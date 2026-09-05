@@ -64,26 +64,56 @@ def get_req_query(request, key, default=""):
 
 
 async def get_req_json(request, default=None):
-    """跨框架安全提取 JSON Body (支持 aiohttp / quart / starlette / dict / None)"""
+    """跨框架安全提取 JSON Body (支持 aiohttp / quart / starlette / FastAPI / dict / None)"""
     if default is None:
         default = {}
     if request is None:
         return default
     if isinstance(request, dict):
         return request
+    import json
+    # 1. 尝试 request.json()
     try:
         if hasattr(request, "json"):
             if callable(request.json):
                 res = await request.json()
-                return res if isinstance(res, dict) else default
+                if isinstance(res, dict):
+                    return res
             elif isinstance(request.json, dict):
                 return request.json
     except Exception:
         pass
+    # 2. 尝试 request.read() (aiohttp / starlette)
+    try:
+        if hasattr(request, "read") and callable(request.read):
+            raw = await request.read()
+            if raw:
+                parsed = json.loads(raw.decode("utf-8", errors="ignore"))
+                if isinstance(parsed, dict):
+                    return parsed
+    except Exception:
+        pass
+    # 3. 尝试 request.body (FastAPI / Starlette)
+    try:
+        if hasattr(request, "body"):
+            raw = request.body
+            if callable(raw):
+                raw = await raw()
+            if isinstance(raw, (bytes, bytearray)):
+                raw = raw.decode("utf-8", errors="ignore")
+            if isinstance(raw, str) and raw.strip():
+                parsed = json.loads(raw)
+                if isinstance(parsed, dict):
+                    return parsed
+    except Exception:
+        pass
+    # 4. 尝试 request.post() (表单兼容)
     try:
         if hasattr(request, "post") and callable(request.post):
             res = await request.post()
-            return dict(res) if res else default
+            if res:
+                return dict(res)
     except Exception:
         pass
     return default
+

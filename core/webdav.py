@@ -31,6 +31,15 @@ def is_enabled():
     return bool(url)
 
 
+def _clean_url(url):
+    u = str(url or "").strip()
+    if not u:
+        return ""
+    if not (u.startswith("http://") or u.startswith("https://")):
+        u = "https://" + u
+    return u.rstrip("/")
+
+
 def _get_auth_header(user, pwd):
     raw = f"{user}:{pwd}".encode("utf-8")
     return "Basic " + base64.b64encode(raw).decode("ascii")
@@ -51,7 +60,8 @@ def _ensure_remote_dir(base_url, remote_dir, auth, timeout=6):
     for part in parts:
         cur_url = f"{cur_url}/{part}"
         try:
-            req = urllib.request.Request(cur_url, method="MKCOL")
+            # WebDAV 集合标准规定集合 URL 须以斜杠结尾，避免 301 重定向将 MKCOL 变更为 GET 导致目录未创建
+            req = urllib.request.Request(f"{cur_url}/", method="MKCOL")
             req.add_header("Authorization", auth)
             req.add_header("User-Agent", "XBBot-WebDAV-Backup/1.0")
             with urllib.request.urlopen(req, timeout=timeout, context=_make_ssl_context()):
@@ -73,15 +83,15 @@ def upload_backup(local_path):
     if not os.path.isfile(local_path):
         return False, f"本地文件不存在: {local_path}"
 
-    url = ST.cfg("备份配置", "WebDAV服务器地址", "").strip()
-    if not url:
+    raw_url = ST.cfg("备份配置", "WebDAV服务器地址", "").strip()
+    if not raw_url:
         return False, "未配置 WebDAV 服务器地址"
+    base_url = _clean_url(raw_url)
     user = ST.cfg("备份配置", "WebDAV用户名", "").strip()
     pwd = ST.cfg("备份配置", "WebDAV应用密码", "").strip()
     rdir = ST.cfg("备份配置", "WebDAV远端目录", "/xbbot_backup/").strip() or "/xbbot_backup/"
 
     auth = _get_auth_header(user, pwd)
-    base_url = url.rstrip("/")
 
     try:
         _ensure_remote_dir(base_url, rdir, auth, timeout=6)
@@ -128,21 +138,21 @@ def upload_backup(local_path):
         return False, msg
 
 
-def test_connection():
-    """测试 WebDAV 连接与鉴权有效性"""
-    url = ST.cfg("备份配置", "WebDAV服务器地址", "").strip()
-    if not url:
+def test_connection(url=None, user=None, pwd=None, rdir=None):
+    """测试 WebDAV 连接与鉴权有效性 (支持直接传参或回退读取当前配置)"""
+    raw_url = str(url if url is not None else ST.cfg("备份配置", "WebDAV服务器地址", "")).strip()
+    if not raw_url:
         return False, "请先填写 WebDAV 服务器地址"
-    user = ST.cfg("备份配置", "WebDAV用户名", "").strip()
-    pwd = ST.cfg("备份配置", "WebDAV应用密码", "").strip()
-    rdir = ST.cfg("备份配置", "WebDAV远端目录", "/xbbot_backup/").strip() or "/xbbot_backup/"
+    base_url = _clean_url(raw_url)
+    user = str(user if user is not None else ST.cfg("备份配置", "WebDAV用户名", "")).strip()
+    pwd = str(pwd if pwd is not None else ST.cfg("备份配置", "WebDAV应用密码", "")).strip()
+    rdir = str(rdir if rdir is not None else (ST.cfg("备份配置", "WebDAV远端目录", "/xbbot_backup/").strip() or "/xbbot_backup/")).strip()
 
     auth = _get_auth_header(user, pwd)
-    base_url = url.rstrip("/")
 
     try:
-        # 使用 PROPFIND 探测标准 WebDAV 根/服务
-        req = urllib.request.Request(base_url, method="PROPFIND")
+        # 使用 PROPFIND 探测标准 WebDAV 根/服务 (携带尾部斜杠防 301 重定向)
+        req = urllib.request.Request(f"{base_url}/", method="PROPFIND")
         req.add_header("Authorization", auth)
         req.add_header("Depth", "0")
         req.add_header("User-Agent", "XBBot-WebDAV-Backup/1.0")
@@ -155,7 +165,7 @@ def test_connection():
     except urllib.error.HTTPError as e:
         if e.code in (405, 501):
             try:
-                req2 = urllib.request.Request(base_url, method="OPTIONS")
+                req2 = urllib.request.Request(f"{base_url}/", method="OPTIONS")
                 req2.add_header("Authorization", auth)
                 with urllib.request.urlopen(req2, timeout=5, context=_make_ssl_context()) as resp2:
                     _ensure_remote_dir(base_url, rdir, auth, timeout=6)

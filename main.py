@@ -108,7 +108,7 @@ def _raw_file_response(data_bytes, filename):
 PLUGIN_ID = "astrbot_plugin_xbbot"
 PLUGIN_DESC = "小白(奴/签/银/娱/私/灵/骑/超管/帮派/冒险+主菜单+WebUI), 现代SQLite存储"
 PLUGIN_AUTHOR = "Light"
-PLUGIN_VERSION = "0.68.32"
+PLUGIN_VERSION = "0.68.34"
 PLUGIN_REPO = "https://github.com/imsuperone/xb"
 
 # 复用 router 的主菜单，保持单源
@@ -123,9 +123,11 @@ except Exception:
         "| ❤️ 签到系统 | ✨ 精灵系统 |\r\n"
         "| 🎮 娱乐系统 | 🏦 银行系统 |\r\n"
         "| ⛓️ 奴隶系统 | 🏍️ 坐骑系统 |\r\n"
-        "| ⚔️ 帮派系统 | 🗺️ 冒险系统 |\r\n"
+        "| 🏰 帮派系统 | 🗺️ 冒险系统 |\r\n"
+        "| 👮 超管系统 | ⚙️ 快捷配置 |\r\n"
         "----------------\r\n"
-        "发送系统关键词打开菜单，如【签到系统】【精灵系统】"
+        "输入【系统名】如【签到系统】即可查看各系统对应指令！\r\n"
+        "当前版本：v0.68.34"
     )
 
 
@@ -182,13 +184,17 @@ class XbBot(Star):
                 for _sec, _kv in _pnom.items():
                     if isinstance(_kv, dict) and _kv:
                         _dst = ST._CONFIG.setdefault(_sec, {})
-                        for _k, _v in _kv.items():
-                            if _k not in _dst:
-                                _dst[_k] = _v
-                            elif str(_dst.get(_k, "")) == "" and str(_v) != "":
-                                # AstrBot 原生页按 schema 物化空键会覆盖掉用户值，
-                                # 本地有非空持久值时必须回填，否则 WebDAV 等配置重启即丢
-                                _dst[_k] = _v
+                        if _sec == "备份配置":
+                            # 备份管理专属卡片配置，本地持久值绝对优先于未定制的默认 schema
+                            _dst.update(_kv)
+                        else:
+                            for _k, _v in _kv.items():
+                                if _k not in _dst:
+                                    _dst[_k] = _v
+                                elif str(_dst.get(_k, "")) == "" and str(_v) != "":
+                                    # AstrBot 原生页按 schema 物化空键会覆盖掉用户值，
+                                    # 本地有非空持久值时必须回填，否则 WebDAV 等配置重启即丢
+                                    _dst[_k] = _v
         except Exception:
             pass
         # DB 镜像最后一道兜底：文件也被污染时仍可从库恢复
@@ -718,16 +724,18 @@ class XbBot(Star):
             return _err(f"clean left users failed: {e}", 500)
 
     async def page_cfg_get(self, request=None, *args, **kwargs):
+        req = request if request is not None else (args[0] if args else None)
         try:
             from .core.api.config_api import handle_cfg_get
-            return await handle_cfg_get(request)
+            return await handle_cfg_get(req)
         except Exception as e:
             return _err(f"get failed: {e}", 500)
 
     async def page_cfg_save(self, request=None, *args, **kwargs):
+        req = request if request is not None else (args[0] if args else None)
         try:
             from .core.api.config_api import handle_cfg_save
-            return await handle_cfg_save(request, os.path.dirname(os.path.abspath(__file__)))
+            return await handle_cfg_save(req, os.path.dirname(os.path.abspath(__file__)))
         except Exception as e:
             return _err(f"save failed: {e}", 500)
 
@@ -846,23 +854,26 @@ class XbBot(Star):
             return _err(f"db doctor failed: {e}", 500)
 
     async def page_webdav_test(self, request=None, *args, **kwargs):
+        req = request if request is not None else (args[0] if args else None)
         try:
             from .core.api.backup import handle_webdav_test
-            return await handle_webdav_test(request)
+            return await handle_webdav_test(req)
         except Exception as e:
             return _err(f"webdav test failed: {e}", 500)
 
     async def page_webdav_backup_now(self, request=None, *args, **kwargs):
+        req = request if request is not None else (args[0] if args else None)
         try:
             from .core.api.backup import handle_webdav_backup_now
-            return await handle_webdav_backup_now(request)
+            return await handle_webdav_backup_now(req)
         except Exception as e:
             return _err(f"webdav backup failed: {e}", 500)
 
-    async def page_version_check(self, request=None):
+    async def page_version_check(self, request=None, *args, **kwargs):
+        req = request if request is not None else (args[0] if args else None)
         try:
             from .core.api.updater import handle_version_check
-            return await handle_version_check(request, os.path.dirname(os.path.abspath(__file__)))
+            return await handle_version_check(req, os.path.dirname(os.path.abspath(__file__)))
         except Exception as e:
             return _err(f"version check failed: {e}", 500)
 

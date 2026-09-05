@@ -46,8 +46,8 @@ async def handle_cfg_get(request):
 async def handle_cfg_save(request, plugin_base=""):
     try:
         p = await get_req_json(request, default={})
-        if not isinstance(p, dict):
-            return _err("payload must be dict", 400)
+        if not isinstance(p, dict) or not p:
+            return _err("未能读取到有效配置数据(请求体为空或解析失败)，请重试", 400)
         norm = _cfg_layer._normalize_cfg(p)
         for sec, kv in norm.items():
             ST._CONFIG.setdefault(sec, {})
@@ -76,7 +76,7 @@ async def handle_cfg_save(request, plugin_base=""):
             ST.sync_astrbot_config(ST._CONFIG)
         except Exception:
             pass
-        return json_response({"saved": True})
+        return json_response({"saved": True, "备份配置": ST._CONFIG.get("备份配置", {})})
     except Exception as e:
         return _err(f"save failed: {e}", 500)
 

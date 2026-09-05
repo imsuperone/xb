@@ -3,40 +3,61 @@ const PLUGIN_ID = "astrbot_plugin_xbbot";
 let _WORKING_API_PREFIX = null;
 
 function getBridge() {
+  let rawBridge = null;
   try {
-    if (window.bridge && typeof window.bridge.apiGet === "function") return window.bridge;
-    if (window.AstrBotPluginPage && typeof window.AstrBotPluginPage.apiGet === "function") return window.AstrBotPluginPage;
-    try {
-      if (window.parent && window.parent.AstrBotPluginPage && typeof window.parent.AstrBotPluginPage.apiGet === "function") {
-        return window.parent.AstrBotPluginPage;
-      }
-      if (window.parent && window.parent.bridge && typeof window.parent.bridge.apiGet === "function") {
-        return window.parent.bridge;
-      }
-    } catch (e) {}
+    if (window.bridge && typeof window.bridge.apiGet === "function") rawBridge = window.bridge;
+    else if (window.AstrBotPluginPage && typeof window.AstrBotPluginPage.apiGet === "function") rawBridge = window.AstrBotPluginPage;
+    else {
+      try {
+        if (window.parent && window.parent.AstrBotPluginPage && typeof window.parent.AstrBotPluginPage.apiGet === "function") {
+          rawBridge = window.parent.AstrBotPluginPage;
+        } else if (window.parent && window.parent.bridge && typeof window.parent.bridge.apiGet === "function") {
+          rawBridge = window.parent.bridge;
+        }
+      } catch (e) {}
+    }
   } catch (e) {}
+
+  if (rawBridge) {
+    return {
+      apiGet(endpoint, params) {
+        let ep = String(endpoint || "");
+        if (params && typeof params === "object" && Object.keys(params).length) {
+          const sep = ep.includes("?") ? "&" : "?";
+          ep += sep + new URLSearchParams(params).toString();
+        }
+        return rawBridge.apiGet(ep);
+      },
+      apiPost(endpoint, data) {
+        return rawBridge.apiPost(endpoint, data);
+      }
+    };
+  }
 
   return {
     async apiGet(endpoint, params) {
-      const ep = String(endpoint || "").replace(/^\/+/, "");
-      const q = params && Object.keys(params).length ? "?" + new URLSearchParams(params).toString() : "";
+      let ep = String(endpoint || "").replace(/^\/+/, "");
+      if (params && typeof params === "object" && Object.keys(params).length) {
+        const sep = ep.includes("?") ? "&" : "?";
+        ep += sep + new URLSearchParams(params).toString();
+      }
       if (_WORKING_API_PREFIX !== null) {
         try {
-          const r = await fetch(_WORKING_API_PREFIX + ep + q);
+          const r = await fetch(_WORKING_API_PREFIX + ep);
           if (r.ok) return await r.json();
         } catch (err) {}
       }
       const prefixes = [`/api/plugins/${PLUGIN_ID}/`, `/${PLUGIN_ID}/`, `api/`, `./api/`, ``];
       for (const p of prefixes) {
         try {
-          const r = await fetch(p + ep + q);
+          const r = await fetch(p + ep);
           if (r.ok) {
             _WORKING_API_PREFIX = p;
             return await r.json();
           }
         } catch (err) {}
       }
-      const r = await fetch(ep + q);
+      const r = await fetch(ep);
       return await r.json();
     },
     async apiPost(endpoint, data) {
@@ -1442,7 +1463,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.68.32"
+        version: res.version || "0.68.34"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -2971,11 +2992,18 @@ document.getElementById("btnBackupRefresh")?.addEventListener("click", () => loa
 document.getElementById("btnWebDAVTest")?.addEventListener("click", async () => {
   toast("正在连接测试 WebDAV...", "ok", 3000);
   try {
-    const res = await getBridge().apiGet("backup/webdav/test", {});
+    const g = (id) => (document.getElementById(id) || {}).value ?? "";
+    const payload = {
+      url: g("wdUrl").trim(),
+      user: g("wdUser").trim(),
+      pwd: g("wdPwd"),
+      dir: g("wdDir").trim()
+    };
+    const res = await getBridge().apiPost("backup/webdav/test", payload);
     if (res && res.ok) {
       toast("WebDAV 测试成功: " + (res.msg || "连接正常"), "ok", 7000);
     } else {
-      toast("WebDAV 测试失败: " + (res && res.msg ? res.msg : "未知错误"), "bad", 8000);
+      toast("WebDAV 测试失败: " + (res && res.msg ? res.msg : (res && res.error ? res.error : "未知错误")), "bad", 8000);
     }
   } catch (err) {
     toast("WebDAV 测试异常: " + err.message, "bad", 8000);
@@ -3086,7 +3114,11 @@ async function loadBackupCfg() {
 async function saveBackupCfg() {
   const msg = document.getElementById("backupCfgMsg");
   const say = (t, ok) => {
-    if (msg) { msg.textContent = t; msg.classList.add(ok ? "ok" : "bad"); }
+    if (msg) {
+      msg.textContent = t;
+      msg.classList.remove("ok", "bad");
+      msg.classList.add(ok ? "ok" : "bad");
+    }
     toast(t, ok ? "ok" : "bad");
   };
   try {
@@ -3101,15 +3133,41 @@ async function saveBackupCfg() {
       "备份间隔小时": g("autoHours").trim() || "3",
       "保留备份数量": g("autoKeep").trim() || "30"
     }};
-    await getBridge().apiPost("config/save", payload);
-    // 存后即读回校验，存不住立刻暴露
-    const cur = await getBridge().apiGet("config/get");
-    const saved = ((cur || {})["备份配置"] || {})["WebDAV服务器地址"] || "";
-    if (saved !== payload["备份配置"]["WebDAV服务器地址"]) {
-      say("保存异常：读回不一致，请重试", false);
+    const res = await getBridge().apiPost("config/save", payload);
+    if (res && res.error) {
+      say("保存失败: " + res.error, false);
       return;
     }
-    say("备份配置已保存并校验一致", true);
+    // 优先校验后端直接回显的已持久化配置
+    const directCfg = (res && res["备份配置"]) ? res["备份配置"] : null;
+    if (directCfg) {
+      const savedSw = directCfg["WebDAV备份开关"] || "";
+      const savedUrl = directCfg["WebDAV服务器地址"] || "";
+      if (savedSw && savedSw !== payload["备份配置"]["WebDAV备份开关"]) {
+        say(`保存异常：备份开关保存未生效 (预期:${payload["备份配置"]["WebDAV备份开关"]}, 实际:${savedSw})`, false);
+        return;
+      }
+      if (payload["备份配置"]["WebDAV服务器地址"] && savedUrl !== payload["备份配置"]["WebDAV服务器地址"]) {
+        say(`保存异常：服务器地址保存未生效 (预期:${payload["备份配置"]["WebDAV服务器地址"]}, 实际:${savedUrl})`, false);
+        return;
+      }
+    }
+    // 存后经防缓存带时间戳URL二次读回校验
+    try {
+      const cur = await getBridge().apiGet("config/get", { _t: Date.now() });
+      const b = (cur || {})["备份配置"] || {};
+      const savedUrl = b["WebDAV服务器地址"] || "";
+      const savedSw = b["WebDAV备份开关"] || "";
+      if (payload["备份配置"]["WebDAV服务器地址"] && savedUrl && savedUrl !== payload["备份配置"]["WebDAV服务器地址"]) {
+        say(`保存异常：服务器地址读回不一致，请重试`, false);
+        return;
+      }
+      if (savedSw && savedSw !== payload["备份配置"]["WebDAV备份开关"]) {
+        say(`保存异常：备份开关读回不一致，请重试`, false);
+        return;
+      }
+    } catch (readErr) {}
+    say("备份配置已成功保存并校验生效", true);
   } catch (e) { say("保存失败: " + e.message, false); }
 }
 async function loadCfgSnapshots() {
@@ -3616,26 +3674,64 @@ let LATEST_RELEASE_DATA = null;
 
 async function checkVersionUpdate(silent = false) {
   const btn = document.getElementById("btnCheckUpdate");
+  const statusEl = document.getElementById("checkUpdateStatus");
   try {
     if (!silent) toast("正在检测最新版本...", "ok");
-    if (btn) { btn.disabled = true; btn.textContent = "⏳ 检测中…"; }
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "⏳ 检测中…";
+    }
+    if (statusEl) {
+      statusEl.style.display = "inline-flex";
+      statusEl.style.color = "var(--muted)";
+      statusEl.style.background = "var(--panel2)";
+      statusEl.style.border = "1px solid var(--line)";
+      statusEl.textContent = "⏳ 正在检测云端版本…";
+    }
     // 20秒超时熔断：任何挂起都转为可见报错，杜绝点击无反应
     const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error("请求超时(20s)，请检查网络后重试")), 20000));
-    const res = await Promise.race([getBridge().apiGet("version/check"), timeout]);
+    const res = await Promise.race([getBridge().apiGet("version/check", { _t: Date.now() }), timeout]);
     if (res && (res.ok || res.has_update !== undefined || res.current_version)) {
       LATEST_RELEASE_DATA = res;
       const badge = document.getElementById("verBadge");
       if (res.has_update) {
+        if (btn) {
+          btn.textContent = `🚀 发现新版 v${res.latest_version}`;
+          btn.style.color = "var(--acc)";
+          btn.style.borderColor = "var(--acc)";
+          btn.style.background = "rgba(59,130,246,0.1)";
+        }
+        if (statusEl) {
+          statusEl.style.display = "inline-flex";
+          statusEl.style.color = "var(--acc)";
+          statusEl.style.background = "rgba(59,130,246,0.12)";
+          statusEl.style.border = "1px solid rgba(59,130,246,0.3)";
+          statusEl.textContent = `🚀 发现新版本 v${res.latest_version}（建议升级）`;
+        }
         if (badge) {
           badge.style.display = "inline-flex";
-          badge.style.background = "";
-          badge.textContent = `🚀 发现新版本 ${res.latest_version}`;
-          badge.title = "点击查看更新并一键升级";
+          badge.style.background = "linear-gradient(135deg, #3B82F6, #1D4ED8)";
+          badge.textContent = `🚀 发现新版本 v${res.latest_version}`;
+          badge.title = "点击查看更新详情并一键升级";
         }
         if (!silent) {
+          toast(`发现新版本: v${res.latest_version}`, "ok");
           showUpdateModal(res);
         }
       } else if (res.detect_error) {
+        if (btn) {
+          btn.textContent = "⚠️ 重试检测";
+          btn.style.color = "var(--warn)";
+          btn.style.borderColor = "var(--warn)";
+          btn.style.background = "rgba(255,149,0,0.08)";
+        }
+        if (statusEl) {
+          statusEl.style.display = "inline-flex";
+          statusEl.style.color = "var(--warn)";
+          statusEl.style.background = "rgba(255,149,0,0.12)";
+          statusEl.style.border = "1px solid rgba(255,149,0,0.3)";
+          statusEl.textContent = `⚠️ 检测失败：${res.detect_error}`;
+        }
         if (badge) {
           badge.style.display = "inline-flex";
           badge.style.background = "linear-gradient(135deg,#F59E0B,#D97706)";
@@ -3644,15 +3740,43 @@ async function checkVersionUpdate(silent = false) {
         }
         if (!silent) {
           toast("更新检测失败：" + res.detect_error, "bad", 8000);
+          showUpdateModal(res);
         }
       } else {
-        if (badge) badge.style.display = "none";
+        if (btn) {
+          btn.textContent = `🟢 已是最新 (v${res.current_version})`;
+          btn.style.color = "var(--ok)";
+          btn.style.borderColor = "var(--ok)";
+          btn.style.background = "rgba(52,199,89,0.08)";
+        }
+        if (statusEl) {
+          statusEl.style.display = "inline-flex";
+          statusEl.style.color = "var(--ok)";
+          statusEl.style.background = "rgba(52,199,89,0.12)";
+          statusEl.style.border = "1px solid rgba(52,199,89,0.3)";
+          statusEl.textContent = `✨ 本地与云端均为最新版本 (v${res.current_version})，无需更新！`;
+        }
+        if (badge) {
+          badge.style.display = "inline-flex";
+          badge.style.background = "linear-gradient(135deg, #10B981, #059669)";
+          badge.textContent = `🟢 最新版 v${res.current_version}`;
+          badge.title = "本地与云端均为最新版本（点击查看详情）";
+        }
         if (!silent) {
-          toast(`当前已是最新版本 (${res.current_version})`, "ok");
+          toast(`本地与云端均为最新版本 (v${res.current_version})`, "ok");
+          showUpdateModal(res);
         }
       }
     } else {
-      // 兜底：任何非预期响应形状也必须给提示，杜绝点击无反应
+      // 兜底：任何非预期响应形状也必须给提示
+      if (btn) {
+        btn.textContent = "⚠️ 检测无响应";
+      }
+      if (statusEl) {
+        statusEl.style.display = "inline-flex";
+        statusEl.style.color = "var(--warn)";
+        statusEl.textContent = "⚠️ 未获取到有效版本响应";
+      }
       if (!silent) {
         let raw = "";
         try { raw = JSON.stringify(res).slice(0, 120); } catch (e) {}
@@ -3660,39 +3784,86 @@ async function checkVersionUpdate(silent = false) {
       }
     }
   } catch(err) {
+    if (btn) {
+      btn.textContent = "⚠️ 检测超时/失败";
+      btn.style.color = "var(--warn)";
+    }
+    if (statusEl) {
+      statusEl.style.display = "inline-flex";
+      statusEl.style.color = "var(--warn)";
+      statusEl.style.background = "rgba(255,149,0,0.12)";
+      statusEl.style.border = "1px solid rgba(255,149,0,0.3)";
+      statusEl.textContent = `⚠️ 请求失败: ${err.message}`;
+    }
     if (!silent) toast("检测更新失败: " + err.message, "bad");
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = "🚀 检查更新"; }
+    if (btn) btn.disabled = false;
   }
 }
 
 function showUpdateModal(data) {
-  const isNew = data.has_update;
-  const tag = data.latest_version || data.current_version;
+  const isNew = Boolean(data.has_update);
+  const curVer = data.current_version || "未知";
+  const latestVer = data.latest_version || curVer;
   const dateStr = data.release_date ? ` · 发布于 ${data.release_date}` : "";
   const changelog = data.changelog || "暂无详细更新日志。";
+  const errStr = data.detect_error || "";
+
+  let statusCard = "";
+  if (isNew) {
+    statusCard = `
+<div style="padding:10px 12px;background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.25);border-radius:10px;font-size:12px;color:var(--acc);margin-top:10px;display:flex;align-items:center;gap:8px">
+  <span style="font-size:18px">🚀</span>
+  <div>
+    <div style="font-weight:700">发现云端更新！建议升级至 v${esc(latestVer)}</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:2px">前往 AstrBot 官方面板的「插件管理」页面，点击「更新」即可一键无损升级。</div>
+  </div>
+</div>`;
+  } else if (errStr) {
+    statusCard = `
+<div style="padding:10px 12px;background:var(--warnSoft);border:1px solid rgba(255,149,0,0.25);border-radius:10px;font-size:12px;color:var(--warn);margin-top:10px;display:flex;align-items:center;gap:8px">
+  <span style="font-size:18px">⚠️</span>
+  <div>
+    <div style="font-weight:700">云端检测未能连通</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:2px">${esc(errStr)}</div>
+  </div>
+</div>`;
+  } else {
+    statusCard = `
+<div style="padding:10px 12px;background:var(--okSoft);border:1px solid rgba(52,199,89,0.25);border-radius:10px;font-size:12px;color:var(--ok);margin-top:10px;display:flex;align-items:center;gap:8px">
+  <span style="font-size:18px">✨</span>
+  <div>
+    <div style="font-weight:700">本地与云端均为最新版本 (v${esc(curVer)})</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:2px">当前运行代码已处于最新版本状态，运行良好，无需执行更新。</div>
+  </div>
+</div>`;
+  }
 
   const modalHtml = `
-<div style="background:var(--panel2);border-radius:12px;padding:12px 14px;border:1px solid var(--line);margin-bottom:12px">
-  <div style="display:flex;align-items:center;justify-content:space-between">
-    <span style="font-size:12px;color:var(--muted)">当前运行版本: <strong>${esc(data.current_version)}</strong></span>
-    ${isNew ? `<span class="badge badge-success" style="font-size:12px;font-weight:700">最新版本: ${esc(tag)}</span>` : `<span class="badge badge-primary">已是最新</span>`}
+<div style="background:var(--panel2);border-radius:14px;padding:12px 14px;border:1px solid var(--line);margin-bottom:12px">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+    <div style="padding:10px 12px;background:var(--panel);border-radius:10px;border:1px solid var(--line)">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:2px">当前本地运行版本</div>
+      <div style="font-size:15px;font-weight:700;color:var(--text)">v${esc(curVer)}</div>
+    </div>
+    <div style="padding:10px 12px;background:var(--panel);border-radius:10px;border:1px solid var(--line)">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:2px">云端仓库最新版本</div>
+      <div style="font-size:15px;font-weight:700;color:${isNew ? "var(--acc)" : "var(--ok)"}">${isNew ? "🚀 v" : "🟢 v"}${esc(latestVer)}</div>
+    </div>
   </div>
-  ${dateStr ? `<div style="font-size:11px;color:var(--muted);margin-top:4px">${esc(dateStr)}</div>` : ""}
+  ${statusCard}
+  ${dateStr ? `<div style="font-size:11px;color:var(--muted);margin-top:8px">${esc(dateStr)}</div>` : ""}
 </div>
 
 <div style="font-size:12.5px;font-weight:600;color:var(--text);margin-bottom:6px">📝 版本更新日志与特性</div>
 <div style="background:var(--panel);border-radius:10px;padding:10px 12px;border:1px solid var(--line);font-size:12px;color:var(--text);max-height:160px;overflow-y:auto;white-space:pre-wrap;line-height:1.6">
 ${esc(changelog)}
 </div>
-
-${isNew ? `
-<div style="margin-top:10px;padding:8px 12px;background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.2);border-radius:8px;font-size:11.5px;color:var(--acc);display:flex;align-items:center;gap:6px">
-  <span>💡 <strong>更新指引</strong>：前往 AstrBot 官方面板的「插件管理」页面，直接点击「更新」即可无损升级至最新版本。</span>
-</div>` : ""}
 `;
 
-  uiAlert(modalHtml, isNew ? "🚀 发现新版本" : "ℹ️ 版本信息", isNew ? "🚀" : "ℹ️");
+  const modalTitle = isNew ? "🚀 发现新版本" : (errStr ? "⚠️ 版本检测结果" : "✨ 版本检测：已是最新版本");
+  const modalIcon = isNew ? "🚀" : (errStr ? "⚠️" : "✨");
+  uiAlert(modalHtml, modalTitle, modalIcon);
 }
 
 // 绑定版本徽章与检查更新按钮
@@ -3701,6 +3872,10 @@ document.getElementById("verBadge")?.addEventListener("click", () => {
   else checkVersionUpdate(false);
 });
 document.getElementById("btnCheckUpdate")?.addEventListener("click", () => checkVersionUpdate(false));
+document.getElementById("checkUpdateStatus")?.addEventListener("click", () => {
+  if (LATEST_RELEASE_DATA) showUpdateModal(LATEST_RELEASE_DATA);
+  else checkVersionUpdate(false);
+});
 
 // 启动时静默检查一次
 setTimeout(() => { checkVersionUpdate(true); }, 1500);

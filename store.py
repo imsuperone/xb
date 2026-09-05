@@ -1151,10 +1151,14 @@ def _flatten_cfg(cfg):
     return out
 
 def save_config():
-    if not CONFIG_FILE:
-        return
+    p = CONFIG_FILE
+    if not p:
+        try:
+            p = os.path.join(get_persistent_data_dir(), "config.json")
+        except Exception:
+            p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "config.json")
     try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        with open(p, "w", encoding="utf-8") as f:
             json.dump(_flatten_cfg(_CONFIG), f, ensure_ascii=False, indent=2)
     except Exception:
         pass
@@ -1367,10 +1371,10 @@ def recall_set(k, v):
         except Exception:
             _safe_rollback()
 
-_WD_KEYS = ("WebDAV服务器地址", "WebDAV用户名", "WebDAV应用密码", "WebDAV远端目录", "WebDAV备份开关")
+_WD_KEYS = ("WebDAV服务器地址", "WebDAV用户名", "WebDAV应用密码", "WebDAV远端目录", "WebDAV备份开关", "自动备份开关", "备份间隔小时", "保留备份数量")
 
 def wd_cfg_backup(payload_sec=None):
-    """WebDAV 配置 DB 镜像写透：仅镜像本次保存 payload 里出现的键（含清空语义）。
+    """WebDAV 与自动备份配置 DB 镜像写透：仅镜像本次保存 payload 里出现的键（含清空语义）。
     其它节保存不碰镜像，避免误清。"""
     if not isinstance(payload_sec, dict):
         return
@@ -1382,18 +1386,19 @@ def wd_cfg_backup(payload_sec=None):
         pass
 
 def wd_cfg_restore():
-    """WebDAV 配置 DB 镜像恢复：内存缺键或空值且镜像有非空值时回填。
-    用户主动清空（镜像同步为空）不会诈尸。"""
+    """WebDAV 与备份配置 DB 镜像恢复：从数据库 kv 表恢复备份配置，杜绝任何外部重置导致配置丢失。
+    当内存中缺键、为空或处于 schema 默认值（如'假'/'3'/'30'）且数据库有非空有效值时回填。"""
     try:
         sec = _CONFIG.setdefault("备份配置", {}) if isinstance(_CONFIG, dict) else {}
         if not isinstance(sec, dict):
             return
         for k in _WD_KEYS:
-            cur = str(sec.get(k, "") or "")
-            if not cur:
-                v = recall_get("wdcfg__" + k, "")
-                if v:
-                    sec[k] = v
+            v = recall_get("wdcfg__" + k, None)
+            if v is not None and str(v) != "":
+                cur = str(sec.get(k, "") or "")
+                # 内存中若为未定制的 schema 默认值或空值，回填数据库保存的用户定制值
+                if not cur or cur in ("", "假", "3", "30", "/xbbot_backup/"):
+                    sec[k] = str(v)
     except Exception:
         pass
 

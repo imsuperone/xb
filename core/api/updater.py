@@ -33,7 +33,7 @@ def _get_local_version(plugin_base=""):
                     return line.split(":", 1)[1].strip().strip('"').strip("'")
     except Exception:
         pass
-    return "0.68.32"
+    return "0.68.34"
 
 
 def _parse_version_tuple(v_str):
@@ -54,9 +54,13 @@ def check_latest_version(plugin_base=""):
         "Accept": "application/vnd.github.v3+json"
     }
 
-    # 1. 优先尝试检测 main 分支 metadata.yaml（实时源码最新版，含多镜像容灾）
+    # 1. 优先尝试检测 main 分支 metadata.yaml（CDN 高速镜像容灾，首选 jsdelivr 1.5s 响应）
     main_ver = ""
     raw_meta_urls = [
+        f"https://fastly.jsdelivr.net/gh/{GITHUB_REPO}@main/metadata.yaml",
+        f"https://cdn.jsdelivr.net/gh/{GITHUB_REPO}@main/metadata.yaml",
+        f"https://testingcf.jsdelivr.net/gh/{GITHUB_REPO}@main/metadata.yaml",
+        f"https://ghproxy.net/https://raw.githubusercontent.com/{GITHUB_REPO}/main/metadata.yaml",
         f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/metadata.yaml",
         f"https://mirror.ghproxy.com/https://raw.githubusercontent.com/{GITHUB_REPO}/main/metadata.yaml",
         f"https://raw.gitmirror.com/{GITHUB_REPO}/main/metadata.yaml"
@@ -64,7 +68,7 @@ def check_latest_version(plugin_base=""):
     for url in raw_meta_urls:
         try:
             req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, timeout=4) as resp:
+            with urllib.request.urlopen(req, timeout=3) as resp:
                 if resp.status == 200:
                     txt = resp.read().decode("utf-8")
                     for line in txt.splitlines():

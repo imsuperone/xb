@@ -476,7 +476,7 @@ async def handle_cfg_snapshot_restore(request, plugin_base=""):
 
 
 async def handle_webdav_test(request):
-    """测试 WebDAV 连接（完全异步化，绝不阻塞主事件循环）"""
+    """测试 WebDAV 连接（完全异步化，绝不阻塞主事件循环，支持动态参数与回退读取配置）"""
     import asyncio
     try:
         from .. import webdav as _wd
@@ -486,7 +486,12 @@ async def handle_webdav_test(request):
         except ImportError:
             return _err("WebDAV 模块未加载", 500)
     try:
-        ok, msg = await asyncio.to_thread(_wd.test_connection)
+        p = await get_req_json(request, default={})
+        url = (p.get("url") if isinstance(p, dict) else None) or get_req_query(request, "url", None)
+        user = (p.get("user") if isinstance(p, dict) else None) or get_req_query(request, "user", None)
+        pwd = (p.get("pwd") if isinstance(p, dict) else None) or get_req_query(request, "pwd", None)
+        rdir = (p.get("dir") if isinstance(p, dict) else None) or get_req_query(request, "dir", None)
+        ok, msg = await asyncio.to_thread(_wd.test_connection, url, user, pwd, rdir)
         return json_response({"ok": ok, "msg": msg})
     except Exception as e:
         return _err(f"WebDAV 测试异常: {e}", 500)
