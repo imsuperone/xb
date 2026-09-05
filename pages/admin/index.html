@@ -1570,7 +1570,7 @@
   <div class="wrap">
     <header>
       <div class="brand">
-        <h1>管理控制台 <span class="ver">v0.68.35</span> <span id="verBadge" style="display:none;font-size:11px;padding:3px 8px;border-radius:12px;background:linear-gradient(135deg, #10B981, #059669);color:#fff;font-weight:600;cursor:pointer;margin-left:4px;box-shadow:0 2px 6px rgba(16,185,129,0.3)" title="点击查看更新并一键升级">🚀 发现新版本</span></h1>
+        <h1>管理控制台 <span class="ver">v0.68.36</span> <span id="verBadge" style="display:none;font-size:11px;padding:3px 8px;border-radius:12px;background:linear-gradient(135deg, #10B981, #059669);color:#fff;font-weight:600;cursor:pointer;margin-left:4px;box-shadow:0 2px 6px rgba(16,185,129,0.3)" title="点击查看更新并一键升级">🚀 发现新版本</span></h1>
         <div class="sub">
           <span class="status-badge"><span class="status-dot"></span> 运行正常</span>
         </div>
@@ -1931,8 +1931,6 @@
             <button id="btnBackupRefresh" class="ghost">🔄 刷新</button>
             <button id="btnBackupRestore" class="ghost">🔄 恢复选中</button>
             <button id="btnBackupExportSel" class="ghost">📥 导出</button>
-            <button id="btnWebDAVTest" class="ghost" style="color:var(--primary);border-color:var(--primarySoft);font-weight:600">☁️ 测试 WebDAV</button>
-            <button id="btnWebDAVBackupNow" class="ghost">☁️ 立即上传云端</button>
           </div>
           <div style="display:flex;gap:5px;margin-left:auto;flex-wrap:wrap">
             <button id="btnBackupDelete" class="ghost del">🗑️ 删除选中</button>
@@ -1946,9 +1944,15 @@
       <div class="panel" style="margin-top:10px">
         <h2>☁️ WebDAV 与自动备份配置</h2>
         <div class="hint">WebDAV 地址与账号只在此处填写保存（坚果云请用应用密码）。保存后自动写入数据库镜像，重启不丢失。</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin-top:8px">
-          <label style="display:flex;align-items:center;gap:8px;font-size:12.5px"><input type="checkbox" id="wdSwitch"> WebDAV备份开关</label>
-          <label style="display:flex;align-items:center;gap:8px;font-size:12.5px"><input type="checkbox" id="autoSwitch"> 自动备份开关</label>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:10px">
+          <div style="display:flex;align-items:center;justify-content:space-between;background:var(--panel2);padding:10px 14px;border-radius:10px;border:1px solid var(--line)">
+            <span style="font-size:12.5px;font-weight:600">WebDAV备份开关</span>
+            <label class="switch"><input type="checkbox" id="wdSwitch"><span class="slider-toggle"></span></label>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;background:var(--panel2);padding:10px 14px;border-radius:10px;border:1px solid var(--line)">
+            <span style="font-size:12.5px;font-weight:600">自动备份开关</span>
+            <label class="switch"><input type="checkbox" id="autoSwitch"><span class="slider-toggle"></span></label>
+          </div>
           <label style="font-size:12.5px">服务器地址<input id="wdUrl" type="text" placeholder="https://dav.jianguoyun.com/dav/" style="width:100%;margin-top:4px"></label>
           <label style="font-size:12.5px">用户名<input id="wdUser" type="text" placeholder="账号/邮箱" style="width:100%;margin-top:4px"></label>
           <label style="font-size:12.5px">应用密码<input id="wdPwd" type="password" placeholder="应用密码/Token" style="width:100%;margin-top:4px"></label>
@@ -1956,20 +1960,12 @@
           <label style="font-size:12.5px">备份间隔小时<input id="autoHours" type="number" min="1" style="width:100%;margin-top:4px"></label>
           <label style="font-size:12.5px">保留备份数量<input id="autoKeep" type="number" min="1" style="width:100%;margin-top:4px"></label>
         </div>
-        <div class="toolbar" style="margin-top:8px">
+        <div class="toolbar" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           <button id="btnBackupCfgSave">💾 保存备份配置</button>
+          <button id="btnWebDAVTest" class="ghost" style="color:var(--primary);border-color:var(--primarySoft);font-weight:600">☁️ 测试 WebDAV</button>
+          <button id="btnWebDAVBackupNow" class="ghost">☁️ 立即上传云端</button>
           <span class="msg" id="backupCfgMsg"></span>
         </div>
-      </div>
-      <div class="panel" style="margin-top:10px">
-        <h2>🛟 配置快照与一键恢复</h2>
-        <div class="hint">快照保存<strong>全部配置</strong>（必要配置+全部用户自定义）到数据库。配置丢失或改乱时，一键恢复。每次保存配置时会自动留一份快照（最多保留 5 份）。</div>
-        <div class="toolbar">
-          <button id="btnCfgSnapSave" class="ghost">📸 立即快照当前配置</button>
-          <button id="btnCfgSnapRestore" class="ghost">🛟 恢复最新快照</button>
-          <span class="msg" id="cfgSnapMsg"></span>
-        </div>
-        <div id="cfgSnapList" style="margin-top:8px;font-size:12.5px"></div>
       </div>
       <div class="panel" style="margin-top:10px">
         <h2>📦 旧库数据导入（兼容新旧格式）</h2>
@@ -2165,9 +2161,12 @@
   <!-- 全局统一高质感模态弹窗 -->
   <div id="appModal">
     <div class="cmd-modal-box" style="width:min(440px,92vw);padding:24px;border-radius:18px">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-        <span id="appModalIcon" style="font-size:22px;line-height:1">ℹ️</span>
-        <h3 id="appModalTitle" style="margin:0;font-size:16px;font-weight:600">系统提示</h3>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span id="appModalIcon" style="font-size:22px;line-height:1">ℹ️</span>
+          <h3 id="appModalTitle" style="margin:0;font-size:16px;font-weight:600">系统提示</h3>
+        </div>
+        <button id="appModalClose" class="ghost" style="border:none;background:transparent;padding:4px 8px;font-size:16px;line-height:1;cursor:pointer;color:var(--muted);border-radius:8px" title="关闭">✕</button>
       </div>
       <div id="appModalContent" style="color:var(--text-secondary);font-size:13px;line-height:1.55;margin-bottom:16px"></div>
       <div id="appModalInputWrap" style="margin-bottom:16px;display:none">

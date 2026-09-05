@@ -497,13 +497,23 @@ async def handle_webdav_test(request):
         return _err(f"WebDAV 测试异常: {e}", 500)
 
 
-async def handle_webdav_backup_now(request):
-    """立即备份并上传至 WebDAV（完全异步化，绝不阻塞主事件循环）"""
+async def handle_webdav_backup_now(request, plugin_base=""):
+    """立即备份并上传至 WebDAV（完全异步化，绝不阻塞主事件循环；支持指定选中文件）"""
     import asyncio
+    p = await get_req_json(request, default={})
+    target_path = str((p.get("path") if isinstance(p, dict) else "") or get_req_query(request, "path", "")).strip()
+
     def _worker():
-        dst = ST.backup_user_data(force=True)
+        dst = None
+        base = _backup_base(plugin_base)
+        if target_path and target_path != "__backup_now__":
+            real_p = _safe_backup(target_path, base)
+            if real_p and os.path.isfile(real_p) and (real_p.endswith(".db") or real_p.endswith(".json")):
+                dst = real_p
+        if not dst:
+            dst = ST.backup_user_data(force=True)
         if not dst or not os.path.isfile(dst):
-            return False, "本地备份生成失败", None
+            return False, "本地备份生成或定位失败", None
         try:
             from .. import webdav as _wd
         except ImportError:

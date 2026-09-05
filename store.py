@@ -1162,6 +1162,30 @@ def save_config():
             json.dump(_flatten_cfg(_CONFIG), f, ensure_ascii=False, indent=2)
     except Exception:
         pass
+    # 同步落盘全量配置到 SQLite kv 表，确保 .db 文件自包含全部配置与用户资产
+    try:
+        if isinstance(_CONFIG, dict) and _CONFIG:
+            recall_set("sys_config_json", json.dumps(_CONFIG, ensure_ascii=False))
+    except Exception:
+        pass
+
+def load_config_from_db():
+    """从数据库恢复全量配置：若内存配置缺失或为空，从 kv 表补齐"""
+    try:
+        raw = recall_get("sys_config_json", "")
+        if raw:
+            db_cfg = json.loads(raw)
+            if isinstance(db_cfg, dict) and db_cfg:
+                for sec, sub in db_cfg.items():
+                    if isinstance(sub, dict):
+                        s = _CONFIG.setdefault(sec, {})
+                        for k, v in sub.items():
+                            if k not in s or s[k] in (None, ""):
+                                s[k] = v
+                return True
+    except Exception:
+        pass
+    return False
 
 # ==================== 9. 备份 ====================
 BACKUP_DIR = ""
@@ -1230,6 +1254,11 @@ def backup_user_data(force=False):
             except Exception:
                 pass
     try:
+        # 冷备前落盘配置，确保备份出来的 db 自包含 100% 配置与用户数据
+        try:
+            save_config()
+        except Exception:
+            pass
         day = time.strftime("%Y-%m-%d", time.localtime(now))
         day_dir = os.path.join(BACKUP_DIR, day)
         os.makedirs(day_dir, exist_ok=True)
@@ -1511,6 +1540,6 @@ __all__ = ["register_names","register_name","parse_at","set_config","cfg","cfgi"
            "Group","group","group_user","save_group",
            "redpack_put","redpack_get",
            "init","flush_all","merge_from","get_persistent_data_dir","set_persistent_data_dir",
-           "set_config_path","set_astrbot_config","sync_astrbot_config","set_ini","save_config",
+           "set_config_path","set_astrbot_config","sync_astrbot_config","set_ini","save_config","load_config_from_db",
            "set_backup_dir","backup_user_data","maybe_auto_backup","clean_old_backups",
            "recall_set","recall_get"]

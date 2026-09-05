@@ -425,6 +425,7 @@ function uiAlert(msg, title = "提示", icon = "ℹ️") {
       resolve(true);
       return;
     }
+    const closeBtn = document.getElementById("appModalClose");
     const iconEl = document.getElementById("appModalIcon");
     if (iconEl) {
       iconEl.textContent = icon;
@@ -441,7 +442,8 @@ function uiAlert(msg, title = "提示", icon = "ℹ️") {
     const cancelBtn = document.getElementById("appModalCancel");
     if (cancelBtn) cancelBtn.style.display = "none";
     if (okBtn) {
-      okBtn.textContent = "知道了";
+      okBtn.textContent = "确定";
+      okBtn.style.display = "";
       okBtn.style.background = "var(--acc)";
       okBtn.style.borderColor = "transparent";
     }
@@ -451,11 +453,13 @@ function uiAlert(msg, title = "提示", icon = "ℹ️") {
     const clean = () => {
       modal.classList.remove("show");
       if (okBtn) okBtn.onclick = null;
+      if (closeBtn) closeBtn.onclick = null;
       modal.onclick = null;
       if (cancelBtn) cancelBtn.style.display = "";
     };
 
     if (okBtn) okBtn.onclick = () => { clean(); resolve(true); };
+    if (closeBtn) closeBtn.onclick = () => { clean(); resolve(true); };
     modal.onclick = (e) => { if (e.target === modal) { clean(); resolve(true); } };
   });
 }
@@ -467,6 +471,7 @@ function uiConfirm(msg, title = "确认操作") {
       resolve(window.confirm ? window.confirm(title + "\n\n" + msg.replace(/<[^>]+>/g, "")) : true);
       return;
     }
+    const closeBtn = document.getElementById("appModalClose");
     const isDanger = /危险|清空|删除|覆盖|终极/.test(title + msg);
     const iconEl = document.getElementById("appModalIcon");
     if (iconEl) {
@@ -487,7 +492,7 @@ function uiConfirm(msg, title = "确认操作") {
       cancelBtn.textContent = "取消";
     }
     if (okBtn) {
-      okBtn.textContent = isDanger ? "确认" : "确定升级";
+      okBtn.textContent = isDanger ? "确认" : "确定";
       if (isDanger) {
         okBtn.style.background = "var(--bad)";
         okBtn.style.borderColor = "var(--bad)";
@@ -503,10 +508,12 @@ function uiConfirm(msg, title = "确认操作") {
       modal.classList.remove("show");
       if (okBtn) okBtn.onclick = null;
       if (cancelBtn) cancelBtn.onclick = null;
+      if (closeBtn) closeBtn.onclick = null;
       modal.onclick = null;
     };
     if (okBtn) okBtn.onclick = () => { clean(); resolve(true); };
     if (cancelBtn) cancelBtn.onclick = () => { clean(); resolve(false); };
+    if (closeBtn) closeBtn.onclick = () => { clean(); resolve(false); };
     modal.onclick = (e) => { if (e.target === modal) { clean(); resolve(false); } };
   });
 }
@@ -518,6 +525,7 @@ function uiPrompt(msg, dflt = "", title = "请输入") {
       resolve(window.prompt ? window.prompt(msg, dflt) : dflt);
       return;
     }
+    const closeBtn = document.getElementById("appModalClose");
     const iconEl = document.getElementById("appModalIcon");
     if (iconEl) { iconEl.textContent = "✏️"; iconEl.style.color = "var(--acc)"; }
     document.getElementById("appModalTitle").textContent = title;
@@ -536,18 +544,20 @@ function uiPrompt(msg, dflt = "", title = "请输入") {
 
     const clean = () => {
       modal.classList.remove("show");
-      okBtn.onclick = null;
-      cancelBtn.onclick = null;
+      if (okBtn) okBtn.onclick = null;
+      if (cancelBtn) cancelBtn.onclick = null;
+      if (closeBtn) closeBtn.onclick = null;
       modal.onclick = null;
       inp.onkeydown = null;
     };
     const doOk = () => { const v = inp.value; clean(); resolve(v); };
-    okBtn.onclick = doOk;
-    cancelBtn.onclick = () => { clean(); resolve(null); };
+    if (okBtn) okBtn.onclick = doOk;
+    if (cancelBtn) cancelBtn.onclick = () => { clean(); resolve(null); };
+    if (closeBtn) closeBtn.onclick = () => { clean(); resolve(null); };
     modal.onclick = (e) => { if (e.target === modal) { clean(); resolve(null); } };
     inp.onkeydown = (e) => {
-      if (e.key === "Enter") doOk();
-      else if (e.key === "Escape") { clean(); resolve(null); }
+      if (e.key === "Enter") { e.preventDefault(); doOk(); }
+      else if (e.key === "Escape") { e.preventDefault(); clean(); resolve(null); }
     };
   });
 }
@@ -664,7 +674,6 @@ const TAB_LOADERS = {
   shops: async () => { return loadShops(); },
   backups: async () => {
     if (typeof loadBackupCfg === "function") try { await loadBackupCfg(); } catch (e) {}
-    if (typeof loadCfgSnapshots === "function") try { await loadCfgSnapshots(); } catch (e) {}
     return typeof loadBackups === "function" ? loadBackups("") : Promise.resolve();
   },
   imgs: async () => { return loadImages(""); },
@@ -686,7 +695,7 @@ async function main() {
     }
   } catch (e) {}
   
-  Promise.all([loadStats(), loadOverviewReq(), loadAnalytics(), checkVersionUpdate(true)]).catch(() => {});
+  Promise.all([loadStats(), loadOverviewReq(), loadAnalytics()]).catch(() => {});
   TAB_DONE.overview = true;
 }
 
@@ -1496,7 +1505,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.68.35"
+        version: res.version || "0.68.36"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -3043,12 +3052,25 @@ document.getElementById("btnWebDAVTest")?.addEventListener("click", async () => 
   }
 });
 document.getElementById("btnWebDAVBackupNow")?.addEventListener("click", async () => {
-  toast("正在生成本地冷备并上传至 WebDAV 云端...", "ok", 4000);
+  const sel = window.BACKUP_SELECTED || "";
+  let payload = {};
+  if (sel) {
+    const ext = (sel.split(".").pop() || "").toLowerCase();
+    if (["db", "json"].includes(ext)) {
+      payload.path = sel;
+      const fn = sel.split("/").pop();
+      toast(`正在上传选中备份 [${fn}] 至 WebDAV 云端...`, "ok", 4000);
+    } else {
+      toast("正在生成本地冷备并上传至 WebDAV 云端...", "ok", 4000);
+    }
+  } else {
+    toast("正在生成本地冷备并上传至 WebDAV 云端...", "ok", 4000);
+  }
   try {
-    const res = await getBridge().apiPost("backup/webdav/upload", {});
+    const res = await getBridge().apiPost("backup/webdav/upload", payload);
     if (res && res.ok) {
       toast("WebDAV 云备份成功: " + (res.msg || "已成功上传"), "ok", 7000);
-      await loadBackups("");
+      await loadBackups(BACKUP_DIR);
     } else {
       toast("WebDAV 上传失败: " + (res && res.msg ? res.msg : "未能完成上传"), "bad", 8000);
     }
@@ -3203,41 +3225,7 @@ async function saveBackupCfg() {
     say("备份配置已成功保存并校验生效", true);
   } catch (e) { say("保存失败: " + e.message, false); }
 }
-async function loadCfgSnapshots() {
-  try {
-    const r = await getBridge().apiGet("backups/config/snapshots", {});
-    const box = document.getElementById("cfgSnapList");
-    if (!box) return;
-    const list = (r && r.snapshots) || [];
-    if (!list.length) { box.innerHTML = `<span style="color:var(--muted)">暂无快照，点击「立即快照」创建第一份。</span>`; return; }
-    box.innerHTML = list.map((s) =>
-      `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)">` +
-      `<span style="font-weight:600">${esc(s.name)}</span>` +
-      `<span style="color:var(--muted);font-size:11.5px">${esc((s.sections || []).slice(0, 8).join("、"))}${(s.sections || []).length > 8 ? "…" : ""}</span>` +
-      `<button class="ghost sm" data-snap-restore="${esc(s.name)}" style="margin-left:auto">恢复此份</button></div>`
-    ).join("");
-    box.querySelectorAll("[data-snap-restore]").forEach((b) => b.addEventListener("click", () => restoreCfgSnapshot(b.dataset.snapRestore)));
-  } catch (e) { err("snapshots: " + e.message); }
-}
-async function saveCfgSnapshot() {
-  try {
-    const r = await getBridge().apiPost("backups/config/snapshot/save", {});
-    toast("配置快照已保存: " + ((r && r.name) || ""), "ok");
-    await loadCfgSnapshots();
-  } catch (e) { toast("快照失败: " + e.message, "bad"); }
-}
-async function restoreCfgSnapshot(name) {
-  try {
-    if (!(await uiConfirm(`确认恢复配置快照 ${name || "最新"}？当前配置将被覆盖！`, "恢复配置"))) return;
-    const r = await getBridge().apiPost("backups/config/snapshot/restore", name ? { name } : {});
-    toast("已恢复配置快照: " + ((r && r.name) || ""), "ok");
-    await loadCfgSnapshots();
-    await loadBackupCfg();
-  } catch (e) { toast("恢复失败: " + e.message, "bad"); }
-}
 document.getElementById("btnBackupCfgSave")?.addEventListener("click", saveBackupCfg);
-document.getElementById("btnCfgSnapSave")?.addEventListener("click", saveCfgSnapshot);
-document.getElementById("btnCfgSnapRestore")?.addEventListener("click", () => restoreCfgSnapshot(""));
 document.getElementById("btnSlaveRefresh")?.addEventListener("click", loadSlaveUsers);
 document.getElementById("slaveSearch")?.addEventListener("input", renderSlaveTable);
 document.getElementById("slaveSort")?.addEventListener("change", renderSlaveTable);
@@ -3714,7 +3702,7 @@ async function checkVersionUpdate(silent = false) {
       btn.disabled = true;
       btn.textContent = "⏳ 检测中…";
     }
-    if (statusEl) {
+    if (statusEl && !silent) {
       statusEl.style.display = "inline-flex";
       statusEl.style.color = "var(--muted)";
       statusEl.style.background = "var(--panel2)";
@@ -3759,11 +3747,15 @@ async function checkVersionUpdate(silent = false) {
           btn.style.background = "rgba(255,149,0,0.08)";
         }
         if (statusEl) {
-          statusEl.style.display = "inline-flex";
-          statusEl.style.color = "var(--warn)";
-          statusEl.style.background = "rgba(255,149,0,0.12)";
-          statusEl.style.border = "1px solid rgba(255,149,0,0.3)";
-          statusEl.textContent = `⚠️ 检测失败：${res.detect_error}`;
+          if (!silent) {
+            statusEl.style.display = "inline-flex";
+            statusEl.style.color = "var(--warn)";
+            statusEl.style.background = "rgba(255,149,0,0.12)";
+            statusEl.style.border = "1px solid rgba(255,149,0,0.3)";
+            statusEl.textContent = `⚠️ 检测失败：${res.detect_error}`;
+          } else {
+            statusEl.style.display = "none";
+          }
         }
         if (badge) {
           badge.style.display = "inline-flex";
@@ -3783,11 +3775,8 @@ async function checkVersionUpdate(silent = false) {
           btn.style.background = "rgba(52,199,89,0.08)";
         }
         if (statusEl) {
-          statusEl.style.display = "inline-flex";
-          statusEl.style.color = "var(--ok)";
-          statusEl.style.background = "rgba(52,199,89,0.12)";
-          statusEl.style.border = "1px solid rgba(52,199,89,0.3)";
-          statusEl.textContent = `✨ 本地与云端均为最新版本 (v${res.current_version})，无需更新！`;
+          statusEl.style.display = "none";
+          statusEl.textContent = "";
         }
         if (badge) {
           badge.style.display = "inline-flex";
@@ -3796,7 +3785,6 @@ async function checkVersionUpdate(silent = false) {
           badge.title = "本地与云端均为最新版本（点击查看详情）";
         }
         if (!silent) {
-          toast(`本地与云端均为最新版本 (v${res.current_version})`, "ok");
           showUpdateModal(res);
         }
       }

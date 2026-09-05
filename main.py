@@ -108,7 +108,7 @@ def _raw_file_response(data_bytes, filename):
 PLUGIN_ID = "astrbot_plugin_xbbot"
 PLUGIN_DESC = "小白(奴/签/银/娱/私/灵/骑/超管/帮派/冒险+主菜单+WebUI), 现代SQLite存储"
 PLUGIN_AUTHOR = "Light"
-PLUGIN_VERSION = "0.68.35"
+PLUGIN_VERSION = "0.68.36"
 PLUGIN_REPO = "https://github.com/imsuperone/xb"
 
 # 复用 router 的主菜单，保持单源
@@ -127,7 +127,7 @@ except Exception:
         "| 👮 超管系统 | ⚙️ 快捷配置 |\r\n"
         "----------------\r\n"
         "输入【系统名】如【签到系统】即可查看各系统对应指令！\r\n"
-        "当前版本：v0.68.35"
+        "当前版本：v0.68.36"
     )
 
 

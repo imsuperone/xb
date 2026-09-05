@@ -53,8 +53,14 @@ def _make_ssl_context():
     return ctx
 
 
+_VERIFIED_REMOTE_DIRS = set()
+
+
 def _ensure_remote_dir(base_url, remote_dir, auth, timeout=6):
-    """递归检查并创建 WebDAV 远端多级目录 (MKCOL)"""
+    """递归检查并创建 WebDAV 远端多级目录 (MKCOL)，带内存去重防触发服务商 429 频控"""
+    cache_key = f"{base_url}|{remote_dir}|{auth}"
+    if cache_key in _VERIFIED_REMOTE_DIRS:
+        return True
     parts = [p for p in remote_dir.strip("/").split("/") if p]
     cur_url = base_url.rstrip("/")
     for part in parts:
@@ -68,10 +74,15 @@ def _ensure_remote_dir(base_url, remote_dir, auth, timeout=6):
                 pass
         except urllib.error.HTTPError as e:
             # 405 Method Not Allowed / 301 / 409 通常表示目录已存在，属于正常情况
-            if e.code not in (405, 301, 409, 200, 201):
+            if e.code in (405, 301, 409, 200, 201):
                 pass
+            elif e.code == 429:
+                # 触发服务商频控，通常目录已就绪，跳过后续以保护配额
+                break
         except Exception:
             pass
+    _VERIFIED_REMOTE_DIRS.add(cache_key)
+    return True
 
 
 def upload_backup(local_path):
@@ -122,7 +133,10 @@ def upload_backup(local_path):
                 return True, msg
             return False, f"WebDAV 服务器返回非预期状态码: {status}"
     except urllib.error.HTTPError as e:
-        msg = f"WebDAV 上传 HTTP 错误 {e.code}: {e.reason}"
+        if e.code == 429:
+            msg = "WebDAV 上传触发服务商频控 (HTTP 429 Too Many Requests: 坚果云等限制频次，凭证正常，请稍候再试)"
+        else:
+            msg = f"WebDAV 上传 HTTP 错误 {e.code}: {e.reason}"
         if _logger:
             _logger.error(msg)
         return False, msg
@@ -150,8 +164,34 @@ def test_connection(url=None, user=None, pwd=None, rdir=None):
 
     auth = _get_auth_header(user, pwd)
 
+    # 1. 优先采用 RFC 4918 标准 OPTIONS 轻量探测（几乎所有 WebDAV 均支持，且不消耗目录列表配额，防坚果云 429 频控）
     try:
-        # 使用 PROPFIND 探测标准 WebDAV 根/服务 (携带尾部斜杠防 301 重定向)
+        req = urllib.request.Request(f"{base_url}/", method="OPTIONS")
+        req.add_header("Authorization", auth)
+        req.add_header("User-Agent", "XBBot-WebDAV-Backup/1.0")
+        with urllib.request.urlopen(req, timeout=8, context=_make_ssl_context()) as resp:
+            status = getattr(resp, "status", getattr(resp, "code", 200))
+            if status in (200, 204):
+                _ensure_remote_dir(base_url, rdir, auth, timeout=6)
+                return True, f"WebDAV 连接与鉴权成功！(服务器状态: {status}, 远端目录: {rdir})"
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            return False, "WebDAV 用户名或应用密码错误 (HTTP 401 Unauthorized)"
+        if e.code == 403:
+            return False, "WebDAV 拒绝访问 (HTTP 403 Forbidden)"
+        if e.code == 404:
+            return False, "WebDAV 服务器路径不存在 (HTTP 404 Not Found)"
+        if e.code == 429:
+            return False, "WebDAV 连接与鉴权正常，但触发服务商频控限制 (HTTP 429 Too Many Requests: 坚果云等限制频次，请等待 1-2 分钟后再试)"
+        # 405 Method Not Allowed 或 501，继续回退 PROPFIND
+    except (urllib.error.URLError, TimeoutError) as e:
+        reason = getattr(e, 'reason', e)
+        return False, f"WebDAV 连接超时或目标主机无法连接（8秒超时）: {reason}"
+    except Exception:
+        pass
+
+    # 2. 回退 PROPFIND 探测
+    try:
         req = urllib.request.Request(f"{base_url}/", method="PROPFIND")
         req.add_header("Authorization", auth)
         req.add_header("Depth", "0")
@@ -160,24 +200,17 @@ def test_connection(url=None, user=None, pwd=None, rdir=None):
             status = getattr(resp, "status", getattr(resp, "code", 200))
             if status in (200, 207):
                 _ensure_remote_dir(base_url, rdir, auth, timeout=6)
-                return True, f"WebDAV 连接与鉴权成功！服务器响应: {status} (目标目录: {rdir})"
+                return True, f"WebDAV 连接与鉴权成功！(PROPFIND 响应: {status}, 远端目录: {rdir})"
             return False, f"WebDAV 响应非预期状态码: {status}"
     except urllib.error.HTTPError as e:
-        if e.code in (405, 501):
-            try:
-                req2 = urllib.request.Request(f"{base_url}/", method="OPTIONS")
-                req2.add_header("Authorization", auth)
-                with urllib.request.urlopen(req2, timeout=5, context=_make_ssl_context()) as resp2:
-                    _ensure_remote_dir(base_url, rdir, auth, timeout=6)
-                    return True, f"WebDAV 连接成功！(OPTIONS 响应: {getattr(resp2, 'status', 200)})"
-            except Exception as e2:
-                return False, f"WebDAV 认证或连接失败 (HTTP {e.code}): {e.reason}"
         if e.code == 401:
             return False, "WebDAV 用户名或应用密码错误 (HTTP 401 Unauthorized)"
         if e.code == 403:
             return False, "WebDAV 拒绝访问 (HTTP 403 Forbidden)"
         if e.code == 404:
             return False, "WebDAV 服务器路径不存在 (HTTP 404 Not Found)"
+        if e.code == 429:
+            return False, "WebDAV 连接与鉴权正常，但触发服务商频控限制 (HTTP 429 Too Many Requests: 坚果云等限制频次，请等待 1-2 分钟后再试)"
         return False, f"WebDAV HTTP 错误 {e.code}: {e.reason}"
     except (urllib.error.URLError, TimeoutError) as e:
         reason = getattr(e, 'reason', e)
