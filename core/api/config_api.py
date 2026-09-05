@@ -52,6 +52,12 @@ async def handle_cfg_save(request, plugin_base=""):
         for sec, kv in norm.items():
             ST._CONFIG.setdefault(sec, {})
             ST._CONFIG[sec].update(kv)
+        # WebDAV 配置 DB 镜像写透（含用户主动清空语义）
+        try:
+            if hasattr(ST, "wd_cfg_backup"):
+                ST.wd_cfg_backup(norm.get("备份配置"))
+        except Exception:
+            pass
         try:
             ST.save_config()
         except Exception:

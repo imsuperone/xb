@@ -1367,6 +1367,36 @@ def recall_set(k, v):
         except Exception:
             _safe_rollback()
 
+_WD_KEYS = ("WebDAV服务器地址", "WebDAV用户名", "WebDAV应用密码", "WebDAV远端目录", "WebDAV备份开关")
+
+def wd_cfg_backup(payload_sec=None):
+    """WebDAV 配置 DB 镜像写透：仅镜像本次保存 payload 里出现的键（含清空语义）。
+    其它节保存不碰镜像，避免误清。"""
+    if not isinstance(payload_sec, dict):
+        return
+    try:
+        for k in _WD_KEYS:
+            if k in payload_sec:
+                recall_set("wdcfg__" + k, str(payload_sec.get(k, "") or ""))
+    except Exception:
+        pass
+
+def wd_cfg_restore():
+    """WebDAV 配置 DB 镜像恢复：内存缺键或空值且镜像有非空值时回填。
+    用户主动清空（镜像同步为空）不会诈尸。"""
+    try:
+        sec = _CONFIG.setdefault("备份配置", {}) if isinstance(_CONFIG, dict) else {}
+        if not isinstance(sec, dict):
+            return
+        for k in _WD_KEYS:
+            cur = str(sec.get(k, "") or "")
+            if not cur:
+                v = recall_get("wdcfg__" + k, "")
+                if v:
+                    sec[k] = v
+    except Exception:
+        pass
+
 def recall_get(k, default=None):
     k_str = str(k)
     with _KV_CACHE_LOCK:

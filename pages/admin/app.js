@@ -1437,7 +1437,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.68.29"
+        version: res.version || "0.68.30"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -3523,10 +3523,14 @@ document.getElementById("btnDbDoctor")?.addEventListener("click", runDbDoctor);
 let LATEST_RELEASE_DATA = null;
 
 async function checkVersionUpdate(silent = false) {
+  const btn = document.getElementById("btnCheckUpdate");
   try {
     if (!silent) toast("正在检测最新版本...", "ok");
-    const res = await getBridge().apiGet("version/check");
-    if (res && res.ok) {
+    if (btn) { btn.disabled = true; btn.textContent = "⏳ 检测中…"; }
+    // 20秒超时熔断：任何挂起都转为可见报错，杜绝点击无反应
+    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error("请求超时(20s)，请检查网络后重试")), 20000));
+    const res = await Promise.race([getBridge().apiGet("version/check"), timeout]);
+    if (res && (res.ok || res.has_update !== undefined || res.current_version)) {
       LATEST_RELEASE_DATA = res;
       const badge = document.getElementById("verBadge");
       if (res.has_update) {
@@ -3555,9 +3559,18 @@ async function checkVersionUpdate(silent = false) {
           toast(`当前已是最新版本 (${res.current_version})`, "ok");
         }
       }
+    } else {
+      // 兜底：任何非预期响应形状也必须给提示，杜绝点击无反应
+      if (!silent) {
+        let raw = "";
+        try { raw = JSON.stringify(res).slice(0, 120); } catch (e) {}
+        toast("检测更新无有效响应" + (raw ? ("：" + raw) : "，请重试或查看AstrBot后台日志"), "bad");
+      }
     }
   } catch(err) {
     if (!silent) toast("检测更新失败: " + err.message, "bad");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "🚀 检查更新"; }
   }
 }
 
