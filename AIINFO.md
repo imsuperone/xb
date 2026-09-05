@@ -5,12 +5,12 @@
 | 项目属性 | 当前值 |
 | :--- | :--- |
 | **插件名称** | `astrbot_plugin_xbbot` (小白统一模块) |
-| **当前版本** | `v0.68.28` (已发布并在 GitHub 与本地保持对齐) |
+| **当前版本** | `v0.68.29` (已发布并在 GitHub 与本地保持对齐) |
 | **项目作者** | Light (`faxlight@faxt.top`) |
 | **开源仓库** | `https://github.com/imsuperone/xb` |
 | **经济基线 (v0.68.28)** | 接龙 20金币+0魅力全局锁定；WebDAV 持久兜底防丢 |
 | **主代码目录** | `c:\Users\Light\Desktop\DRxb\astrbot_plugins\astrbot_plugin_xbbot` |
-| **离线发行包** | `C:\Users\Light\Desktop\DRxb\astrbot_plugin_xbbot_v0.68.28.zip` |
+| **离线发行包** | `C:\Users\Light\Desktop\DRxb\astrbot_plugin_xbbot_v0.68.29.zip` |
 | **平台依赖** | AstrBot >= 3.4.0, Python >= 3.10 (支持 3.14t/自由线程) |
 | **底层协议端** | OneBot v11 (aiocqhttp), NapCat, Lagrange 原生图文 |
 
@@ -19,7 +19,8 @@
 ## 🚦 系统运行状态诊断指标
 
 - **Python 模块语法解析**：40/40 语法解析通过 (100%)
-- **版本号强一致性对齐**：9/9 处对齐为 `0.68.28` (100%)
+- **版本号强一致性对齐**：9/9 处对齐为 `0.68.29` (100%)
+- **WebDAV/更新提示 (v0.68.29)**：空值回填防丢已验证；检测失败黄灯+可重试，不再误报已是最新
 - **三对齐 (v0.68.27)**：库5表无漂移/配置92键全覆盖(补2)/映射自洽/种子配置无密钥
 - **交付审计 (v0.68.26)**：git零库零备份零缓存/源码零密钥零QQ/交付zip纯净/读副本恢复清空合并一致性确认
 - **复检结论 (v0.68.25)**：verify/压测/前后端对齐/索引一致性/投诉场景冒烟全绿，零逻辑变更

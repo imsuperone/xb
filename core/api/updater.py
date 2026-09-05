@@ -33,7 +33,7 @@ def _get_local_version(plugin_base=""):
                     return line.split(":", 1)[1].strip().strip('"').strip("'")
     except Exception:
         pass
-    return "0.68.28"
+    return "0.68.29"
 
 
 def _parse_version_tuple(v_str):
@@ -111,6 +111,9 @@ def check_latest_version(plugin_base=""):
         best_body = "当前已是最新版本。"
 
     has_update = _parse_version_tuple(best_ver) > _parse_version_tuple(local_ver)
+    detect_error = None
+    if not main_ver and not rel_ver:
+        detect_error = "无法连接 GitHub（raw/Api 双通道均失败，多为服务器网络或代理问题），请检查网络后重试"
     return {
         "ok": True,
         "current_version": local_ver,
@@ -118,7 +121,8 @@ def check_latest_version(plugin_base=""):
         "has_update": has_update,
         "release_name": best_name,
         "release_date": best_date,
-        "changelog": best_body
+        "changelog": best_body,
+        "detect_error": detect_error
     }
 
 

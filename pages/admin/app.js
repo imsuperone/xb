@@ -1437,7 +1437,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.68.28"
+        version: res.version || "0.68.29"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -3532,10 +3532,22 @@ async function checkVersionUpdate(silent = false) {
       if (res.has_update) {
         if (badge) {
           badge.style.display = "inline-flex";
+          badge.style.background = "";
           badge.textContent = `🚀 发现新版本 ${res.latest_version}`;
+          badge.title = "点击查看更新并一键升级";
         }
         if (!silent) {
           showUpdateModal(res);
+        }
+      } else if (res.detect_error) {
+        if (badge) {
+          badge.style.display = "inline-flex";
+          badge.style.background = "linear-gradient(135deg,#F59E0B,#D97706)";
+          badge.textContent = "⚠️ 更新检测失败";
+          badge.title = res.detect_error + "（点击重试）";
+        }
+        if (!silent) {
+          toast("更新检测失败：" + res.detect_error, "bad", 8000);
         }
       } else {
         if (badge) badge.style.display = "none";
@@ -3580,7 +3592,7 @@ ${isNew ? `
 
 // 绑定版本徽章与检查更新按钮
 document.getElementById("verBadge")?.addEventListener("click", () => {
-  if (LATEST_RELEASE_DATA) showUpdateModal(LATEST_RELEASE_DATA);
+  if (LATEST_RELEASE_DATA && !LATEST_RELEASE_DATA.detect_error) showUpdateModal(LATEST_RELEASE_DATA);
   else checkVersionUpdate(false);
 });
 document.getElementById("btnCheckUpdate")?.addEventListener("click", () => checkVersionUpdate(false));

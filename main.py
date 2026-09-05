@@ -108,7 +108,7 @@ def _raw_file_response(data_bytes, filename):
 PLUGIN_ID = "astrbot_plugin_xbbot"
 PLUGIN_DESC = "小白(奴/签/银/娱/私/灵/骑/超管/帮派/冒险+主菜单+WebUI), 现代SQLite存储"
 PLUGIN_AUTHOR = "Light"
-PLUGIN_VERSION = "0.68.28"
+PLUGIN_VERSION = "0.68.29"
 PLUGIN_REPO = "https://github.com/imsuperone/xb"
 
 # 复用 router 的主菜单，保持单源
@@ -183,7 +183,12 @@ class XbBot(Star):
                     if isinstance(_kv, dict) and _kv:
                         _dst = ST._CONFIG.setdefault(_sec, {})
                         for _k, _v in _kv.items():
-                            _dst.setdefault(_k, _v)
+                            if _k not in _dst:
+                                _dst[_k] = _v
+                            elif str(_dst.get(_k, "")) == "" and str(_v) != "":
+                                # AstrBot 原生页按 schema 物化空键会覆盖掉用户值，
+                                # 本地有非空持久值时必须回填，否则 WebDAV 等配置重启即丢
+                                _dst[_k] = _v
         except Exception:
             pass
         # 接龙奖励全局锁定 20 金币 + 0 魅力：历史旧档（400+2 等）残留会被一次性纠正
