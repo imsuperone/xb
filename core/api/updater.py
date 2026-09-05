@@ -14,7 +14,7 @@ try:
 except ImportError:
     import store as ST
 
-GITHUB_REPO = "emmfax/xb"
+GITHUB_REPO = "imsuperone/xb"
 REPO_URL = f"https://github.com/{GITHUB_REPO}"
 API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
@@ -33,7 +33,7 @@ def _get_local_version(plugin_base=""):
                     return line.split(":", 1)[1].strip().strip('"').strip("'")
     except Exception:
         pass
-    return "0.68.27"
+    return "0.68.28"
 
 
 def _parse_version_tuple(v_str):

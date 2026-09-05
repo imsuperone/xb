@@ -108,8 +108,8 @@ def _raw_file_response(data_bytes, filename):
 PLUGIN_ID = "astrbot_plugin_xbbot"
 PLUGIN_DESC = "小白(奴/签/银/娱/私/灵/骑/超管/帮派/冒险+主菜单+WebUI), 现代SQLite存储"
 PLUGIN_AUTHOR = "Light"
-PLUGIN_VERSION = "0.68.27"
-PLUGIN_REPO = "https://github.com/emmfax/xb"
+PLUGIN_VERSION = "0.68.28"
+PLUGIN_REPO = "https://github.com/imsuperone/xb"
 
 # 复用 router 的主菜单，保持单源
 try:
@@ -170,6 +170,35 @@ class XbBot(Star):
         ST.set_config_path(os.path.join(data_dir, "config.json"))
         ST.set_backup_dir(os.path.join(data_dir, "backups"))
         ST.set_astrbot_config(config)
+        # 持久配置兜底：WebUI 保存落盘 data_dir/config.json；若 AstrBot 重启时过滤掉
+        # 未知节（如备份配置/WebDAV），用本地持久值补齐缺失键，防“保存后丢失”
+        try:
+            import json as _pjs
+            _pcfg = os.path.join(data_dir, "config.json")
+            if os.path.isfile(_pcfg):
+                with open(_pcfg, encoding="utf-8") as _pf:
+                    _praw = _pjs.load(_pf)
+                _pnom = _normalize_cfg(_praw) if isinstance(_praw, dict) else {}
+                for _sec, _kv in _pnom.items():
+                    if isinstance(_kv, dict) and _kv:
+                        _dst = ST._CONFIG.setdefault(_sec, {})
+                        for _k, _v in _kv.items():
+                            _dst.setdefault(_k, _v)
+        except Exception:
+            pass
+        # 接龙奖励全局锁定 20 金币 + 0 魅力：历史旧档（400+2 等）残留会被一次性纠正
+        try:
+            _ent = ST._CONFIG.setdefault("娱乐配置", {})
+            if str(_ent.get("接龙奖励金币", "20")) != "20" or str(_ent.get("接龙奖励魅力", "0")) != "0":
+                _ent["接龙奖励金币"] = "20"
+                _ent["接龙奖励魅力"] = "0"
+                try:
+                    ST.save_config()
+                    ST.sync_astrbot_config(ST._CONFIG)
+                except Exception:
+                    pass
+        except Exception:
+            pass
         self._db_path = db_path
         old_db = str(cfg.get("网络", {}).get("merge_from_db", "") or "")
         if old_db:

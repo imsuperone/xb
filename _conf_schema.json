@@ -889,12 +889,12 @@
       "接龙奖励金币": {
         "type": "int",
         "description": "接龙成功奖励金币",
-        "default": 50
+        "default": 20
       },
       "接龙奖励魅力": {
         "type": "int",
         "description": "接龙成功奖励魅力",
-        "default": 2
+        "default": 0
       },
       "接龙消耗体力": {
         "type": "int",
