@@ -1,6 +1,15 @@
 # -*- coding: utf-8 -*-
 """API helpers — _err / _raw_file_response / get_req_query / get_req_json 统一出口"""
-from astrbot.api.web import json_response, error_response as _orig_error_response
+import inspect
+import json
+try:
+    from astrbot.api.web import json_response, error_response as _orig_error_response
+except Exception:
+    def json_response(data, *args, **kwargs):
+        return data
+
+    def _orig_error_response(msg, code=500):
+        return {"error": msg, "code": code}
 
 
 def _err(msg, code=500):
@@ -11,6 +20,18 @@ def _err(msg, code=500):
             return _orig_error_response(msg)
         except Exception:
             return json_response({"error": msg, "code": code})
+
+
+def no_cache_response(resp):
+    """为 Response 对象注入禁用缓存响应头，杜绝浏览器与中间代理缓存 GET API"""
+    try:
+        if hasattr(resp, "headers"):
+            resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            resp.headers["Pragma"] = "no-cache"
+            resp.headers["Expires"] = "0"
+    except Exception:
+        pass
+    return resp
 
 
 def _raw_file_response(data_bytes, filename):
@@ -34,29 +55,40 @@ def _raw_file_response(data_bytes, filename):
 
 def get_req_query(request, key, default=""):
     """跨框架安全提取 URL 查询参数 (支持 aiohttp / quart / starlette / dict / None)"""
-    if request is None:
+    req = request
+    if req is None:
+        try:
+            from astrbot.api.web import request as _web_req
+            req = _web_req
+        except Exception:
+            try:
+                from quart import request as _quart_req
+                req = _quart_req
+            except Exception:
+                pass
+    if req is None:
         return default
     try:
-        if hasattr(request, "query") and request.query is not None:
-            v = request.query.get(key, default)
+        if hasattr(req, "args") and req.args is not None:
+            v = req.args.get(key, default)
             return str(v) if v is not None else default
     except Exception:
         pass
     try:
-        if hasattr(request, "args") and request.args is not None:
-            v = request.args.get(key, default)
+        if hasattr(req, "query") and req.query is not None:
+            v = req.query.get(key, default)
             return str(v) if v is not None else default
     except Exception:
         pass
     try:
-        if hasattr(request, "query_params") and request.query_params is not None:
-            v = request.query_params.get(key, default)
+        if hasattr(req, "query_params") and req.query_params is not None:
+            v = req.query_params.get(key, default)
             return str(v) if v is not None else default
     except Exception:
         pass
     try:
-        if isinstance(request, dict):
-            v = request.get(key, default)
+        if isinstance(req, dict):
+            v = req.get(key, default)
             return str(v) if v is not None else default
     except Exception:
         pass
@@ -64,41 +96,115 @@ def get_req_query(request, key, default=""):
 
 
 async def get_req_json(request, default=None):
-    """跨框架安全提取 JSON Body (支持 aiohttp / quart / starlette / FastAPI / dict / None)"""
+    """跨框架安全提取 JSON Body (支持 Quart / aiohttp / starlette / FastAPI / dict / None)"""
     if default is None:
         default = {}
-    if request is None:
+    req = request
+    if req is None:
+        try:
+            from astrbot.api.web import request as _web_req
+            req = _web_req
+        except Exception:
+            try:
+                from quart import request as _quart_req
+                req = _quart_req
+            except Exception:
+                pass
+    if req is None:
         return default
-    if isinstance(request, dict):
-        return request
-    import json
-    # 1. 尝试 request.json()
+    if isinstance(req, dict):
+        return req
+
+    # 1. Quart 优先: request.get_json() (官方异步方法)
     try:
-        if hasattr(request, "json"):
-            if callable(request.json):
-                res = await request.json()
-                if isinstance(res, dict):
-                    return res
-            elif isinstance(request.json, dict):
-                return request.json
+        if hasattr(req, "get_json") and callable(req.get_json):
+            res = req.get_json()
+            if inspect.isawaitable(res):
+                res = await res
+            if isinstance(res, dict):
+                return res
+            elif isinstance(res, str) and res.strip():
+                try:
+                    p = json.loads(res)
+                    if isinstance(p, dict):
+                        return p
+                except Exception:
+                    pass
     except Exception:
         pass
-    # 2. 尝试 request.read() (aiohttp / starlette)
+
+    # 2. 检查 request.json 属性 (Quart 下为 async property，访问时返回 coroutine；其它框架为 dict 或 callable)
     try:
-        if hasattr(request, "read") and callable(request.read):
-            raw = await request.read()
+        j = getattr(req, "json", None)
+        if j is not None:
+            if inspect.isawaitable(j):
+                res = await j
+                if isinstance(res, dict):
+                    return res
+                elif isinstance(res, str) and res.strip():
+                    try:
+                        p = json.loads(res)
+                        if isinstance(p, dict):
+                            return p
+                    except Exception:
+                        pass
+            elif callable(j):
+                res = j()
+                if inspect.isawaitable(res):
+                    res = await res
+                if isinstance(res, dict):
+                    return res
+                elif isinstance(res, str) and res.strip():
+                    try:
+                        p = json.loads(res)
+                        if isinstance(p, dict):
+                            return p
+                    except Exception:
+                        pass
+            elif isinstance(j, dict):
+                return j
+    except Exception:
+        pass
+
+    # 3. 尝试 request.get_data() (Quart 获取原始 bytes)
+    try:
+        if hasattr(req, "get_data") and callable(req.get_data):
+            raw = req.get_data()
+            if inspect.isawaitable(raw):
+                raw = await raw
+            if raw:
+                if isinstance(raw, (bytes, bytearray)):
+                    raw = raw.decode("utf-8", errors="ignore")
+                if isinstance(raw, str) and raw.strip():
+                    parsed = json.loads(raw)
+                    if isinstance(parsed, dict):
+                        return parsed
+    except Exception:
+        pass
+
+    # 4. 尝试 request.read() (aiohttp / starlette)
+    try:
+        if hasattr(req, "read") and callable(req.read):
+            raw = req.read()
+            if inspect.isawaitable(raw):
+                raw = await raw
             if raw:
                 parsed = json.loads(raw.decode("utf-8", errors="ignore"))
                 if isinstance(parsed, dict):
                     return parsed
     except Exception:
         pass
-    # 3. 尝试 request.body (FastAPI / Starlette)
+
+    # 5. 尝试 request.body (FastAPI / Starlette)
     try:
-        if hasattr(request, "body"):
-            raw = request.body
-            if callable(raw):
-                raw = await raw()
+        if hasattr(req, "body"):
+            raw = req.body
+            if inspect.isawaitable(raw):
+                raw = await raw
+            elif callable(raw):
+                raw = raw()
+                if inspect.isawaitable(raw):
+                    raw = await raw
             if isinstance(raw, (bytes, bytearray)):
                 raw = raw.decode("utf-8", errors="ignore")
             if isinstance(raw, str) and raw.strip():
@@ -107,13 +213,32 @@ async def get_req_json(request, default=None):
                     return parsed
     except Exception:
         pass
-    # 4. 尝试 request.post() (表单兼容)
+
+    # 6. 尝试 request.form (表单兼容)
     try:
-        if hasattr(request, "post") and callable(request.post):
-            res = await request.post()
+        f = getattr(req, "form", None)
+        if f is not None:
+            if inspect.isawaitable(f):
+                f = await f
+            elif callable(f):
+                f = f()
+                if inspect.isawaitable(f):
+                    f = await f
+            if f and isinstance(f, dict):
+                return dict(f)
+    except Exception:
+        pass
+
+    # 7. 尝试 request.post() (aiohttp 表单兼容)
+    try:
+        if hasattr(req, "post") and callable(req.post):
+            res = req.post()
+            if inspect.isawaitable(res):
+                res = await res
             if res:
                 return dict(res)
     except Exception:
         pass
+
     return default
 

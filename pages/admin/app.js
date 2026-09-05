@@ -2,6 +2,27 @@ const PLUGIN_ID = "astrbot_plugin_xbbot";
 
 let _WORKING_API_PREFIX = null;
 
+function cleanEndpointAndParams(endpoint, params) {
+  let ep = String(endpoint || "").replace(/^\/+/, "");
+  let mergedParams = (params && typeof params === "object") ? Object.assign({}, params) : {};
+  if (ep.includes("?")) {
+    const qIdx = ep.indexOf("?");
+    const qStr = ep.slice(qIdx + 1);
+    ep = ep.slice(0, qIdx);
+    if (qStr) {
+      try {
+        const urlParams = new URLSearchParams(qStr);
+        for (const [k, v] of urlParams.entries()) {
+          if (!(k in mergedParams)) {
+            mergedParams[k] = v;
+          }
+        }
+      } catch (e) {}
+    }
+  }
+  return { ep, params: mergedParams };
+}
+
 function getBridge() {
   let rawBridge = null;
   try {
@@ -21,47 +42,59 @@ function getBridge() {
   if (rawBridge) {
     return {
       apiGet(endpoint, params) {
-        let ep = String(endpoint || "");
-        if (params && typeof params === "object" && Object.keys(params).length) {
-          const sep = ep.includes("?") ? "&" : "?";
-          ep += sep + new URLSearchParams(params).toString();
+        const { ep, params: cleanParams } = cleanEndpointAndParams(endpoint, params);
+        if (cleanParams && Object.keys(cleanParams).length > 0) {
+          return rawBridge.apiGet(ep, cleanParams);
         }
         return rawBridge.apiGet(ep);
       },
       apiPost(endpoint, data) {
-        return rawBridge.apiPost(endpoint, data);
+        const { ep } = cleanEndpointAndParams(endpoint);
+        return rawBridge.apiPost(ep, data || {});
+      },
+      download(endpoint, params, filename) {
+        const { ep, params: cleanParams } = cleanEndpointAndParams(endpoint, params);
+        if (typeof rawBridge.download === "function") {
+          return rawBridge.download(ep, cleanParams, filename);
+        }
+      },
+      upload(endpoint, file) {
+        const { ep } = cleanEndpointAndParams(endpoint);
+        if (typeof rawBridge.upload === "function") {
+          return rawBridge.upload(ep, file);
+        }
       }
     };
   }
 
   return {
     async apiGet(endpoint, params) {
-      let ep = String(endpoint || "").replace(/^\/+/, "");
-      if (params && typeof params === "object" && Object.keys(params).length) {
-        const sep = ep.includes("?") ? "&" : "?";
-        ep += sep + new URLSearchParams(params).toString();
+      const { ep, params: cleanParams } = cleanEndpointAndParams(endpoint, params);
+      let fullEp = ep;
+      if (cleanParams && Object.keys(cleanParams).length > 0) {
+        fullEp += "?" + new URLSearchParams(cleanParams).toString();
       }
       if (_WORKING_API_PREFIX !== null) {
         try {
-          const r = await fetch(_WORKING_API_PREFIX + ep);
+          const r = await fetch(_WORKING_API_PREFIX + fullEp);
           if (r.ok) return await r.json();
         } catch (err) {}
       }
       const prefixes = [`/api/plugins/${PLUGIN_ID}/`, `/${PLUGIN_ID}/`, `api/`, `./api/`, ``];
       for (const p of prefixes) {
         try {
-          const r = await fetch(p + ep);
+          const r = await fetch(p + fullEp);
           if (r.ok) {
             _WORKING_API_PREFIX = p;
             return await r.json();
           }
         } catch (err) {}
       }
-      const r = await fetch(ep);
+      const r = await fetch(fullEp);
       return await r.json();
     },
     async apiPost(endpoint, data) {
-      const ep = String(endpoint || "").replace(/^\/+/, "");
+      const { ep } = cleanEndpointAndParams(endpoint);
       if (_WORKING_API_PREFIX !== null) {
         try {
           const r = await fetch(_WORKING_API_PREFIX + ep, {
@@ -94,7 +127,7 @@ function getBridge() {
       return await r.json();
     },
     async upload(endpoint, file) {
-      const ep = String(endpoint || "").replace(/^\/+/, "");
+      const { ep } = cleanEndpointAndParams(endpoint);
       const fd = new FormData();
       fd.append("file", file);
       const r = await fetch(`/${PLUGIN_ID}/` + ep, { method: "POST", body: fd });
@@ -1463,7 +1496,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.68.34"
+        version: res.version || "0.68.35"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -2911,7 +2944,7 @@ let BACKUP_DIR = "";
 async function loadBackups(dir="") {
   try {
     BACKUP_DIR = dir || "";
-    const d = await getBridge().apiGet("backups/list", { dir: BACKUP_DIR });
+    const d = await getBridge().apiGet("backups/list", BACKUP_DIR ? { dir: BACKUP_DIR } : {});
     const crumbs = (d.dir || "").split("/").filter(Boolean);
     let crumb = `<a data-bkcrumb="">根目录</a>`;
     let acc = "";
@@ -2973,7 +3006,7 @@ function renderBackups(d) {
 async function backupNow() {
   try { await getBridge().apiPost("backups/restore", { path: "__backup_now__" }); } catch (e) {}
   // 触发后端的 maybe_auto_backup via dummy restore path, 简化：直接调用 list 前后端会自动备份一次
-  try { await getBridge().apiGet("backups/list", { dir: "" }); } catch (e) {}
+  try { await getBridge().apiGet("backups/list"); } catch (e) {}
   // 更直接：调用后端的 backup via list 的 force 参数（后端在每次 list 前会检查，但为演示直接提示）
   toast("已触发备份，请刷新查看", "ok");
   await loadBackups(BACKUP_DIR);
@@ -3152,9 +3185,9 @@ async function saveBackupCfg() {
         return;
       }
     }
-    // 存后经防缓存带时间戳URL二次读回校验
+    // 存后二次读回校验
     try {
-      const cur = await getBridge().apiGet("config/get", { _t: Date.now() });
+      const cur = await getBridge().apiGet("config/get");
       const b = (cur || {})["备份配置"] || {};
       const savedUrl = b["WebDAV服务器地址"] || "";
       const savedSw = b["WebDAV备份开关"] || "";
@@ -3690,7 +3723,7 @@ async function checkVersionUpdate(silent = false) {
     }
     // 20秒超时熔断：任何挂起都转为可见报错，杜绝点击无反应
     const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error("请求超时(20s)，请检查网络后重试")), 20000));
-    const res = await Promise.race([getBridge().apiGet("version/check", { _t: Date.now() }), timeout]);
+    const res = await Promise.race([getBridge().apiGet("version/check"), timeout]);
     if (res && (res.ok || res.has_update !== undefined || res.current_version)) {
       LATEST_RELEASE_DATA = res;
       const badge = document.getElementById("verBadge");

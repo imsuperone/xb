@@ -108,7 +108,7 @@ def _raw_file_response(data_bytes, filename):
 PLUGIN_ID = "astrbot_plugin_xbbot"
 PLUGIN_DESC = "小白(奴/签/银/娱/私/灵/骑/超管/帮派/冒险+主菜单+WebUI), 现代SQLite存储"
 PLUGIN_AUTHOR = "Light"
-PLUGIN_VERSION = "0.68.34"
+PLUGIN_VERSION = "0.68.35"
 PLUGIN_REPO = "https://github.com/imsuperone/xb"
 
 # 复用 router 的主菜单，保持单源
@@ -127,7 +127,7 @@ except Exception:
         "| 👮 超管系统 | ⚙️ 快捷配置 |\r\n"
         "----------------\r\n"
         "输入【系统名】如【签到系统】即可查看各系统对应指令！\r\n"
-        "当前版本：v0.68.34"
+        "当前版本：v0.68.35"
     )
 
 
@@ -636,6 +636,18 @@ class XbBot(Star):
             yield r
 
     # ---------- Pages APIs (薄委托 → core/api) ----------
+    @staticmethod
+    def _get_req(request=None, args=None):
+        if request is not None:
+            return request
+        if args and len(args) > 0:
+            return args[0]
+        try:
+            from astrbot.api.web import request as _web_req
+            return _web_req
+        except Exception:
+            return None
+
     async def page_stats(self, request=None, *args, **kwargs):
         try:
             from .core.api.stats import handle_stats
@@ -724,7 +736,7 @@ class XbBot(Star):
             return _err(f"clean left users failed: {e}", 500)
 
     async def page_cfg_get(self, request=None, *args, **kwargs):
-        req = request if request is not None else (args[0] if args else None)
+        req = self._get_req(request, args)
         try:
             from .core.api.config_api import handle_cfg_get
             return await handle_cfg_get(req)
@@ -732,7 +744,7 @@ class XbBot(Star):
             return _err(f"get failed: {e}", 500)
 
     async def page_cfg_save(self, request=None, *args, **kwargs):
-        req = request if request is not None else (args[0] if args else None)
+        req = self._get_req(request, args)
         try:
             from .core.api.config_api import handle_cfg_save
             return await handle_cfg_save(req, os.path.dirname(os.path.abspath(__file__)))

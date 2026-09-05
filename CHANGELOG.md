@@ -1,5 +1,16 @@
 # 更新日志
 
+## v0.68.35
+- 🔌 **AstrBot 插件桥接端点彻底修复 (解决 Plugin bridge endpoint is invalid)**：
+  - 彻底根除 `app.js` 原生 bridge 端点校验报错：严禁向 `rawBridge` 传递带有 `?` 或查询参数的 endpoint 字符串；
+  - 增强 `getBridge()` 与 `cleanEndpointAndParams` 架构，将 endpoint 严格剥离为纯路径标识，查询参数独立通过原生第 2 参数传递，同时移除前端所有硬编码 `?_t=`；
+  - 修复 `backups/list`、`version/check`、`config/get` 等 API 在 AstrBot 原生 WebUI 内部调用时触发的 endpoint 校验异常。
+- ⚡ **Quart 异步请求体与全局代理深度适配 (解决 请求体为空或解析失败)**：
+  - 全面适配 AstrBot 底层 Quart 异步 Web 框架特性，彻底重构 `core/api/helpers.py` 中的 `get_req_json`；
+  - 优先调用 Quart 官方异步方法 `await request.get_json()`，并正确 await Quart 的 `request.json` async property 协程对象，杜绝 `RuntimeWarning: coroutine was never awaited` 导致的空请求体抛错；
+  - 增加 `from astrbot.api.web import request as _web_req` 兜底，即便 Web API 路由未显式传递形参也能自动从上下文捕获活跃请求体与查询参数；
+  - 统一为 `config/get`、`version/check`、`backups/list` 等核心 GET/POST 响应注入标准 HTTP `Cache-Control: no-cache, no-store, must-revalidate` 禁用缓存响应头，彻底消除浏览器陈旧缓存。
+
 ## v0.68.34
 - 🚀 **检查更新全方位回显与极速响应**：
   - 检测按钮直接承载状态与结果展示（如 `🟢 已是最新 (v0.68.34)`、`🚀 发现新版 vX.Y.Z`、`⚠️ 重试检测`），不再静默复位为“检查更新”；

@@ -6,7 +6,7 @@ import os
 import time
 from astrbot.api.web import json_response
 
-from .helpers import _err, get_req_query, get_req_json
+from .helpers import _err, get_req_query, get_req_json, no_cache_response
 
 try:
     from ... import store as ST
@@ -60,7 +60,7 @@ async def handle_backups_list(request, plugin_base=""):
             files.append({"name": name, "path": r, "size": sz, "mtime": mtime})
     dirs.sort(key=lambda x: x["name"], reverse=True)
     files.sort(key=lambda x: x["name"], reverse=True)
-    return json_response({"dir": str(rel or ""), "dirs": dirs, "files": files})
+    return no_cache_response(json_response({"dir": str(rel or ""), "dirs": dirs, "files": files}))
 
 
 async def handle_backups_restore(request, plugin_base=""):

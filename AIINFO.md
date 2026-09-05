@@ -5,12 +5,12 @@
 | 项目属性 | 当前值 |
 | :--- | :--- |
 | **插件名称** | `astrbot_plugin_xbbot` (小白统一模块) |
-| **当前版本** | `v0.68.34` (已发布并在 GitHub 与本地保持对齐) |
+| **当前版本** | `v0.68.35` (已发布并在 GitHub 与本地保持对齐) |
 | **项目作者** | Light (`faxlight@faxt.top`) |
 | **开源仓库** | `https://github.com/imsuperone/xb` |
 | **经济基线 (v0.68.28)** | 接龙 20金币+0魅力全局锁定；WebDAV 持久兜底防丢 |
 | **主代码目录** | `c:\Users\Light\Desktop\DRxb\astrbot_plugins\astrbot_plugin_xbbot` |
-| **离线发行包** | `C:\Users\Light\Desktop\DRxb\astrbot_plugin_xbbot_v0.68.34.zip` |
+| **离线发行包** | `C:\Users\Light\Desktop\DRxb\astrbot_plugin_xbbot_v0.68.35.zip` |
 | **平台依赖** | AstrBot >= 3.4.0, Python >= 3.10 (支持 3.14t/自由线程) |
 | **底层协议端** | OneBot v11 (aiocqhttp), NapCat, Lagrange 原生图文 |
 
@@ -19,7 +19,9 @@
 ## 🚦 系统运行状态诊断指标
 
 - **Python 模块语法解析**：41/41 语法解析通过 (100%)
-- **版本号强一致性对齐**：9/9 处对齐为 `0.68.32` (100%)
+- **版本号强一致性对齐**：9/9 处对齐为 `0.68.35` (100%)
+- **插件桥接与Quart请求 (v0.68.35)**：彻底根治 `Plugin bridge endpoint is invalid.` 与 `未能读取到有效配置数据(请求体为空或解析失败)`
+- **检查更新全方位回显 (v0.68.34)**：检测按钮直显结果+jsDelivr CDN 1.5s 极速响应+WebDAV 读回校验强化
 - **备份管理 (v0.68.31)**：WebDAV 专属卡片+读回校验；配置快照一键恢复；更新检查零静默
 - **WebDAV/更新提示 (v0.68.30)**：DB镜像三级防丢4语义验证；检查更新零静默+20s熔断
 - **WebDAV/更新提示 (v0.68.29)**：空值回填防丢已验证；检测失败黄灯+可重试，不再误报已是最新

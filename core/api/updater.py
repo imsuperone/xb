@@ -7,7 +7,7 @@ import time
 import urllib.request
 import urllib.error
 from astrbot.api.web import json_response
-from .helpers import _err
+from .helpers import _err, no_cache_response
 
 try:
     from ... import store as ST
@@ -33,7 +33,7 @@ def _get_local_version(plugin_base=""):
                     return line.split(":", 1)[1].strip().strip('"').strip("'")
     except Exception:
         pass
-    return "0.68.34"
+    return "0.68.35"
 
 
 def _parse_version_tuple(v_str):
@@ -135,7 +135,7 @@ async def handle_version_check(request=None, plugin_base=""):
     global _LAST_CHECK_RES, _LAST_CHECK_TIME
     now = time.time()
     if _LAST_CHECK_RES is not None and (now - _LAST_CHECK_TIME) < _CHECK_CACHE_TTL:
-        return json_response(_LAST_CHECK_RES)
+        return no_cache_response(json_response(_LAST_CHECK_RES))
 
     import asyncio
     try:
@@ -149,4 +149,4 @@ async def handle_version_check(request=None, plugin_base=""):
         }
     _LAST_CHECK_RES = res
     _LAST_CHECK_TIME = now
-    return json_response(res)
+    return no_cache_response(json_response(res))

@@ -4,7 +4,7 @@ import os
 import json
 import time
 from astrbot.api.web import json_response
-from .helpers import _err, get_req_query, get_req_json
+from .helpers import _err, get_req_query, get_req_json, no_cache_response
 
 try:
     from ... import store as ST
@@ -38,7 +38,7 @@ async def handle_commands(request, plugin_base=""):
 async def handle_cfg_get(request):
     try:
         cfg = getattr(ST, "_CONFIG", {}) or {}
-        return json_response(cfg)
+        return no_cache_response(json_response(cfg))
     except Exception as e:
         return _err(f"get failed: {e}", 500)
 
@@ -76,7 +76,7 @@ async def handle_cfg_save(request, plugin_base=""):
             ST.sync_astrbot_config(ST._CONFIG)
         except Exception:
             pass
-        return json_response({"saved": True, "备份配置": ST._CONFIG.get("备份配置", {})})
+        return no_cache_response(json_response({"saved": True, "备份配置": ST._CONFIG.get("备份配置", {})}))
     except Exception as e:
         return _err(f"save failed: {e}", 500)
 
