@@ -5,12 +5,12 @@
 | 项目属性 | 当前值 |
 | :--- | :--- |
 | **插件名称** | `astrbot_plugin_xbbot` (小白统一模块) |
-| **当前版本** | `v0.68.30` (已发布并在 GitHub 与本地保持对齐) |
+| **当前版本** | `v0.68.31` (已发布并在 GitHub 与本地保持对齐) |
 | **项目作者** | Light (`faxlight@faxt.top`) |
 | **开源仓库** | `https://github.com/imsuperone/xb` |
 | **经济基线 (v0.68.28)** | 接龙 20金币+0魅力全局锁定；WebDAV 持久兜底防丢 |
 | **主代码目录** | `c:\Users\Light\Desktop\DRxb\astrbot_plugins\astrbot_plugin_xbbot` |
-| **离线发行包** | `C:\Users\Light\Desktop\DRxb\astrbot_plugin_xbbot_v0.68.30.zip` |
+| **离线发行包** | `C:\Users\Light\Desktop\DRxb\astrbot_plugin_xbbot_v0.68.31.zip` |
 | **平台依赖** | AstrBot >= 3.4.0, Python >= 3.10 (支持 3.14t/自由线程) |
 | **底层协议端** | OneBot v11 (aiocqhttp), NapCat, Lagrange 原生图文 |
 
@@ -19,7 +19,8 @@
 ## 🚦 系统运行状态诊断指标
 
 - **Python 模块语法解析**：40/40 语法解析通过 (100%)
-- **版本号强一致性对齐**：9/9 处对齐为 `0.68.30` (100%)
+- **版本号强一致性对齐**：9/9 处对齐为 `0.68.31` (100%)
+- **备份管理 (v0.68.31)**：WebDAV 专属卡片+读回校验；配置快照一键恢复；更新检查零静默
 - **WebDAV/更新提示 (v0.68.30)**：DB镜像三级防丢4语义验证；检查更新零静默+20s熔断
 - **WebDAV/更新提示 (v0.68.29)**：空值回填防丢已验证；检测失败黄灯+可重试，不再误报已是最新
 - **三对齐 (v0.68.27)**：库5表无漂移/配置92键全覆盖(补2)/映射自洽/种子配置无密钥

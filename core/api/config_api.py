@@ -58,6 +58,16 @@ async def handle_cfg_save(request, plugin_base=""):
                 ST.wd_cfg_backup(norm.get("备份配置"))
         except Exception:
             pass
+        # 全量配置自动快照（去重，删改乱可一键恢复）
+        try:
+            from .backup import auto_snapshot_if_changed as _auto_snap
+            _auto_snap()
+        except Exception:
+            try:
+                from core.api.backup import auto_snapshot_if_changed as _auto_snap2
+                _auto_snap2()
+            except Exception:
+                pass
         try:
             ST.save_config()
         except Exception:

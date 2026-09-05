@@ -108,7 +108,7 @@ def _raw_file_response(data_bytes, filename):
 PLUGIN_ID = "astrbot_plugin_xbbot"
 PLUGIN_DESC = "小白(奴/签/银/娱/私/灵/骑/超管/帮派/冒险+主菜单+WebUI), 现代SQLite存储"
 PLUGIN_AUTHOR = "Light"
-PLUGIN_VERSION = "0.68.30"
+PLUGIN_VERSION = "0.68.31"
 PLUGIN_REPO = "https://github.com/imsuperone/xb"
 
 # 复用 router 的主菜单，保持单源
@@ -273,6 +273,9 @@ class XbBot(Star):
         context.register_web_api(f"/{PLUGIN_ID}/backups/list", self.page_backups_list, ["GET"], "备份列表")
         context.register_web_api(f"/{PLUGIN_ID}/backups/restore", self.page_backups_restore, ["POST"], "恢复备份")
         context.register_web_api(f"/{PLUGIN_ID}/backups/delete", self.page_backups_delete, ["POST"], "删除备份")
+        context.register_web_api(f"/{PLUGIN_ID}/backups/config/snapshots", self.page_cfg_snapshots, ["GET"], "配置快照列表")
+        context.register_web_api(f"/{PLUGIN_ID}/backups/config/snapshot/save", self.page_cfg_snapshot_save, ["POST"], "保存配置快照")
+        context.register_web_api(f"/{PLUGIN_ID}/backups/config/snapshot/restore", self.page_cfg_snapshot_restore, ["POST"], "恢复配置快照")
         context.register_web_api(f"/{PLUGIN_ID}/backups/export", self.page_backups_export, ["GET", "POST"], "导出备份")
         context.register_web_api(f"/{PLUGIN_ID}/backups/doctor", self.page_db_doctor, ["POST", "GET"], "数据库健康体检与碎片整理")
         context.register_web_api(f"/{PLUGIN_ID}/backup/webdav/test", self.page_webdav_test, ["GET", "POST"], "测试WebDAV连接")
@@ -806,6 +809,27 @@ class XbBot(Star):
             return await handle_backups_delete(request, os.path.dirname(os.path.abspath(__file__)))
         except Exception as e:
             return _err(f"delete failed: {e}", 500)
+
+    async def page_cfg_snapshots(self, request=None, *args, **kwargs):
+        try:
+            from .core.api.backup import handle_cfg_snapshots
+            return await handle_cfg_snapshots(request, os.path.dirname(os.path.abspath(__file__)))
+        except Exception as e:
+            return _err(f"snapshots failed: {e}", 500)
+
+    async def page_cfg_snapshot_save(self, request=None, *args, **kwargs):
+        try:
+            from .core.api.backup import handle_cfg_snapshot_save
+            return await handle_cfg_snapshot_save(request, os.path.dirname(os.path.abspath(__file__)))
+        except Exception as e:
+            return _err(f"snapshot save failed: {e}", 500)
+
+    async def page_cfg_snapshot_restore(self, request=None, *args, **kwargs):
+        try:
+            from .core.api.backup import handle_cfg_snapshot_restore
+            return await handle_cfg_snapshot_restore(request, os.path.dirname(os.path.abspath(__file__)))
+        except Exception as e:
+            return _err(f"snapshot restore failed: {e}", 500)
 
     async def page_backups_export(self, request=None, *args, **kwargs):
         try:

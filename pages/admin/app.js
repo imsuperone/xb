@@ -84,7 +84,8 @@ function getBridge() {
 let CFG = {};
 
 // 各配置节归属系统（用于分类）+ 必要/玩法分层
-const NECESSARY_SECTIONS = ["总开关配置", "群组开关配置", "网络", "私聊配置", "维护配置", "备份配置"];
+const NECESSARY_SECTIONS = ["总开关配置", "群组开关配置", "网络", "私聊配置", "维护配置"];
+// 备份配置（含 WebDAV）已迁移至「备份管理」Tab 专属卡片，不在配置页重复渲染
 const GAMEPLAY_SECTIONS = ["签到配置","抽奖配置","新手配置","点赞配置","银行配置","娱乐配置","精灵配置","坐骑配置","帮派配置","冒险配置","祈福配置","起名配置","概率配置","唤醒词配置"];
 const SYSTEM_MAP = {
   "设置": "奴隶系统", "费用配置": "奴隶系统", "间隔配置": "奴隶系统",
@@ -607,7 +608,11 @@ const TAB_LOADERS = {
   cmds: async () => { return loadCommands(); },
   spirits: async () => { return loadSpirits(); },
   shops: async () => { return loadShops(); },
-  backups: async () => { return typeof loadBackups === "function" ? loadBackups("") : Promise.resolve(); },
+  backups: async () => {
+    if (typeof loadBackupCfg === "function") try { await loadBackupCfg(); } catch (e) {}
+    if (typeof loadCfgSnapshots === "function") try { await loadCfgSnapshots(); } catch (e) {}
+    return typeof loadBackups === "function" ? loadBackups("") : Promise.resolve();
+  },
   imgs: async () => { return loadImages(""); },
   groups: async () => { return loadGroups(); },
   logs: async () => { return loadLogs(); },
@@ -1437,7 +1442,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.68.30"
+        version: res.version || "0.68.31"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -3055,6 +3060,93 @@ document.getElementById("btnClearAll")?.addEventListener("click", async () => {
     toast("清空失败: " + e.message, "bad");
   }
 });
+// ---------- 备份管理：WebDAV 与自动备份配置 + 配置快照 ----------
+function _setVal(id, v) {
+  const el = document.getElementById(id);
+  if (el) el.value = v ?? "";
+}
+function _setChk(id, v) {
+  const el = document.getElementById(id);
+  if (el) el.checked = (String(v) === "真" || String(v) === "true" || String(v) === "1");
+}
+async function loadBackupCfg() {
+  try {
+    const cur = await getBridge().apiGet("config/get");
+    const b = (cur || {})["备份配置"] || {};
+    _setChk("wdSwitch", b["WebDAV备份开关"] ?? "假");
+    _setVal("wdUrl", b["WebDAV服务器地址"] ?? "");
+    _setVal("wdUser", b["WebDAV用户名"] ?? "");
+    _setVal("wdPwd", b["WebDAV应用密码"] ?? "");
+    _setVal("wdDir", b["WebDAV远端目录"] ?? "/xbbot_backup/");
+    _setChk("autoSwitch", b["自动备份开关"] ?? "真");
+    _setVal("autoHours", b["备份间隔小时"] ?? "3");
+    _setVal("autoKeep", b["保留备份数量"] ?? "30");
+  } catch (e) { err("backup cfg: " + e.message); }
+}
+async function saveBackupCfg() {
+  const msg = document.getElementById("backupCfgMsg");
+  const say = (t, ok) => {
+    if (msg) { msg.textContent = t; msg.classList.add(ok ? "ok" : "bad"); }
+    toast(t, ok ? "ok" : "bad");
+  };
+  try {
+    const g = (id) => (document.getElementById(id) || {}).value ?? "";
+    const payload = {"备份配置": {
+      "WebDAV备份开关": document.getElementById("wdSwitch")?.checked ? "真" : "假",
+      "WebDAV服务器地址": g("wdUrl").trim(),
+      "WebDAV用户名": g("wdUser").trim(),
+      "WebDAV应用密码": g("wdPwd"),
+      "WebDAV远端目录": g("wdDir").trim() || "/xbbot_backup/",
+      "自动备份开关": document.getElementById("autoSwitch")?.checked ? "真" : "假",
+      "备份间隔小时": g("autoHours").trim() || "3",
+      "保留备份数量": g("autoKeep").trim() || "30"
+    }};
+    await getBridge().apiPost("config/save", payload);
+    // 存后即读回校验，存不住立刻暴露
+    const cur = await getBridge().apiGet("config/get");
+    const saved = ((cur || {})["备份配置"] || {})["WebDAV服务器地址"] || "";
+    if (saved !== payload["备份配置"]["WebDAV服务器地址"]) {
+      say("保存异常：读回不一致，请重试", false);
+      return;
+    }
+    say("备份配置已保存并校验一致", true);
+  } catch (e) { say("保存失败: " + e.message, false); }
+}
+async function loadCfgSnapshots() {
+  try {
+    const r = await getBridge().apiGet("backups/config/snapshots", {});
+    const box = document.getElementById("cfgSnapList");
+    if (!box) return;
+    const list = (r && r.snapshots) || [];
+    if (!list.length) { box.innerHTML = `<span style="color:var(--muted)">暂无快照，点击「立即快照」创建第一份。</span>`; return; }
+    box.innerHTML = list.map((s) =>
+      `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)">` +
+      `<span style="font-weight:600">${esc(s.name)}</span>` +
+      `<span style="color:var(--muted);font-size:11.5px">${esc((s.sections || []).slice(0, 8).join("、"))}${(s.sections || []).length > 8 ? "…" : ""}</span>` +
+      `<button class="ghost sm" data-snap-restore="${esc(s.name)}" style="margin-left:auto">恢复此份</button></div>`
+    ).join("");
+    box.querySelectorAll("[data-snap-restore]").forEach((b) => b.addEventListener("click", () => restoreCfgSnapshot(b.dataset.snapRestore)));
+  } catch (e) { err("snapshots: " + e.message); }
+}
+async function saveCfgSnapshot() {
+  try {
+    const r = await getBridge().apiPost("backups/config/snapshot/save", {});
+    toast("配置快照已保存: " + ((r && r.name) || ""), "ok");
+    await loadCfgSnapshots();
+  } catch (e) { toast("快照失败: " + e.message, "bad"); }
+}
+async function restoreCfgSnapshot(name) {
+  try {
+    if (!(await uiConfirm(`确认恢复配置快照 ${name || "最新"}？当前配置将被覆盖！`, "恢复配置"))) return;
+    const r = await getBridge().apiPost("backups/config/snapshot/restore", name ? { name } : {});
+    toast("已恢复配置快照: " + ((r && r.name) || ""), "ok");
+    await loadCfgSnapshots();
+    await loadBackupCfg();
+  } catch (e) { toast("恢复失败: " + e.message, "bad"); }
+}
+document.getElementById("btnBackupCfgSave")?.addEventListener("click", saveBackupCfg);
+document.getElementById("btnCfgSnapSave")?.addEventListener("click", saveCfgSnapshot);
+document.getElementById("btnCfgSnapRestore")?.addEventListener("click", () => restoreCfgSnapshot(""));
 document.getElementById("btnSlaveRefresh")?.addEventListener("click", loadSlaveUsers);
 document.getElementById("slaveSearch")?.addEventListener("input", renderSlaveTable);
 document.getElementById("slaveSort")?.addEventListener("change", renderSlaveTable);

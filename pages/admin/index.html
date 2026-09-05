@@ -1570,7 +1570,7 @@
   <div class="wrap">
     <header>
       <div class="brand">
-        <h1>管理控制台 <span class="ver">v0.68.30</span> <span id="verBadge" style="display:none;font-size:11px;padding:3px 8px;border-radius:12px;background:linear-gradient(135deg, #10B981, #059669);color:#fff;font-weight:600;cursor:pointer;margin-left:4px;box-shadow:0 2px 6px rgba(16,185,129,0.3)" title="点击查看更新并一键升级">🚀 发现新版本</span></h1>
+        <h1>管理控制台 <span class="ver">v0.68.31</span> <span id="verBadge" style="display:none;font-size:11px;padding:3px 8px;border-radius:12px;background:linear-gradient(135deg, #10B981, #059669);color:#fff;font-weight:600;cursor:pointer;margin-left:4px;box-shadow:0 2px 6px rgba(16,185,129,0.3)" title="点击查看更新并一键升级">🚀 发现新版本</span></h1>
         <div class="sub">
           <span class="status-badge"><span class="status-dot"></span> 运行正常</span>
         </div>
@@ -1941,6 +1941,34 @@
         <div class="hint crumbs" id="backupCrumbs" style="margin:5px 0 8px"></div>
         <div class="search"><span>🔍</span><input id="backupSearch" placeholder="搜索日期目录 / 备份文件名…" /></div>
         <div id="backupBrowser"></div>
+      </div>
+      <div class="panel" style="margin-top:10px">
+        <h2>☁️ WebDAV 与自动备份配置</h2>
+        <div class="hint">WebDAV 地址与账号只在此处填写保存（坚果云请用应用密码）。保存后自动写入数据库镜像，重启不丢失。</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin-top:8px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:12.5px"><input type="checkbox" id="wdSwitch"> WebDAV备份开关</label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:12.5px"><input type="checkbox" id="autoSwitch"> 自动备份开关</label>
+          <label style="font-size:12.5px">服务器地址<input id="wdUrl" type="text" placeholder="https://dav.jianguoyun.com/dav/" style="width:100%;margin-top:4px"></label>
+          <label style="font-size:12.5px">用户名<input id="wdUser" type="text" placeholder="账号/邮箱" style="width:100%;margin-top:4px"></label>
+          <label style="font-size:12.5px">应用密码<input id="wdPwd" type="password" placeholder="应用密码/Token" style="width:100%;margin-top:4px"></label>
+          <label style="font-size:12.5px">远端目录<input id="wdDir" type="text" placeholder="/xbbot_backup/" style="width:100%;margin-top:4px"></label>
+          <label style="font-size:12.5px">备份间隔小时<input id="autoHours" type="number" min="1" style="width:100%;margin-top:4px"></label>
+          <label style="font-size:12.5px">保留备份数量<input id="autoKeep" type="number" min="1" style="width:100%;margin-top:4px"></label>
+        </div>
+        <div class="toolbar" style="margin-top:8px">
+          <button id="btnBackupCfgSave">💾 保存备份配置</button>
+          <span class="msg" id="backupCfgMsg"></span>
+        </div>
+      </div>
+      <div class="panel" style="margin-top:10px">
+        <h2>🛟 配置快照与一键恢复</h2>
+        <div class="hint">快照保存<strong>全部配置</strong>（必要配置+全部用户自定义）到数据库。配置丢失或改乱时，一键恢复。每次保存配置时会自动留一份快照（最多保留 5 份）。</div>
+        <div class="toolbar">
+          <button id="btnCfgSnapSave" class="ghost">📸 立即快照当前配置</button>
+          <button id="btnCfgSnapRestore" class="ghost">🛟 恢复最新快照</button>
+          <span class="msg" id="cfgSnapMsg"></span>
+        </div>
+        <div id="cfgSnapList" style="margin-top:8px;font-size:12.5px"></div>
       </div>
       <div class="panel" style="margin-top:10px">
         <h2>📦 旧库数据导入（兼容新旧格式）</h2>
