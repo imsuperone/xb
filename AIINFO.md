@@ -5,12 +5,12 @@
 | 项目属性 | 当前值 |
 | :--- | :--- |
 | **插件名称** | `astrbot_plugin_xbbot` (小白统一模块) |
-| **当前版本** | `v0.68.31` (已发布并在 GitHub 与本地保持对齐) |
+| **当前版本** | `v0.68.32` (已发布并在 GitHub 与本地保持对齐) |
 | **项目作者** | Light (`faxlight@faxt.top`) |
 | **开源仓库** | `https://github.com/imsuperone/xb` |
 | **经济基线 (v0.68.28)** | 接龙 20金币+0魅力全局锁定；WebDAV 持久兜底防丢 |
 | **主代码目录** | `c:\Users\Light\Desktop\DRxb\astrbot_plugins\astrbot_plugin_xbbot` |
-| **离线发行包** | `C:\Users\Light\Desktop\DRxb\astrbot_plugin_xbbot_v0.68.31.zip` |
+| **离线发行包** | `C:\Users\Light\Desktop\DRxb\astrbot_plugin_xbbot_v0.68.32.zip` |
 | **平台依赖** | AstrBot >= 3.4.0, Python >= 3.10 (支持 3.14t/自由线程) |
 | **底层协议端** | OneBot v11 (aiocqhttp), NapCat, Lagrange 原生图文 |
 
@@ -18,8 +18,8 @@
 
 ## 🚦 系统运行状态诊断指标
 
-- **Python 模块语法解析**：40/40 语法解析通过 (100%)
-- **版本号强一致性对齐**：9/9 处对齐为 `0.68.31` (100%)
+- **Python 模块语法解析**：41/41 语法解析通过 (100%)
+- **版本号强一致性对齐**：9/9 处对齐为 `0.68.32` (100%)
 - **备份管理 (v0.68.31)**：WebDAV 专属卡片+读回校验；配置快照一键恢复；更新检查零静默
 - **WebDAV/更新提示 (v0.68.30)**：DB镜像三级防丢4语义验证；检查更新零静默+20s熔断
 - **WebDAV/更新提示 (v0.68.29)**：空值回填防丢已验证；检测失败黄灯+可重试，不再误报已是最新
@@ -29,7 +29,7 @@
 - **读副本分离 (v0.68.24)**：`coins_get/recall_get` 走 `query_only` 独立连接，16线程×100混合读写零误差
 - **死亡代码清理 (v0.68.24)**：`pages/admin/tabs/` 12文件已删（全库零引用确认）
 - **配置项定义模式**：28 个系统，298 个配置项解析通过 (100%)
-- **WebUI 前端元素检查**：163 个 DOM ID 无重复；43 个 API 端点 100% 对齐后置路由
+- **WebUI 前端元素检查**：177 个 DOM ID 无重复；50 个 API 端点 100% 对齐后置路由
 - **主事件循环延迟 (Lag)**：0ms 纯内存极速分发（已根除旧版 56s 阻塞）
 - **数据库死锁与回滚**：已根除 `cannot rollback - no transaction is active` 与 `database is locked`
 - **24h等效压测 (`scripts/stress_24h.py`)**：4800 ops群聊风暴 p50 11ms/p95 41ms，DB原文零泄漏零逃逸异常；WebAPI 80/80；接龙30s/冒险30min自愈与资金守恒断言通过 (v0.68.23)
@@ -41,12 +41,12 @@
 
 | 文件路径 | 核心职责与关键维护点 |
 | :--- | :--- |
-| `main.py` | 插件主入口。`__init__` 中守护线程 `xb-auto-backup` 运行后台冷备与清理；`_dispatch` 纯内存异步分发（0ms）；注册 47 个 Web API |
+| `main.py` | 插件主入口。`__init__` 中守护线程 `xb-auto-backup` 运行后台冷备与清理；`_dispatch` 纯内存异步分发（0ms）；注册 50 个 Web API；启动时持久配置叠加+接龙奖励锁定 |
 | `store.py` | 现代 SQLite WAL 模式。全局锁 `_LOCK`；`clean_old_backups` 默认保留 30 份数据；`_safe_commit` 与 `_safe_rollback` 优雅降级 |
 | `core/webdav.py` | 纯标准库 WebDAV 备份客户端。支持 Alist/坚果云/NAS；探测超时 8s，上传超时 25s；后台线程异步静默上传 |
 | `core/platform.py` | 消息链跨平台构建，原生成分转换，群名片异步后台落盘 |
 | `core/router.py` | 统一主路由分发中心，主菜单生成，双分支测试探针 |
-| `core/api/backup.py` | WebUI 备份相关 API。包含 WebDAV 连通性测试与立即云备份端点（全面异步化） |
+| `core/api/backup.py` | WebUI 备份相关 API。包含 WebDAV 连通性测试与立即云备份端点（全面异步化）、配置快照存/列/恢复 |
 | `core/api/updater.py`| GitHub 云端版本检测。`asyncio.to_thread` 异步执行 |
 | `pages/admin/index.html` | Web 管理控制台前端骨架。13 大 Tab 视图 |
 | `pages/admin/app.js` | Web 控制台核心 JS 逻辑。包含 WebDAV 测试与云备份事件监听 |
@@ -61,6 +61,7 @@
 - **GET `/astrbot_plugin_xbbot/stats`**：全系统游戏资产宏观统计大屏
 - **GET `/astrbot_plugin_xbbot/config/get`** & **POST `/config/save`**：配置中心读取与实时保存
 - **GET `/astrbot_plugin_xbbot/backups/list`**：备份目录结构及文件树
+- **GET `/astrbot_plugin_xbbot/backups/config/snapshots`** & **POST `/snapshot/save`** & **POST `/snapshot/restore`**：全量配置快照存/列/一键恢复
 - **POST `/astrbot_plugin_xbbot/backup/webdav/test`**：测试 WebDAV 连通性与账号认证
 - **POST `/astrbot_plugin_xbbot/backup/webdav/upload`**：立即执行本地冷备并上传至 WebDAV
 - **POST `/astrbot_plugin_xbbot/backups/doctor`**：SQLite 碎片整理 (VACUUM) 与健康体检
