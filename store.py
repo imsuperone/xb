@@ -1197,10 +1197,15 @@ def set_backup_dir(path):
     BACKUP_DIR = path
 
 _LAST_BACKUP_CHECK = 0.0
+_LAST_BACKUP_PATH = ""
+_LAST_BACKUP_TIME = 0.0
 
-def backup_user_data(force=False):
-    global _last_backup, BACKUP_INTERVAL, _LAST_BACKUP_CHECK
+def backup_user_data(force=False, auto_upload=True):
+    global _last_backup, BACKUP_INTERVAL, _LAST_BACKUP_CHECK, _LAST_BACKUP_PATH, _LAST_BACKUP_TIME
     now = time.time()
+    # 5秒全局防抖保护：无论是否 force，若 5 秒内刚生成过完好备份，直接复用，杜绝重复创建双份备份
+    if (now - _LAST_BACKUP_TIME < 5) and _LAST_BACKUP_PATH and os.path.isfile(_LAST_BACKUP_PATH):
+        return _LAST_BACKUP_PATH
     if not force and now - _LAST_BACKUP_CHECK < 60:
         return None
     _LAST_BACKUP_CHECK = now
@@ -1294,6 +1299,8 @@ def backup_user_data(force=False):
                     pass
         with _LOCK:
             _last_backup = now
+            _LAST_BACKUP_TIME = now
+            _LAST_BACKUP_PATH = dst
         try:
             recall_set("last_backup_ts", str(int(now)))
         except Exception:
@@ -1306,7 +1313,7 @@ def backup_user_data(force=False):
             clean_old_backups()
         except Exception:
             pass
-        if dst and os.path.isfile(dst):
+        if auto_upload and dst and os.path.isfile(dst):
             try:
                 from .core import webdav as _wd
                 _wd.async_upload_backup(dst)

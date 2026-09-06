@@ -108,7 +108,7 @@ def _raw_file_response(data_bytes, filename):
 PLUGIN_ID = "astrbot_plugin_xbbot"
 PLUGIN_DESC = "小白(奴/签/银/娱/私/灵/骑/超管/帮派/冒险+主菜单+WebUI), 现代SQLite存储"
 PLUGIN_AUTHOR = "Light"
-PLUGIN_VERSION = "0.68.36"
+PLUGIN_VERSION = "0.7.0"
 PLUGIN_REPO = "https://github.com/imsuperone/xb"
 
 # 复用 router 的主菜单，保持单源
@@ -286,8 +286,12 @@ class XbBot(Star):
         context.register_web_api(f"/{PLUGIN_ID}/backups/doctor", self.page_db_doctor, ["POST", "GET"], "数据库健康体检与碎片整理")
         context.register_web_api(f"/{PLUGIN_ID}/backup/webdav/test", self.page_webdav_test, ["GET", "POST"], "测试WebDAV连接")
         context.register_web_api(f"/{PLUGIN_ID}/backup/webdav/upload", self.page_webdav_backup_now, ["POST"], "立即上传WebDAV备份")
+        context.register_web_api(f"/{PLUGIN_ID}/backup/webdav/files", self.page_webdav_files, ["GET", "POST"], "获取WebDAV远端备份文件列表")
+        context.register_web_api(f"/{PLUGIN_ID}/backup/webdav/restore", self.page_webdav_restore, ["POST"], "从WebDAV远端备份恢复数据")
         context.register_web_api(f"/{PLUGIN_ID}/backups/webdav/test", self.page_webdav_test, ["GET", "POST"], "测试WebDAV连接")
         context.register_web_api(f"/{PLUGIN_ID}/backups/webdav/upload", self.page_webdav_backup_now, ["POST"], "立即上传WebDAV备份")
+        context.register_web_api(f"/{PLUGIN_ID}/backups/webdav/files", self.page_webdav_files, ["GET", "POST"], "获取WebDAV远端备份文件列表")
+        context.register_web_api(f"/{PLUGIN_ID}/backups/webdav/restore", self.page_webdav_restore, ["POST"], "从WebDAV远端备份恢复数据")
         context.register_web_api(f"/{PLUGIN_ID}/import/legacy", self.page_import_legacy, ["POST"], "旧库导入（兼容新旧格式）")
         context.register_web_api(f"/{PLUGIN_ID}/slave/users", self.page_slave_users, ["GET"], "奴隶用户列表")
         context.register_web_api(f"/{PLUGIN_ID}/slave/calibrate", self.page_slave_calibrate, ["POST", "GET"], "一键校准全员身价")
@@ -880,6 +884,22 @@ class XbBot(Star):
             return await handle_webdav_backup_now(req)
         except Exception as e:
             return _err(f"webdav backup failed: {e}", 500)
+
+    async def page_webdav_files(self, request=None, *args, **kwargs):
+        req = request if request is not None else (args[0] if args else None)
+        try:
+            from .core.api.backup import handle_webdav_files
+            return await handle_webdav_files(req)
+        except Exception as e:
+            return _err(f"webdav files failed: {e}", 500)
+
+    async def page_webdav_restore(self, request=None, *args, **kwargs):
+        req = request if request is not None else (args[0] if args else None)
+        try:
+            from .core.api.backup import handle_webdav_restore
+            return await handle_webdav_restore(req, os.path.dirname(os.path.abspath(__file__)))
+        except Exception as e:
+            return _err(f"webdav restore failed: {e}", 500)
 
     async def page_version_check(self, request=None, *args, **kwargs):
         req = request if request is not None else (args[0] if args else None)

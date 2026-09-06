@@ -171,14 +171,24 @@ function initTheme() {
 
 // ---------- toast ----------
 let _toastT = null;
-function toast(msg, type) {
-  const el = document.getElementById("toast");
-  const txt = document.getElementById("toastTxt");
-  if (!el || !txt) return;
+function toast(msg, type, duration = 2800) {
+  let el = document.getElementById("toast");
+  let txt = document.getElementById("toastTxt");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "toast";
+    txt = document.createElement("span");
+    txt.id = "toastTxt";
+    el.appendChild(txt);
+    document.body.appendChild(el);
+  }
+  if (!txt) {
+    txt = el.querySelector("span") || el;
+  }
   txt.textContent = msg;
   el.className = "show " + (type === "ok" ? "okk" : type === "bad" ? "badk" : "");
   clearTimeout(_toastT);
-  _toastT = setTimeout(() => { el.className = ""; }, 2400);
+  _toastT = setTimeout(() => { el.className = ""; }, duration || 2800);
 }
 
 // 请求 API 封装（支持 GET 自动转参数拼在 URL 与 fallback POST 双向兼容）
@@ -674,6 +684,7 @@ const TAB_LOADERS = {
   shops: async () => { return loadShops(); },
   backups: async () => {
     if (typeof loadBackupCfg === "function") try { await loadBackupCfg(); } catch (e) {}
+    if (typeof loadRemoteWebDAVFiles === "function") try { await loadRemoteWebDAVFiles(); } catch (e) {}
     return typeof loadBackups === "function" ? loadBackups("") : Promise.resolve();
   },
   imgs: async () => { return loadImages(""); },
@@ -1505,7 +1516,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.68.36"
+        version: res.version || "0.7.0"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -3012,27 +3023,47 @@ function renderBackups(d) {
     el.addEventListener("dblclick", () => loadBackups(el.dataset.bkdir));
   });
 }
-async function backupNow() {
-  try { await getBridge().apiPost("backups/restore", { path: "__backup_now__" }); } catch (e) {}
-  // 触发后端的 maybe_auto_backup via dummy restore path, 简化：直接调用 list 前后端会自动备份一次
-  try { await getBridge().apiGet("backups/list"); } catch (e) {}
-  // 更直接：调用后端的 backup via list 的 force 参数（后端在每次 list 前会检查，但为演示直接提示）
-  toast("已触发备份，请刷新查看", "ok");
-  await loadBackups(BACKUP_DIR);
-}
+// 立即生成本地冷备（带防抖与忙态保护）
 document.getElementById("btnBackupNow")?.addEventListener("click", async () => {
+  const btn = document.getElementById("btnBackupNow");
+  if (btn && btn.disabled) return;
+  const origTxt = btn ? btn.textContent : "⚡ 立即备份";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "⏳ 正在生成备份...";
+  }
+  toast("正在打包并生成本地数据冷备...", "ok", 3000);
   try {
     const r = await getBridge().apiPost("backups/restore", { path: "__backup_now__" });
-    toast("备份完成", "ok");
+    toast("本地冷备已生成: " + (r && r.path ? r.path : "成功"), "ok", 4000);
     await loadBackups("");
   } catch (e) {
     await loadBackups("");
-    toast("已刷新备份列表", "ok");
+    toast("备份指令已下发，列表已刷新", "ok", 3000);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = origTxt;
+    }
   }
 });
 document.getElementById("btnBackupRefresh")?.addEventListener("click", () => loadBackups(BACKUP_DIR));
+
+// 测试 WebDAV 连接
 document.getElementById("btnWebDAVTest")?.addEventListener("click", async () => {
-  toast("正在连接测试 WebDAV...", "ok", 3000);
+  const btn = document.getElementById("btnWebDAVTest");
+  const msgEl = document.getElementById("backupCfgMsg");
+  if (btn && btn.disabled) return;
+  const origTxt = btn ? btn.textContent : "☁️ 测试 WebDAV";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "⏳ 测试连接中...";
+  }
+  if (msgEl) {
+    msgEl.textContent = "正在发起 WebDAV 连接测试...";
+    msgEl.className = "msg";
+  }
+  toast("正在连接测试 WebDAV...", "ok", 4000);
   try {
     const g = (id) => (document.getElementById(id) || {}).value ?? "";
     const payload = {
@@ -3043,41 +3074,161 @@ document.getElementById("btnWebDAVTest")?.addEventListener("click", async () => 
     };
     const res = await getBridge().apiPost("backup/webdav/test", payload);
     if (res && res.ok) {
-      toast("WebDAV 测试成功: " + (res.msg || "连接正常"), "ok", 7000);
+      const succMsg = res.msg || "WebDAV 连接与鉴权成功！";
+      if (msgEl) { msgEl.textContent = "✅ " + succMsg; msgEl.className = "msg ok"; }
+      toast("WebDAV 测试成功: " + succMsg, "ok", 6000);
+      uiAlert(succMsg, "☁️ WebDAV 连接测试成功", "✅");
+      await loadRemoteWebDAVFiles();
     } else {
-      toast("WebDAV 测试失败: " + (res && res.msg ? res.msg : (res && res.error ? res.error : "未知错误")), "bad", 8000);
+      const errMsg = (res && res.msg) ? res.msg : ((res && res.error) ? res.error : "未知错误");
+      if (msgEl) { msgEl.textContent = "❌ " + errMsg; msgEl.className = "msg bad"; }
+      toast("WebDAV 测试失败: " + errMsg, "bad", 8000);
+      uiAlert(errMsg, "❌ WebDAV 测试失败", "⚠️");
     }
   } catch (err) {
-    toast("WebDAV 测试异常: " + err.message, "bad", 8000);
+    const errMsg = err.message || String(err);
+    if (msgEl) { msgEl.textContent = "❌ " + errMsg; msgEl.className = "msg bad"; }
+    toast("WebDAV 测试异常: " + errMsg, "bad", 8000);
+    uiAlert(errMsg, "❌ WebDAV 测试异常", "⚠️");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = origTxt;
+    }
   }
 });
+
+// 立即上传至 WebDAV 云端
 document.getElementById("btnWebDAVBackupNow")?.addEventListener("click", async () => {
+  const btn = document.getElementById("btnWebDAVBackupNow");
+  const msgEl = document.getElementById("backupCfgMsg");
+  if (btn && btn.disabled) return;
+  const origTxt = btn ? btn.textContent : "☁️ 立即上传云端";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "⏳ 正在上传云端...";
+  }
+
   const sel = window.BACKUP_SELECTED || "";
   let payload = {};
+  let desc = "本地最新冷备";
   if (sel) {
     const ext = (sel.split(".").pop() || "").toLowerCase();
     if (["db", "json"].includes(ext)) {
       payload.path = sel;
-      const fn = sel.split("/").pop();
-      toast(`正在上传选中备份 [${fn}] 至 WebDAV 云端...`, "ok", 4000);
-    } else {
-      toast("正在生成本地冷备并上传至 WebDAV 云端...", "ok", 4000);
+      desc = sel.split("/").pop();
     }
-  } else {
-    toast("正在生成本地冷备并上传至 WebDAV 云端...", "ok", 4000);
   }
+  if (msgEl) {
+    msgEl.textContent = `正在打包并上传 [${desc}] 至 WebDAV...`;
+    msgEl.className = "msg";
+  }
+  toast(`正在上传 [${desc}] 至 WebDAV 云端...`, "ok", 4000);
+
   try {
     const res = await getBridge().apiPost("backup/webdav/upload", payload);
     if (res && res.ok) {
-      toast("WebDAV 云备份成功: " + (res.msg || "已成功上传"), "ok", 7000);
+      const succMsg = res.msg || "已成功上传至 WebDAV 远端！";
+      if (msgEl) { msgEl.textContent = "✅ " + succMsg; msgEl.className = "msg ok"; }
+      toast("WebDAV 云备份成功: " + succMsg, "ok", 6000);
+      uiAlert(succMsg, "☁️ WebDAV 云端备份成功", "🎉");
       await loadBackups(BACKUP_DIR);
+      await loadRemoteWebDAVFiles();
     } else {
-      toast("WebDAV 上传失败: " + (res && res.msg ? res.msg : "未能完成上传"), "bad", 8000);
+      const errMsg = (res && res.msg) ? res.msg : "未能完成上传";
+      if (msgEl) { msgEl.textContent = "❌ " + errMsg; msgEl.className = "msg bad"; }
+      toast("WebDAV 上传失败: " + errMsg, "bad", 8000);
+      uiAlert(errMsg, "❌ WebDAV 上传失败", "⚠️");
     }
   } catch (err) {
-    toast("WebDAV 上传异常: " + err.message, "bad", 8000);
+    const errMsg = err.message || String(err);
+    if (msgEl) { msgEl.textContent = "❌ " + errMsg; msgEl.className = "msg bad"; }
+    toast("WebDAV 上传异常: " + errMsg, "bad", 8000);
+    uiAlert(errMsg, "❌ WebDAV 上传异常", "⚠️");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = origTxt;
+    }
   }
 });
+
+// ---------- WebDAV 远端归档浏览与快捷热恢复 ----------
+async function loadRemoteWebDAVFiles() {
+  const box = document.getElementById("webdavFilesList");
+  if (!box) return;
+  box.innerHTML = `<div class="hint" style="padding:14px;text-align:center">⏳ 正在连接 WebDAV 查询远端目录归档...</div>`;
+  try {
+    const res = await getBridge().apiGet("backup/webdav/files", {});
+    if (!res || !res.ok) {
+      const errMsg = (res && res.msg) ? res.msg : ((res && res.error) ? res.error : "无法读取 WebDAV 远端列表，请先检查配置与网络连通性");
+      box.innerHTML = `<div class="hint" style="padding:14px;text-align:center;color:var(--bad);background:var(--panel2);border-radius:8px">❌ 读取远端归档失败: ${esc(errMsg)}</div>`;
+      return;
+    }
+    const files = res.files || [];
+    if (!files.length) {
+      box.innerHTML = `<div class="hint" style="padding:14px;text-align:center;background:var(--panel2);border-radius:8px">云端远端目录下暂无归档文件，点击上方「立即上传云端」即可上传备份。</div>`;
+      return;
+    }
+    let html = `<div style="display:flex;flex-direction:column;gap:6px">`;
+    files.forEach((f) => {
+      const isDb = f.name.endsWith(".db");
+      html += `
+        <div style="display:flex;align-items:center;justify-content:space-between;background:var(--panel2);padding:10px 14px;border-radius:10px;border:1px solid var(--line);flex-wrap:wrap;gap:8px">
+          <div style="display:flex;align-items:center;gap:10px;min-width:200px">
+            <span style="font-size:20px">${isDb ? "🗄️" : "📄"}</span>
+            <div>
+              <div style="font-weight:600;font-size:13px;word-break:break-all">${esc(f.name)}</div>
+              <div class="hint" style="font-size:11.5px;margin-top:2px">大小: ${esc(f.size || "-")} · 修改时间: ${esc(f.mtime || "-")}</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center">
+            ${isDb ? `<button class="ghost" data-wdrestore="${esc(f.name)}" style="color:var(--acc);border-color:var(--accBorder);font-size:12px;padding:4px 10px">🔄 快捷恢复</button>` : ""}
+          </div>
+        </div>
+      `;
+    });
+    html += `</div>`;
+    box.innerHTML = html;
+
+    // 绑定快捷恢复事件
+    box.querySelectorAll("[data-wdrestore]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const fname = btn.dataset.wdrestore;
+        const ok = await uiConfirm(
+          `⚠️ 确认从 WebDAV 远端备份【${fname}】恢复数据库？\n\n注意：当前数据与配置将即刻被远端备份覆盖并热重载生效！`,
+          "🔄 恢复远端云备份"
+        );
+        if (!ok) return;
+        const origText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = "⏳ 正在下载并恢复...";
+        toast(`正在从云端拉取 [${fname}] 并执行恢复...`, "ok", 6000);
+        try {
+          const r = await getBridge().apiPost("backup/webdav/restore", { file: fname });
+          if (r && r.ok) {
+            toast(`远端备份 [${fname}] 恢复成功！`, "ok", 6000);
+            uiAlert(r.msg || `数据库已成功还原至云端归档 [${fname}]！数据与配置已全量热生效。`, "🎉 远端备份恢复成功", "✅");
+            await loadBackups(BACKUP_DIR);
+          } else {
+            const err = (r && r.msg) ? r.msg : ((r && r.error) ? r.error : "恢复失败");
+            toast(`恢复失败: ${err}`, "bad", 8000);
+            uiAlert(err, "❌ 远端恢复失败", "⚠️");
+          }
+        } catch (e) {
+          toast(`恢复异常: ${e.message}`, "bad", 8000);
+          uiAlert(e.message || String(e), "❌ 远端恢复异常", "⚠️");
+        } finally {
+          btn.disabled = false;
+          btn.textContent = origText;
+        }
+      });
+    });
+  } catch (err) {
+    box.innerHTML = `<div class="hint" style="padding:14px;text-align:center;color:var(--bad);background:var(--panel2);border-radius:8px">❌ 网络或服务异常: ${esc(err.message || String(err))}</div>`;
+  }
+}
+document.getElementById("btnWebDAVRefreshFiles")?.addEventListener("click", loadRemoteWebDAVFiles);
 document.getElementById("btnBackupExport")?.addEventListener("click", async () => {
   try {
     const data = await getBridge().apiGet("users/export", {});
@@ -3164,6 +3315,9 @@ async function loadBackupCfg() {
     _setChk("autoSwitch", b["自动备份开关"] ?? "真");
     _setVal("autoHours", b["备份间隔小时"] ?? "3");
     _setVal("autoKeep", b["保留备份数量"] ?? "30");
+    if (b["WebDAV服务器地址"]) {
+      try { loadRemoteWebDAVFiles(); } catch (e) {}
+    }
   } catch (e) { err("backup cfg: " + e.message); }
 }
 async function saveBackupCfg() {
@@ -3223,6 +3377,7 @@ async function saveBackupCfg() {
       }
     } catch (readErr) {}
     say("备份配置已成功保存并校验生效", true);
+    try { loadRemoteWebDAVFiles(); } catch (e) {}
   } catch (e) { say("保存失败: " + e.message, false); }
 }
 document.getElementById("btnBackupCfgSave")?.addEventListener("click", saveBackupCfg);

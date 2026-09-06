@@ -10,6 +10,8 @@ import base64
 import threading
 import urllib.request
 import urllib.error
+import urllib.parse
+import xml.etree.ElementTree as ET
 
 try:
     from .. import store as ST
@@ -230,3 +232,203 @@ def async_upload_backup(local_path):
             pass
     t = threading.Thread(target=_worker, name="WebDAV-Upload", daemon=True)
     t.start()
+
+
+def list_remote_files(url=None, user=None, pwd=None, rdir=None, timeout=12):
+    """
+    列出 WebDAV 远端备份目录中的所有备份文件 (PROPFIND Depth: 1)
+    :return: (bool, list[dict] 或 str 错误提示)
+    """
+    raw_url = str(url if url is not None else ST.cfg("备份配置", "WebDAV服务器地址", "")).strip()
+    if not raw_url:
+        return False, "请先填写 WebDAV 服务器地址"
+    base_url = _clean_url(raw_url)
+    user = str(user if user is not None else ST.cfg("备份配置", "WebDAV用户名", "")).strip()
+    pwd = str(pwd if pwd is not None else ST.cfg("备份配置", "WebDAV应用密码", "")).strip()
+    rdir = str(rdir if rdir is not None else (ST.cfg("备份配置", "WebDAV远端目录", "/xbbot_backup/").strip() or "/xbbot_backup/")).strip()
+    auth = _get_auth_header(user, pwd)
+
+    clean_rdir = rdir.strip("/")
+    target_url = f"{base_url}/{clean_rdir}/" if clean_rdir else f"{base_url}/"
+
+    body = (
+        '<?xml version="1.0" encoding="utf-8" ?>\n'
+        '<D:propfind xmlns:D="DAV:">\n'
+        '  <D:prop>\n'
+        '    <D:displayname/>\n'
+        '    <D:getcontentlength/>\n'
+        '    <D:getlastmodified/>\n'
+        '    <D:resourcetype/>\n'
+        '  </D:prop>\n'
+        '</D:propfind>'
+    ).encode("utf-8")
+
+    try:
+        req = urllib.request.Request(target_url, data=body, method="PROPFIND")
+        req.add_header("Authorization", auth)
+        req.add_header("Depth", "1")
+        req.add_header("Content-Type", "application/xml; charset=utf-8")
+        req.add_header("User-Agent", "XBBot-WebDAV-Backup/1.0")
+
+        with urllib.request.urlopen(req, timeout=timeout, context=_make_ssl_context()) as resp:
+            data = resp.read()
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return True, []  # 远端目录尚不存在或为空
+        if e.code == 401:
+            return False, "WebDAV 用户名或应用密码错误 (HTTP 401 Unauthorized)"
+        if e.code == 403:
+            return False, "WebDAV 拒绝访问 (HTTP 403 Forbidden)"
+        if e.code == 429:
+            return False, "WebDAV 触发服务商频控限制 (HTTP 429: 坚果云等限制并发频次，请稍候重试)"
+        return False, f"WebDAV HTTP 错误 {e.code}: {e.reason}"
+    except (urllib.error.URLError, TimeoutError) as e:
+        return False, f"WebDAV 列表连接超时或网络失败: {getattr(e, 'reason', e)}"
+    except Exception as e:
+        return False, f"WebDAV 列表读取异常: {e}"
+
+    try:
+        root = ET.fromstring(data)
+    except Exception as e:
+        return False, f"WebDAV XML 解析失败: {e}"
+
+    def _strip_ns(tag):
+        return tag.split("}")[-1] if "}" in tag else tag
+
+    files = []
+    # 提取所有 response 节点
+    for resp_el in root.iter():
+        if _strip_ns(resp_el.tag).lower() != "response":
+            continue
+
+        href = ""
+        is_collection = False
+        display_name = ""
+        content_length = 0
+        last_modified = ""
+
+        for child in resp_el.iter():
+            ntag = _strip_ns(child.tag).lower()
+            if ntag == "href":
+                href = (child.text or "").strip()
+            elif ntag == "collection":
+                is_collection = True
+            elif ntag == "displayname":
+                display_name = (child.text or "").strip()
+            elif ntag == "getcontentlength":
+                try:
+                    content_length = int((child.text or "0").strip())
+                except Exception:
+                    content_length = 0
+            elif ntag == "getlastmodified":
+                last_modified = (child.text or "").strip()
+
+        if is_collection:
+            continue  # 忽略目录本身及子目录
+
+        raw_name = urllib.parse.unquote(display_name or os.path.basename(href.rstrip("/")))
+        if not raw_name or raw_name.startswith("."):
+            continue
+
+        # 格式化文件大小
+        if content_length < 1024:
+            sz_str = f"{content_length} B"
+        elif content_length < 1024 * 1024:
+            sz_str = f"{content_length // 1024} KB"
+        else:
+            sz_str = f"{content_length / (1024 * 1024):.1f} MB"
+
+        files.append({
+            "name": raw_name,
+            "href": href,
+            "size": sz_str,
+            "raw_size": content_length,
+            "mtime": last_modified
+        })
+
+    # 优先按备份文件名字序降序排列（xbbot_YYYYMMDD_HHMMSS 格式天然有序）
+    files.sort(key=lambda x: x["name"], reverse=True)
+    return True, files
+
+
+def download_remote_file(remote_name, local_dest=None, url=None, user=None, pwd=None, rdir=None, timeout=30):
+    """
+    从 WebDAV 远端下载指定备份文件
+    :param remote_name: 远端文件名 (例如 xbbot_20260906_120000.db)
+    :param local_dest: 本地目标保存绝对路径 (None 则保存至 data/backups/downloads/)
+    :return: (bool, 本地文件路径或错误信息)
+    """
+    raw_url = str(url if url is not None else ST.cfg("备份配置", "WebDAV服务器地址", "")).strip()
+    if not raw_url:
+        return False, "未配置 WebDAV 服务器地址"
+    base_url = _clean_url(raw_url)
+    user = str(user if user is not None else ST.cfg("备份配置", "WebDAV用户名", "")).strip()
+    pwd = str(pwd if pwd is not None else ST.cfg("备份配置", "WebDAV应用密码", "")).strip()
+    rdir = str(rdir if rdir is not None else (ST.cfg("备份配置", "WebDAV远端目录", "/xbbot_backup/").strip() or "/xbbot_backup/")).strip()
+    auth = _get_auth_header(user, pwd)
+
+    clean_rdir = rdir.strip("/")
+    clean_name = str(remote_name or "").strip().lstrip("/")
+    if "/" in clean_name:
+        clean_name = os.path.basename(clean_name)
+    if not clean_name:
+        return False, "未指定远端文件名"
+
+    target_url = f"{base_url}/{clean_rdir}/{clean_name}" if clean_rdir else f"{base_url}/{clean_name}"
+
+    if not local_dest:
+        bdir = ST.BACKUP_DIR or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "backups")
+        dl_dir = os.path.join(bdir, "downloads")
+        os.makedirs(dl_dir, exist_ok=True)
+        local_dest = os.path.join(dl_dir, clean_name)
+    else:
+        os.makedirs(os.path.dirname(os.path.abspath(local_dest)), exist_ok=True)
+
+    tmp_dest = local_dest + f".part_{int(time.time())}"
+    try:
+        req = urllib.request.Request(target_url, method="GET")
+        req.add_header("Authorization", auth)
+        req.add_header("User-Agent", "XBBot-WebDAV-Backup/1.0")
+
+        with urllib.request.urlopen(req, timeout=timeout, context=_make_ssl_context()) as resp:
+            status = getattr(resp, "status", getattr(resp, "code", 200))
+            if status != 200:
+                return False, f"WebDAV 服务器返回状态码: {status}"
+            with open(tmp_dest, "wb") as f:
+                while True:
+                    chunk = resp.read(65536)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+
+        if not os.path.isfile(tmp_dest) or os.path.getsize(tmp_dest) == 0:
+            if os.path.exists(tmp_dest):
+                os.remove(tmp_dest)
+            return False, "下载文件为空"
+
+        if os.path.exists(local_dest):
+            try:
+                os.remove(local_dest)
+            except Exception:
+                pass
+        os.replace(tmp_dest, local_dest)
+        return True, local_dest
+    except urllib.error.HTTPError as e:
+        if os.path.exists(tmp_dest):
+            try:
+                os.remove(tmp_dest)
+            except Exception:
+                pass
+        if e.code == 404:
+            return False, f"WebDAV 远端文件不存在 (HTTP 404): {clean_name}"
+        if e.code == 429:
+            return False, "WebDAV 下载触发服务商频控 (HTTP 429: 坚果云等限制频次，请稍候重试)"
+        return False, f"WebDAV 下载 HTTP 错误 {e.code}: {e.reason}"
+    except Exception as e:
+        if os.path.exists(tmp_dest):
+            try:
+                os.remove(tmp_dest)
+            except Exception:
+                pass
+        return False, f"WebDAV 下载异常: {e}"
+

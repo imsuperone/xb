@@ -5,12 +5,12 @@
 | 项目属性 | 当前值 |
 | :--- | :--- |
 | **插件名称** | `astrbot_plugin_xbbot` (小白统一模块) |
-| **当前版本** | `v0.68.36` (已发布并在 GitHub 与本地保持对齐) |
+| **当前版本** | `v0.7.0` (已发布并在 GitHub 与本地保持对齐) |
 | **项目作者** | Light (`faxlight@faxt.top`) |
 | **开源仓库** | `https://github.com/imsuperone/xb` |
 | **经济基线 (v0.68.28)** | 接龙 20金币+0魅力全局锁定；WebDAV 持久兜底防丢 |
 | **主代码目录** | `c:\Users\Light\Desktop\DRxb\astrbot_plugins\astrbot_plugin_xbbot` |
-| **离线发行包** | `C:\Users\Light\Desktop\DRxb\astrbot_plugin_xbbot_v0.68.36.zip` |
+| **离线发行包** | `C:\Users\Light\Desktop\DRxb\astrbot_plugin_xbbot_v0.7.0.zip` |
 | **平台依赖** | AstrBot >= 3.4.0, Python >= 3.10 (支持 3.14t/自由线程) |
 | **底层协议端** | OneBot v11 (aiocqhttp), NapCat, Lagrange 原生图文 |
 
@@ -19,7 +19,10 @@
 ## 🚦 系统运行状态诊断指标
 
 - **Python 模块语法解析**：41/41 语法解析通过 (100%)
-- **版本号强一致性对齐**：9/9 处对齐为 `0.68.36` (100%)
+- **版本号强一致性对齐**：9/9 处对齐为 `0.7.0` (100%)
+- **WebDAV 远端归档与热恢复 (v0.7.0)**：PROPFIND Depth 1 XML 解析远程目录，支持一键热恢复与本地下载
+- **彻底根除双份备份 (v0.7.0)**：5秒全局防抖与路径复用，杜绝多次点击与上传重叠生成两份备份
+- **WebUI 按钮视觉反馈与自愈 Toast (v0.7.0)**：补全 `#toast` DOM，按钮即刻忙态锁定与禁用，弹窗全景回显
 - **WebDAV频控与DB自包含 (v0.68.36)**：OPTIONS轻量嗅探根治HTTP 429；DB kv表全自包含28大系统配置；WebUI交互优化与弹窗规范化
 - **插件桥接与Quart请求 (v0.68.35)**：彻底根治 `Plugin bridge endpoint is invalid.` 与 `未能读取到有效配置数据(请求体为空或解析失败)`
 - **检查更新全方位回显 (v0.68.34)**：检测按钮直显结果+jsDelivr CDN 1.5s 极速响应+WebDAV 读回校验强化
@@ -67,6 +70,8 @@
 - **GET `/astrbot_plugin_xbbot/backups/config/snapshots`** & **POST `/snapshot/save`** & **POST `/snapshot/restore`**：全量配置快照存/列/一键恢复
 - **POST `/astrbot_plugin_xbbot/backup/webdav/test`**：测试 WebDAV 连通性与账号认证
 - **POST `/astrbot_plugin_xbbot/backup/webdav/upload`**：立即执行本地冷备并上传至 WebDAV
+- **GET/POST `/astrbot_plugin_xbbot/backup/webdav/files`**：读取 WebDAV 远端备份文件归档列表
+- **POST `/astrbot_plugin_xbbot/backup/webdav/restore`**：从 WebDAV 远端备份一键快捷热恢复
 - **POST `/astrbot_plugin_xbbot/backups/doctor`**：SQLite 碎片整理 (VACUUM) 与健康体检
 - **GET `/astrbot_plugin_xbbot/version/check`**：云端 Release 与 main 分支更新探测
 
