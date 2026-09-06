@@ -5,12 +5,12 @@
 | 项目属性 | 当前值 |
 | :--- | :--- |
 | **插件名称** | `astrbot_plugin_xbbot` (小白统一模块) |
-| **当前版本** | `v0.7.0` (已发布并在 GitHub 与本地保持对齐) |
+| **当前版本** | `v0.7.1` (已发布并在 GitHub 与本地保持对齐) |
 | **项目作者** | Light (`faxlight@faxt.top`) |
 | **开源仓库** | `https://github.com/imsuperone/xb` |
 | **经济基线 (v0.68.28)** | 接龙 20金币+0魅力全局锁定；WebDAV 持久兜底防丢 |
 | **主代码目录** | `c:\Users\Light\Desktop\DRxb\astrbot_plugins\astrbot_plugin_xbbot` |
-| **离线发行包** | `C:\Users\Light\Desktop\DRxb\astrbot_plugin_xbbot_v0.7.0.zip` |
+| **离线发行包** | `C:\Users\Light\Desktop\DRxb\astrbot_plugin_xbbot_v0.7.1.zip` |
 | **平台依赖** | AstrBot >= 3.4.0, Python >= 3.10 (支持 3.14t/自由线程) |
 | **底层协议端** | OneBot v11 (aiocqhttp), NapCat, Lagrange 原生图文 |
 
@@ -19,7 +19,9 @@
 ## 🚦 系统运行状态诊断指标
 
 - **Python 模块语法解析**：41/41 语法解析通过 (100%)
-- **版本号规范化与强一致性**：当前基准版本 `0.7.0`，遵循 `0.7.xx`（`0.7.0`~`0.7.99`）后置补丁递增规则；仅在满 99 或明确指令时更新前段（`0.8.xx`/`1.0.xx`）
+- **版本号规范化与强一致性**：当前基准版本 `0.7.1`，遵循 `0.7.xx`（`0.7.0`~`0.7.99`）后置补丁递增规则；仅在满 99 或明确指令时更新前段（`0.8.xx`/`1.0.xx`）
+- **WebDAV 中文日期与上海时区 (v0.7.1)**：标准 UTC+8 上海时区中文日期格式化（如 `2026年09月06日 13:25:30`），支持文件名推导兜底
+- **WebDAV 云端归档直接删除 (v0.7.1)**：HTTP DELETE 标准远端物理删除 + 二次危险确认 + 实时无感热刷新
 - **版本比较纪元引擎 (v0.7.0)**：`(epoch, major, minor, patch)` 比较算法，彻底杜绝云端旧版 `0.68.xx` 倒流误判
 - **弹窗 Emoji 全局智能去重 (v0.7.0)**：`_normalizeModalTitleAndIcon` 自动剥离前导 Emoji，根除所有双重图标堆叠（`🚀 🚀`、`✅ ☁️`、`⚠️ ❌`、`ℹ️ 🩺`）
 - **WebDAV 远端归档与热恢复 (v0.7.0)**：PROPFIND Depth 1 XML 解析远程目录，支持一键热恢复与本地下载

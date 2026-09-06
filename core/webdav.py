@@ -11,7 +11,49 @@ import threading
 import urllib.request
 import urllib.error
 import urllib.parse
+import email.utils
+from datetime import datetime, timezone, timedelta
 import xml.etree.ElementTree as ET
+
+SHANGHAI_TZ = timezone(timedelta(hours=8))
+
+
+def format_shanghai_time(dt_str, filename=""):
+    """
+    将 WebDAV 返回的 GMT/UTC 时间字符串 (如 RFC 1123 HTTP-date 或 ISO 8601)
+    准确换算为中国标准时间（UTC+8 / 上海时区）并格式化为中文日期时间。
+    若时间缺失或格式未知，尝试从备份文件名 (xbbot_YYYYMMDD_HHMMSS) 解析兜底。
+    """
+    s = str(dt_str or "").strip()
+    if s:
+        # 1. 尝试 RFC 1123 / RFC 822 (如 "Sun, 06 Sep 2026 05:25:30 GMT")
+        try:
+            dt = email.utils.parsedate_to_datetime(s)
+            if dt is not None:
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                return dt.astimezone(SHANGHAI_TZ).strftime("%Y年%m月%d日 %H:%M:%S")
+        except Exception:
+            pass
+
+        # 2. 尝试 ISO 8601 (如 "2026-09-06T05:25:30Z")
+        try:
+            clean = s.replace("Z", "+00:00")
+            dt = datetime.fromisoformat(clean)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(SHANGHAI_TZ).strftime("%Y年%m月%d日 %H:%M:%S")
+        except Exception:
+            pass
+
+    # 3. 兜底从文件名推导时间 (xbbot_20260906_132530.db)
+    if filename:
+        import re
+        m = re.search(r"(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})", filename)
+        if m:
+            return f"{m.group(1)}年{m.group(2)}月{m.group(3)}日 {m.group(4)}:{m.group(5)}:{m.group(6)}"
+
+    return s or "-"
 
 try:
     from .. import store as ST
@@ -343,7 +385,8 @@ def list_remote_files(url=None, user=None, pwd=None, rdir=None, timeout=12):
             "href": href,
             "size": sz_str,
             "raw_size": content_length,
-            "mtime": last_modified
+            "mtime": format_shanghai_time(last_modified, raw_name),
+            "raw_mtime": last_modified
         })
 
     # 优先按备份文件名字序降序排列（xbbot_YYYYMMDD_HHMMSS 格式天然有序）
@@ -431,4 +474,52 @@ def download_remote_file(remote_name, local_dest=None, url=None, user=None, pwd=
             except Exception:
                 pass
         return False, f"WebDAV 下载异常: {e}"
+
+
+def delete_remote_file(remote_name, url=None, user=None, pwd=None, rdir=None, timeout=15):
+    """
+    从 WebDAV 远端删除指定备份文件 (HTTP DELETE)
+    :param remote_name: 远端文件名 (例如 xbbot_20260906_120000.db)
+    :return: (bool, str) 是否成功及提示信息
+    """
+    raw_url = str(url if url is not None else ST.cfg("备份配置", "WebDAV服务器地址", "")).strip()
+    if not raw_url:
+        return False, "未配置 WebDAV 服务器地址"
+    base_url = _clean_url(raw_url)
+    user = str(user if user is not None else ST.cfg("备份配置", "WebDAV用户名", "")).strip()
+    pwd = str(pwd if pwd is not None else ST.cfg("备份配置", "WebDAV应用密码", "")).strip()
+    rdir = str(rdir if rdir is not None else (ST.cfg("备份配置", "WebDAV远端目录", "/xbbot_backup/").strip() or "/xbbot_backup/")).strip()
+    auth = _get_auth_header(user, pwd)
+
+    clean_rdir = rdir.strip("/")
+    clean_name = str(remote_name or "").strip().lstrip("/")
+    if "/" in clean_name:
+        clean_name = os.path.basename(clean_name)
+    if not clean_name:
+        return False, "未指定待删除远端文件名"
+
+    target_url = f"{base_url}/{clean_rdir}/{clean_name}" if clean_rdir else f"{base_url}/{clean_name}"
+
+    try:
+        req = urllib.request.Request(target_url, method="DELETE")
+        req.add_header("Authorization", auth)
+        req.add_header("User-Agent", "XBBot-WebDAV-Backup/1.0")
+
+        with urllib.request.urlopen(req, timeout=timeout, context=_make_ssl_context()) as resp:
+            status = getattr(resp, "status", getattr(resp, "code", 200))
+            if status in (200, 204, 202):
+                msg = f"已成功从 WebDAV 远端删除备份文件: {clean_name}"
+                if _logger:
+                    _logger.info(msg)
+                return True, msg
+            return False, f"WebDAV 服务器返回状态码: {status}"
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return True, f"远端文件已不存在或已被删除: {clean_name}"
+        if e.code == 429:
+            return False, "WebDAV 删除触发服务商频控 (HTTP 429: 坚果云等限制频次，请稍候重试)"
+        return False, f"WebDAV 删除 HTTP 错误 {e.code}: {e.reason}"
+    except Exception as e:
+        return False, f"WebDAV 删除异常: {e}"
+
 

@@ -1,5 +1,14 @@
 # 更新日志
 
+## v0.7.1
+- 🕒 **WebDAV 远端归档支持中文日期与上海时区 (UTC+8)**：
+  - 在 `core/webdav.py` 中新增 `format_shanghai_time`，将 WebDAV 标准返回的 RFC 1123 HTTP-date（如 `Sun, 06 Sep 2026 05:25:30 GMT`）或 ISO 8601 时间准确换算为中国标准时间（UTC+8 / 上海时区），以标准中文形式展示（如 `2026年09月06日 13:25:30`）；
+  - 支持从备份文件名时间戳解析兜底，前后端双向容错，彻底告别原始英文 GMT 时间串。
+- 🗑️ **WebDAV 远端备份支持在线直接删除**：
+  - 核心模块新增 `delete_remote_file`，遵循 WebDAV RFC 4918 标准发送 HTTP `DELETE` 请求，安全拦截 404/429 并提供友好提示；
+  - 后端注册 `backup/webdav/delete` 与 `backups/webdav/delete` 异步接口；
+  - WebUI 远端列表各归档右侧新增「🗑️ 删除」按钮，集成危险二次确认弹窗与忙态锁定，删除后自动无感刷新云端归档列表。
+
 ## v0.7.0
 - 🚀 **版本检测纪元引擎与防缓存强化**：
   - 重构 `core/api/updater.py` 中的 `_parse_version_tuple`，为项目引入版本纪元机制 `(epoch, major, minor, patch)`，将历史 `0.68.xx` 划入旧纪元（epoch=0），确立后续 `0.7.xx`（`0.7.0` ~ `0.7.99`）及 `0.8.xx`、`1.0.xx` 归属新纪元（epoch=1），彻底根除数值比对误报旧版（如误报建议升级至 `0.68.36`）的重大缺陷；

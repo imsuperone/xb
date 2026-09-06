@@ -4,7 +4,11 @@ import base64
 import json as _json
 import os
 import time
-from astrbot.api.web import json_response
+try:
+    from astrbot.api.web import json_response
+except ImportError:
+    def json_response(data, status=200):
+        return data
 
 from .helpers import _err, get_req_query, get_req_json, no_cache_response
 
@@ -632,4 +636,30 @@ async def handle_webdav_restore(request, plugin_base=""):
         return json_response({"ok": True, "file": clean_name, "msg": f"WebDAV 远端备份 [{clean_name}] 恢复成功！数据与配置已全量生效。"})
     except Exception as e:
         return _err(f"恢复远端备份失败: {e}", 500)
+
+
+async def handle_webdav_delete(request, plugin_base=""):
+    """删除 WebDAV 远端指定备份文件（完全异步化，绝不阻塞主事件循环）"""
+    import asyncio
+    try:
+        from .. import webdav as _wd
+    except ImportError:
+        try:
+            from core import webdav as _wd
+        except ImportError:
+            return _err("WebDAV 模块未加载", 500)
+
+    p = await get_req_json(request, default={})
+    file_name = str((p.get("file") if isinstance(p, dict) else "") or (p.get("name") if isinstance(p, dict) else "") or get_req_query(request, "file", "")).strip()
+    if not file_name:
+        return _err("缺少待删除文件名 (file)", 400)
+    clean_name = os.path.basename(file_name)
+    try:
+        ok, msg = await asyncio.to_thread(_wd.delete_remote_file, clean_name)
+        if not ok:
+            return _err(msg or "删除远端备份失败", 500)
+        return json_response({"ok": True, "file": clean_name, "msg": msg or f"已成功从云端删除备份文件 [{clean_name}]"})
+    except Exception as e:
+        return _err(f"删除云端备份异常: {e}", 500)
+
 

@@ -1554,7 +1554,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.7.0"
+        version: res.version || "0.7.1"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -3191,7 +3191,42 @@ document.getElementById("btnWebDAVBackupNow")?.addEventListener("click", async (
   }
 });
 
-// ---------- WebDAV 远端归档浏览与快捷热恢复 ----------
+// 格式化为中国上海时区 (UTC+8) 中文日期时间
+function formatShanghaiDate(mtimeStr, fileName) {
+  const s = String(mtimeStr || "").trim();
+  if (s && s.includes("年") && s.includes("月")) {
+    return s;
+  }
+  if (s) {
+    try {
+      const d = new Date(s);
+      if (!isNaN(d.getTime())) {
+        const formatter = new Intl.DateTimeFormat("zh-CN", {
+          timeZone: "Asia/Shanghai",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false
+        });
+        const parts = formatter.formatToParts(d);
+        const get = (t) => (parts.find(p => p.type === t) || {}).value || "";
+        return `${get("year")}年${get("month")}月${get("day")}日 ${get("hour")}:${get("minute")}:${get("second")}`;
+      }
+    } catch (e) {}
+  }
+  if (fileName) {
+    const m = String(fileName).match(/(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/);
+    if (m) {
+      return `${m[1]}年${m[2]}月${m[3]}日 ${m[4]}:${m[5]}:${m[6]}`;
+    }
+  }
+  return s || "-";
+}
+
+// ---------- WebDAV 远端归档浏览、快捷热恢复与云端删除 ----------
 async function loadRemoteWebDAVFiles() {
   const box = document.getElementById("webdavFilesList");
   if (!box) return;
@@ -3211,17 +3246,19 @@ async function loadRemoteWebDAVFiles() {
     let html = `<div style="display:flex;flex-direction:column;gap:6px">`;
     files.forEach((f) => {
       const isDb = f.name.endsWith(".db");
+      const shDate = formatShanghaiDate(f.mtime, f.name);
       html += `
         <div style="display:flex;align-items:center;justify-content:space-between;background:var(--panel2);padding:10px 14px;border-radius:10px;border:1px solid var(--line);flex-wrap:wrap;gap:8px">
           <div style="display:flex;align-items:center;gap:10px;min-width:200px">
             <span style="font-size:20px">${isDb ? "🗄️" : "📄"}</span>
             <div>
               <div style="font-weight:600;font-size:13px;word-break:break-all">${esc(f.name)}</div>
-              <div class="hint" style="font-size:11.5px;margin-top:2px">大小: ${esc(f.size || "-")} · 修改时间: ${esc(f.mtime || "-")}</div>
+              <div class="hint" style="font-size:11.5px;margin-top:2px">大小: ${esc(f.size || "-")} · 修改时间: ${esc(shDate)}</div>
             </div>
           </div>
           <div style="display:flex;gap:6px;align-items:center">
             ${isDb ? `<button class="ghost" data-wdrestore="${esc(f.name)}" style="color:var(--acc);border-color:var(--accBorder);font-size:12px;padding:4px 10px">🔄 快捷恢复</button>` : ""}
+            <button class="ghost" data-wddelete="${esc(f.name)}" style="color:var(--bad);border-color:rgba(239,68,68,0.3);font-size:12px;padding:4px 10px" title="从 WebDAV 云端彻底删除此备份文件">🗑️ 删除</button>
           </div>
         </div>
       `;
@@ -3256,6 +3293,40 @@ async function loadRemoteWebDAVFiles() {
         } catch (e) {
           toast(`恢复异常: ${e.message}`, "bad", 8000);
           uiAlert(e.message || String(e), "远端恢复异常", "⚠️");
+        } finally {
+          btn.disabled = false;
+          btn.textContent = origText;
+        }
+      });
+    });
+
+    // 绑定云端删除事件
+    box.querySelectorAll("[data-wddelete]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const fname = btn.dataset.wddelete;
+        const ok = await uiConfirm(
+          `确定要从 WebDAV 云端彻底删除备份文件【${fname}】吗？\n\n注意：此操作将直接从云端服务器永久删除该文件，不可逆！`,
+          "删除云端备份"
+        );
+        if (!ok) return;
+        const origText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = "⏳ 删除中...";
+        toast(`正在从云端删除 [${fname}]...`, "ok", 4000);
+        try {
+          const r = await getBridge().apiPost("backup/webdav/delete", { file: fname });
+          if (r && r.ok) {
+            toast(`云端备份 [${fname}] 已删除！`, "ok", 5000);
+            uiAlert(r.msg || `已成功从 WebDAV 远端删除备份文件【${fname}】。`, "云端备份删除成功", "✅");
+            await loadRemoteWebDAVFiles();
+          } else {
+            const err = (r && r.msg) ? r.msg : ((r && r.error) ? r.error : "删除失败");
+            toast(`删除失败: ${err}`, "bad", 8000);
+            uiAlert(err, "删除云端备份失败", "⚠️");
+          }
+        } catch (e) {
+          toast(`删除异常: ${e.message}`, "bad", 8000);
+          uiAlert(e.message || String(e), "删除云端备份异常", "⚠️");
         } finally {
           btn.disabled = false;
           btn.textContent = origText;
