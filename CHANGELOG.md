@@ -1,6 +1,12 @@
 # 更新日志
 
 ## v0.7.0
+- 🚀 **版本检测纪元引擎与防缓存强化**：
+  - 重构 `core/api/updater.py` 中的 `_parse_version_tuple`，为项目引入版本纪元机制 `(epoch, major, minor, patch)`，将历史 `0.68.xx` 划入旧纪元（epoch=0），确立后续 `0.7.xx`（`0.7.0` ~ `0.7.99`）及 `0.8.xx`、`1.0.xx` 归属新纪元（epoch=1），彻底根除数值比对误报旧版（如误报建议升级至 `0.68.36`）的重大缺陷；
+  - 云端版本检测源增加时间戳防 CDN 缓存穿透，优化 GitHub Release 与 Git main 分支双通道择优调度，本地与云端版本检测精准无误。
+- 🎯 **模态弹窗 Emoji 全局智能去重**：
+  - 在 `pages/admin/app.js` 中新增 `_normalizeModalTitleAndIcon` 核心去重函数，自动提取并剥离 `title` 中的前导 Emoji，杜绝图标与标题堆叠导致的 `🚀 🚀`、`✅ ☁️`、`⚠️ ❌`、`ℹ️ 🩺` 等双重 Emoji 重复问题；
+  - 优化版本检测卡片、WebDAV 提示、数据库体检与运行日志等所有弹窗的排版，界面视觉清爽专业。
 - ☁️ **WebDAV 远端备份归档与一键快捷热恢复**：
   - 新增 WebDAV RFC 4918 标准 `PROPFIND`（`Depth: 1`）远程文件目录直接解析能力，通过纯标准库 `xml.etree.ElementTree` 安全解析 XML 响应，支持展示云端归档的文件名、大小与修改时间；
   - 在 WebDAV 配置卡片下方新增「☁️ WebDAV 云端备份归档与快捷恢复」面板，支持一键热恢复云端数据库或下载至本地；

@@ -427,7 +427,37 @@ function _formatModalText(msg) {
     .split("\n").join("<br>");
 }
 
-function uiAlert(msg, title = "提示", icon = "ℹ️") {
+function _normalizeModalTitleAndIcon(rawTitle, rawIcon) {
+  let title = String(rawTitle || "提示").trim();
+  let icon = rawIcon ? String(rawIcon).trim() : "";
+
+  // 匹配前导 Emoji（支持各种复杂组合 Emoji、变体选择符及跟随的空格）
+  const emojiPrefixRegex = /^([\p{Extended_Pictographic}\uFE0E\uFE0F\u200D\u20E3\u2600-\u27BF]|\s)+/u;
+  const match = title.match(emojiPrefixRegex);
+
+  if (match) {
+    const extractedEmoji = match[0].trim();
+    const cleanTitle = title.replace(emojiPrefixRegex, "").trim();
+    if (cleanTitle) {
+      title = cleanTitle;
+    }
+    // 若未显式指定 icon 或指定的是默认占位符 ℹ️，则将 title 前导 emoji 作为 icon
+    if (!icon || icon === "ℹ️") {
+      icon = extractedEmoji;
+    }
+  }
+
+  if (!icon) icon = "ℹ️";
+  if (!title) title = "提示";
+
+  return { title, icon };
+}
+
+function uiAlert(msg, rawTitle = "提示", rawIcon = "ℹ️") {
+  const norm = _normalizeModalTitleAndIcon(rawTitle, rawIcon);
+  const title = norm.title;
+  const icon = norm.icon;
+
   return new Promise((resolve) => {
     const modal = document.getElementById("appModal");
     if (!modal) {
@@ -439,7 +469,7 @@ function uiAlert(msg, title = "提示", icon = "ℹ️") {
     const iconEl = document.getElementById("appModalIcon");
     if (iconEl) {
       iconEl.textContent = icon;
-      iconEl.style.color = icon === "⚠️" || icon === "❌" ? "var(--bad)" : "var(--acc)";
+      iconEl.style.color = (icon === "⚠️" || icon === "❌" || icon === "🗑️") ? "var(--bad)" : ((icon === "✅" || icon === "🟢") ? "var(--ok)" : "var(--acc)");
     }
     const titleEl = document.getElementById("appModalTitle");
     if (titleEl) titleEl.textContent = title;
@@ -474,7 +504,12 @@ function uiAlert(msg, title = "提示", icon = "ℹ️") {
   });
 }
 
-function uiConfirm(msg, title = "确认操作") {
+function uiConfirm(msg, rawTitle = "确认操作") {
+  const isDanger = /危险|清空|删除|覆盖|终极/.test(rawTitle + msg);
+  const norm = _normalizeModalTitleAndIcon(rawTitle, isDanger ? "⚠️" : "ℹ️");
+  const title = norm.title;
+  const icon = norm.icon;
+
   return new Promise((resolve) => {
     const modal = document.getElementById("appModal");
     if (!modal) {
@@ -482,11 +517,10 @@ function uiConfirm(msg, title = "确认操作") {
       return;
     }
     const closeBtn = document.getElementById("appModalClose");
-    const isDanger = /危险|清空|删除|覆盖|终极/.test(title + msg);
     const iconEl = document.getElementById("appModalIcon");
     if (iconEl) {
-      iconEl.textContent = isDanger ? "⚠️" : "ℹ️";
-      iconEl.style.color = isDanger ? "var(--bad)" : "var(--acc)";
+      iconEl.textContent = icon;
+      iconEl.style.color = (icon === "⚠️" || icon === "❌" || icon === "🗑️" || isDanger) ? "var(--bad)" : "var(--acc)";
     }
     const titleEl = document.getElementById("appModalTitle");
     if (titleEl) titleEl.textContent = title;
@@ -528,7 +562,11 @@ function uiConfirm(msg, title = "确认操作") {
   });
 }
 
-function uiPrompt(msg, dflt = "", title = "请输入") {
+function uiPrompt(msg, dflt = "", rawTitle = "请输入") {
+  const norm = _normalizeModalTitleAndIcon(rawTitle, "✏️");
+  const title = norm.title;
+  const icon = norm.icon;
+
   return new Promise((resolve) => {
     const modal = document.getElementById("appModal");
     if (!modal) {
@@ -537,7 +575,7 @@ function uiPrompt(msg, dflt = "", title = "请输入") {
     }
     const closeBtn = document.getElementById("appModalClose");
     const iconEl = document.getElementById("appModalIcon");
-    if (iconEl) { iconEl.textContent = "✏️"; iconEl.style.color = "var(--acc)"; }
+    if (iconEl) { iconEl.textContent = icon; iconEl.style.color = "var(--acc)"; }
     document.getElementById("appModalTitle").textContent = title;
     document.getElementById("appModalContent").textContent = msg;
     const inpWrap = document.getElementById("appModalInputWrap");
@@ -3077,19 +3115,19 @@ document.getElementById("btnWebDAVTest")?.addEventListener("click", async () => 
       const succMsg = res.msg || "WebDAV 连接与鉴权成功！";
       if (msgEl) { msgEl.textContent = "✅ " + succMsg; msgEl.className = "msg ok"; }
       toast("WebDAV 测试成功: " + succMsg, "ok", 6000);
-      uiAlert(succMsg, "☁️ WebDAV 连接测试成功", "✅");
+      uiAlert(succMsg, "WebDAV 连接测试成功", "✅");
       await loadRemoteWebDAVFiles();
     } else {
       const errMsg = (res && res.msg) ? res.msg : ((res && res.error) ? res.error : "未知错误");
       if (msgEl) { msgEl.textContent = "❌ " + errMsg; msgEl.className = "msg bad"; }
       toast("WebDAV 测试失败: " + errMsg, "bad", 8000);
-      uiAlert(errMsg, "❌ WebDAV 测试失败", "⚠️");
+      uiAlert(errMsg, "WebDAV 测试失败", "⚠️");
     }
   } catch (err) {
     const errMsg = err.message || String(err);
     if (msgEl) { msgEl.textContent = "❌ " + errMsg; msgEl.className = "msg bad"; }
     toast("WebDAV 测试异常: " + errMsg, "bad", 8000);
-    uiAlert(errMsg, "❌ WebDAV 测试异常", "⚠️");
+    uiAlert(errMsg, "WebDAV 测试异常", "⚠️");
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -3131,20 +3169,20 @@ document.getElementById("btnWebDAVBackupNow")?.addEventListener("click", async (
       const succMsg = res.msg || "已成功上传至 WebDAV 远端！";
       if (msgEl) { msgEl.textContent = "✅ " + succMsg; msgEl.className = "msg ok"; }
       toast("WebDAV 云备份成功: " + succMsg, "ok", 6000);
-      uiAlert(succMsg, "☁️ WebDAV 云端备份成功", "🎉");
+      uiAlert(succMsg, "WebDAV 云端备份成功", "🎉");
       await loadBackups(BACKUP_DIR);
       await loadRemoteWebDAVFiles();
     } else {
       const errMsg = (res && res.msg) ? res.msg : "未能完成上传";
       if (msgEl) { msgEl.textContent = "❌ " + errMsg; msgEl.className = "msg bad"; }
       toast("WebDAV 上传失败: " + errMsg, "bad", 8000);
-      uiAlert(errMsg, "❌ WebDAV 上传失败", "⚠️");
+      uiAlert(errMsg, "WebDAV 上传失败", "⚠️");
     }
   } catch (err) {
     const errMsg = err.message || String(err);
     if (msgEl) { msgEl.textContent = "❌ " + errMsg; msgEl.className = "msg bad"; }
     toast("WebDAV 上传异常: " + errMsg, "bad", 8000);
-    uiAlert(errMsg, "❌ WebDAV 上传异常", "⚠️");
+    uiAlert(errMsg, "WebDAV 上传异常", "⚠️");
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -3196,8 +3234,8 @@ async function loadRemoteWebDAVFiles() {
       btn.addEventListener("click", async () => {
         const fname = btn.dataset.wdrestore;
         const ok = await uiConfirm(
-          `⚠️ 确认从 WebDAV 远端备份【${fname}】恢复数据库？\n\n注意：当前数据与配置将即刻被远端备份覆盖并热重载生效！`,
-          "🔄 恢复远端云备份"
+          `确认从 WebDAV 远端备份【${fname}】恢复数据库？\n\n注意：当前数据与配置将即刻被远端备份覆盖并热重载生效！`,
+          "恢复远端云备份"
         );
         if (!ok) return;
         const origText = btn.textContent;
@@ -3208,16 +3246,16 @@ async function loadRemoteWebDAVFiles() {
           const r = await getBridge().apiPost("backup/webdav/restore", { file: fname });
           if (r && r.ok) {
             toast(`远端备份 [${fname}] 恢复成功！`, "ok", 6000);
-            uiAlert(r.msg || `数据库已成功还原至云端归档 [${fname}]！数据与配置已全量热生效。`, "🎉 远端备份恢复成功", "✅");
+            uiAlert(r.msg || `数据库已成功还原至云端归档 [${fname}]！数据与配置已全量热生效。`, "远端备份恢复成功", "✅");
             await loadBackups(BACKUP_DIR);
           } else {
             const err = (r && r.msg) ? r.msg : ((r && r.error) ? r.error : "恢复失败");
             toast(`恢复失败: ${err}`, "bad", 8000);
-            uiAlert(err, "❌ 远端恢复失败", "⚠️");
+            uiAlert(err, "远端恢复失败", "⚠️");
           }
         } catch (e) {
           toast(`恢复异常: ${e.message}`, "bad", 8000);
-          uiAlert(e.message || String(e), "❌ 远端恢复异常", "⚠️");
+          uiAlert(e.message || String(e), "远端恢复异常", "⚠️");
         } finally {
           btn.disabled = false;
           btn.textContent = origText;
@@ -3831,7 +3869,7 @@ async function runDbDoctor() {
     if (res && res.ok) {
       const tblInfo = res.tables ? Object.entries(res.tables).map(([k, v]) => `${k}: ${v} 行`).join(" | ") : "";
       const msg = `🎉 数据库体检与整理完成！\n\n· 完整性健康状态: ${res.integrity}\n· 整理前总大小: ${res.size_before}\n· 整理后总大小: ${res.size_after}\n· 释放碎片空间: ${res.saved}\n· 数据表行数统计: ${tblInfo}`;
-      await uiAlert(msg, "🩺 数据库体检报告");
+      await uiAlert(msg, "数据库体检报告", "🩺");
       toast(res.msg || "体检完成", "ok");
       if (typeof loadBackups === "function") try { await loadBackups(""); } catch(e){}
     } else {
@@ -4024,7 +4062,7 @@ function showUpdateModal(data) {
     </div>
     <div style="padding:10px 12px;background:var(--panel);border-radius:10px;border:1px solid var(--line)">
       <div style="font-size:11px;color:var(--muted);margin-bottom:2px">云端仓库最新版本</div>
-      <div style="font-size:15px;font-weight:700;color:${isNew ? "var(--acc)" : "var(--ok)"}">${isNew ? "🚀 v" : "🟢 v"}${esc(latestVer)}</div>
+      <div style="font-size:15px;font-weight:700;color:${isNew ? "var(--acc)" : "var(--ok)"}">v${esc(latestVer)}</div>
     </div>
   </div>
   ${statusCard}
@@ -4037,7 +4075,7 @@ ${esc(changelog)}
 </div>
 `;
 
-  const modalTitle = isNew ? "🚀 发现新版本" : (errStr ? "⚠️ 版本检测结果" : "✨ 版本检测：已是最新版本");
+  const modalTitle = isNew ? "发现新版本" : (errStr ? "版本检测结果" : "版本检测：已是最新版本");
   const modalIcon = isNew ? "🚀" : (errStr ? "⚠️" : "✨");
   uiAlert(modalHtml, modalTitle, modalIcon);
 }
@@ -4236,7 +4274,7 @@ function initLogsEvents() {
     }
   });
   document.getElementById("btnLogsClear")?.addEventListener("click", async () => {
-    const ok = await uiConfirm("确定要清空当前的插件运行日志吗？\n清空后不可恢复（将重新从空文件开始记录）。", "🗑️ 清空日志");
+    const ok = await uiConfirm("确定要清空当前的插件运行日志吗？\n清空后不可恢复（将重新从空文件开始记录）。", "清空日志");
     if (!ok) return;
     try {
       toast("正在清空日志…", "ok");

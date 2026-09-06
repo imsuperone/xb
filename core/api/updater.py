@@ -6,7 +6,11 @@ import json
 import time
 import urllib.request
 import urllib.error
-from astrbot.api.web import json_response
+try:
+    from astrbot.api.web import json_response
+except ImportError:
+    def json_response(data, status=200):
+        return data
 from .helpers import _err, no_cache_response
 
 try:
@@ -37,16 +41,31 @@ def _get_local_version(plugin_base=""):
 
 
 def _parse_version_tuple(v_str):
+    """
+    解析版本号并赋予纪元权重 (epoch, major, minor, patch)。
+    - 历史遗留版本: 0.10.x ~ 0.68.x 归属旧版纪元 (epoch=0)
+    - 新版规范序列: 0.7.0 起全面进入新纪元 (epoch=1)，后续依次为 0.7.xx -> 0.8.xx -> 1.0.xx
+    保证 0.7.0+ 永远严格大于历史版本 0.68.xx。
+    """
     m = re.findall(r"\d+", str(v_str or ""))
-    return tuple(map(int, m)) if m else (0, 0, 0)
+    nums = [int(x) for x in m] if m else [0, 0, 0]
+    while len(nums) < 3:
+        nums.append(0)
+    major, minor, patch = nums[0], nums[1], nums[2]
+    # 历史遗留版本 0.10.x ~ 0.68.x 归属旧纪元
+    if major == 0 and 10 <= minor <= 69:
+        epoch = 0
+    else:
+        epoch = 1
+    return (epoch, major, minor, patch)
 
 
 def check_latest_version(plugin_base=""):
     """
     双通道检测最新版本：
-    1. GitHub main 分支 metadata.yaml (实时 Git 提交版本，支持 CDN 镜像加速)
-    2. GitHub Releases 接口 (Release 打包版本)
-    择优选取版本号最高者，并与本地版本进行元组比较。
+    1. GitHub Releases 接口 (官方标准发版，带版本日志与元数据)
+    2. GitHub main 分支 metadata.yaml (实时 Git 提交版本，支持多镜像加速容灾)
+    择优选取版本号最高者，并与本地版本进行纪元元组比较。
     """
     local_ver = _get_local_version(plugin_base)
     headers = {
@@ -54,16 +73,17 @@ def check_latest_version(plugin_base=""):
         "Accept": "application/vnd.github.v3+json"
     }
 
-    # 1. 优先尝试检测 main 分支 metadata.yaml（CDN 高速镜像容灾，首选 jsdelivr 1.5s 响应）
+    # 1. 优先尝试检测 main 分支 metadata.yaml（带时间戳穿透 CDN 缓存，多镜像加速容灾）
     main_ver = ""
+    ts = int(time.time())
     raw_meta_urls = [
-        f"https://fastly.jsdelivr.net/gh/{GITHUB_REPO}@main/metadata.yaml",
-        f"https://cdn.jsdelivr.net/gh/{GITHUB_REPO}@main/metadata.yaml",
-        f"https://testingcf.jsdelivr.net/gh/{GITHUB_REPO}@main/metadata.yaml",
-        f"https://ghproxy.net/https://raw.githubusercontent.com/{GITHUB_REPO}/main/metadata.yaml",
         f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/metadata.yaml",
+        f"https://ghproxy.net/https://raw.githubusercontent.com/{GITHUB_REPO}/main/metadata.yaml",
         f"https://mirror.ghproxy.com/https://raw.githubusercontent.com/{GITHUB_REPO}/main/metadata.yaml",
-        f"https://raw.gitmirror.com/{GITHUB_REPO}/main/metadata.yaml"
+        f"https://raw.gitmirror.com/{GITHUB_REPO}/main/metadata.yaml",
+        f"https://cdn.jsdelivr.net/gh/{GITHUB_REPO}@main/metadata.yaml?_t={ts}",
+        f"https://fastly.jsdelivr.net/gh/{GITHUB_REPO}@main/metadata.yaml?_t={ts}",
+        f"https://testingcf.jsdelivr.net/gh/{GITHUB_REPO}@main/metadata.yaml?_t={ts}"
     ]
     for url in raw_meta_urls:
         try:
@@ -98,7 +118,9 @@ def check_latest_version(plugin_base=""):
         pass
 
     # 3. 双通道择优：取版本号更高者
-    if _parse_version_tuple(main_ver) >= _parse_version_tuple(rel_ver) and main_ver:
+    # 若 main 分支最新提交版本严格高于 Release 版本，则提示 main 分支源码更新
+    # 否则若存在 Release 发版，优先使用官方规范发版与更新日志
+    if main_ver and _parse_version_tuple(main_ver) > _parse_version_tuple(rel_ver):
         best_ver = main_ver
         best_name = f"小白 v{main_ver} (Git main 源码更新)"
         best_date = time.strftime("%Y-%m-%d")
@@ -108,6 +130,11 @@ def check_latest_version(plugin_base=""):
         best_name = rel_name or f"小白 v{rel_ver} 正式版"
         best_date = rel_date or time.strftime("%Y-%m-%d")
         best_body = rel_body or "请查看 GitHub Releases 更新说明。"
+    elif main_ver:
+        best_ver = main_ver
+        best_name = f"小白 v{main_ver}"
+        best_date = time.strftime("%Y-%m-%d")
+        best_body = "已检测到 GitHub 仓库最新代码。"
     else:
         best_ver = local_ver
         best_name = f"小白 {local_ver}"
