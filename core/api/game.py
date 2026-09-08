@@ -644,7 +644,8 @@ async def handle_pool_list(request):
 
 
 async def handle_pool_attrs(request):
-    """抽奖武器属性保存（{attrs: {名: {atk, desc}}}，只写 weapon_attrs，不碰文件）"""
+    """抽奖武器属性保存（{attrs: {名: {atk, desc}}, full: 0/1}，只写 weapon_attrs，不碰文件；
+    默认合并：只更新 payload 出现的名；full=1 时全量替换（恢复默认用））"""
     try:
         data = await get_req_json(request, default={})
         if not isinstance(data, dict):
@@ -652,7 +653,15 @@ async def handle_pool_attrs(request):
         raw = data.get("attrs", data)
         if not isinstance(raw, dict):
             return _err("attrs must be dict", 400)
-        clean = {}
+        full = bool(data.get("full", False)) if isinstance(data, dict) else False
+        try:
+            _sl0 = _pool_slave()
+            base0 = _sl0._weapon_attrs_raw() if hasattr(_sl0, "_weapon_attrs_raw") else {}
+            merged = dict(base0) if isinstance(base0, dict) else {}
+        except Exception:
+            merged = {}
+        if full:
+            merged = {}
         for name, v in raw.items():
             name = str(name or "").strip()
             if not name:
@@ -667,7 +676,10 @@ async def handle_pool_attrs(request):
                 atk = 0
             desc = str(v.get("desc", "") or "").strip()
             if atk or desc:
-                clean[name] = {"atk": atk, "desc": desc}
+                merged[name] = {"atk": atk, "desc": desc}
+            elif name in merged:
+                merged.pop(name, None)
+        clean = {k: v for k, v in merged.items() if isinstance(v, dict)}
         ST.set_ini("商城图鉴", "weapon_attrs", json.dumps(clean, ensure_ascii=False))
         try:
             ST.save_config()
@@ -697,9 +709,16 @@ async def handle_pool_replace_path(request):
         src = str(data.get("src", "") or data.get("path", "") or "").strip()
         if not name or not src:
             return _err("name/src required", 400)
+        name = _pool_clean_stem(name)
+        if not name:
+            return _err("name invalid", 400)
         rar, _old = _pool_find(name)
         if not _old:
-            return _err("not found", 404)
+            # 新建模式（添加武器用内置图）：rar 必传
+            rar = str(data.get("rar", "") or "").strip().upper()
+            if rar not in _POOL_RARS:
+                return _err("not found, rar required to create", 404)
+            _old = None
         fp = _img_safe(src, _pool_base())
         if not fp or not _os.path.isfile(fp):
             return _err("源文件不存在或越界", 400)
@@ -867,17 +886,19 @@ async def handle_pool_upload(request):
             data = data.encode("utf-8", errors="ignore")
         if not data:
             return _err("empty file", 400)
-        if replace and fixname:
-            stem = fixname
-        else:
-            dst = _os.path.join(_pool_dir(rar), stem + ext)
-            if _os.path.exists(dst):
-                return _err("同名文件已存在", 400)
-            with open(dst, "wb") as w:
-                w.write(data)
-            _pool_bust(rar)
+        if fixname:
+            stem = _pool_clean_stem(fixname) or stem
+        if not stem:
+            return _err("文件名无效", 400)
+        if replace:
+            _pool_write_file(rar, stem, data, ext)
             return json_response({"ok": True, "name": stem, "rar": rar})
-        _pool_write_file(rar, stem, data, ext)
+        dst = _os.path.join(_pool_dir(rar), stem + ext)
+        if _os.path.exists(dst):
+            return _err("同名文件已存在", 400)
+        with open(dst, "wb") as w:
+            w.write(data)
+        _pool_bust(rar)
         return json_response({"ok": True, "name": stem, "rar": rar})
     except Exception as e:
         return _err(f"pool upload failed: {e}", 500)

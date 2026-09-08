@@ -485,7 +485,9 @@ def _treasure_effect(tname):
             return T.GOURD_EFFECT
         if "四象" in t or "护符" in t:
             return T.CHARM_EFFECT
-        return T.TREASURE_EFFECT_GENERIC if hasattr(T, "TREASURE_EFFECT_GENERIC") else ""
+        if hasattr(T, "TREASURE_EFFECT_GENERIC") and T.TREASURE_EFFECT_GENERIC:
+            return T.TREASURE_EFFECT_GENERIC
+        return T.T_COMMON_EFFECT if hasattr(T, "T_COMMON_EFFECT") else ""
     except Exception:
         return ""
 

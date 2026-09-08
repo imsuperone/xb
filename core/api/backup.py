@@ -64,7 +64,23 @@ async def handle_backups_list(request, plugin_base=""):
             files.append({"name": name, "path": r, "size": sz, "mtime": mtime})
     dirs.sort(key=lambda x: x["name"], reverse=True)
     files.sort(key=lambda x: x["name"], reverse=True)
-    return no_cache_response(json_response({"dir": str(rel or ""), "dirs": dirs, "files": files}))
+    # sidecar 可读性标记：前端在备份时间后提示文件锁防重保护
+    sidecar = {"ok": False, "time": ""}
+    try:
+        _sp = ST._backup_sidecar_path() if hasattr(ST, "_backup_sidecar_path") else ""
+        if _sp and os.path.isfile(_sp):
+            sidecar["ok"] = True
+            try:
+                with open(_sp, "r", encoding="utf-8") as _f:
+                    _d = _json.load(_f)
+                _ts = float((_d or {}).get("ts", 0) or 0)
+                if _ts:
+                    sidecar["time"] = time.strftime("%Y-%m-%d %H:%M", time.localtime(_ts))
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return no_cache_response(json_response({"dir": str(rel or ""), "dirs": dirs, "files": files, "sidecar": sidecar}))
 
 
 async def handle_backups_restore(request, plugin_base=""):

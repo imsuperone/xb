@@ -1552,7 +1552,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.7.18"
+        version: res.version || "0.7.19"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -2698,17 +2698,21 @@ function renderPoolBox(forceOpen=false){
         ? `<img src="${esc(it.thumb)}" style="width:36px;height:36px;object-fit:cover;border:1px solid var(--line);border-radius:6px" onerror="this.style.display='none'">`
         : `<span data-pool-thumb style="display:inline-flex;align-items:center"><span class="badge" style="font-size:11px" title="${esc(it.file||name)}">${esc(_ext||"?")}${_kb?" · "+_kb:""}</span></span>`;
       const pa = (POOL_ATTRS && POOL_ATTRS[name]) || { atk: 0, desc: "" };
-      html+=`<div class="s-fields" data-pool-item="${esc(rar)}|${esc(name)}" style="margin-top:6px">`+
+      const _paAtk = Math.max(0, Number(pa.atk) || 0);
+      const _paDesc = String(pa.desc || "");
+      html+=`<div data-pool-item="${esc(rar)}|${esc(name)}" style="margin-top:6px">`+
+        `<div style="font-size:11px;color:var(--muted);margin:0 2px 2px">📌 默认：攻击加成 +${esc(_paAtk)}${_paDesc ? " · " + esc(_paDesc.slice(0, 20)) : " · 无描述"} · 星级基础另计（★0+100→★5+1600）</div>`+
+        `<div class="s-fields">`+
         `<div class="s-row" style="font-weight:600;min-width:90px"><div style="padding-top:4px">✦ ${esc(name)}</div></div>`+
         `<div class="s-row"><small>稀有度</small><select data-pool-rar>${["SSR","SR","R"].map((r)=>`<option value="${r}"${r===rar?" selected":""}>${r}</option>`).join("")}</select></div>`+
         `<div class="s-row"><small>攻击加成</small><input type="number" data-pool-atk value="${esc(pa.atk ?? 0)}" style="width:70px"></div>`+
         `<div class="s-row" style="flex:1"><small>描述</small><input data-pool-desc value="${esc(pa.desc ?? "")}" placeholder="详情页展示"></div>`+
         `<div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${pv}<button class="ghost sm" data-pool-preview>预览</button><button class="ghost sm" data-pool-pick-builtin>内置选图</button><button class="ghost sm" data-pool-pick-upload>外置选图</button><button class="ghost sm" data-pool-rename>改名</button><button class="s-del" data-pool-del>删除</button></div>`+
-        `</div>`;
+        `</div></div>`;
     });
     html+=`</details>`;
   });
-  html+=`<div style="margin-top:10px;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><select id="poolUploadRar">${["SSR","SR","R"].map((r)=>`<option value="${r}">${r}</option>`).join("")}</select><button class="ghost sm" id="btnPoolUpload">＋ 上传武器</button><button class="ghost sm" id="btnPoolAttrsSave">💾 保存武器属性</button><button class="ghost sm" id="btnPoolAttrsReset">↩️ 恢复默认</button></div></details>`;
+  html+=`<div style="margin-top:10px;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="ghost sm" id="btnPoolUpload">＋ 添加武器</button><button class="ghost sm" id="btnPoolAttrsSave">💾 保存武器属性</button><button class="ghost sm" id="btnPoolAttrsReset">↩️ 恢复默认</button></div></details>`;
   box.innerHTML=html;
   // 分区展开时懒加载图片预览（自动匹配，展开才取，不卡首屏）
   box.querySelectorAll("details[data-pool-group]").forEach((d) => {
@@ -2844,21 +2848,7 @@ function renderPoolBox(forceOpen=false){
   }));
   document.getElementById("btnPoolAttrsSave")?.addEventListener("click", () => savePoolAttrs());
   document.getElementById("btnPoolAttrsReset")?.addEventListener("click", () => resetPoolAttrs());
-  document.getElementById("btnPoolUpload")?.addEventListener("click", ()=>{
-    const rarSel = document.getElementById("poolUploadRar");
-    const rar = (rarSel && rarSel.value) || "SSR";
-    const inp = document.createElement("input"); inp.type = "file"; inp.accept = "image/*";
-    inp.onchange = async (e) => {
-      const file = e.target.files[0]; if (!file) return;
-      try {
-        const fd = new FormData(); fd.append("file", file);
-        const r = await getBridge().apiPost("weapons/pool/upload?rar=" + encodeURIComponent(rar), fd);
-        if (r && r.error) throw new Error(r.error);
-        toast(`已上传至 ${rar}`, "ok"); await loadPool();
-      } catch (err) { toast("上传失败: " + err.message, "bad"); }
-    };
-    inp.click();
-  });
+  document.getElementById("btnPoolUpload")?.addEventListener("click", ()=>openPoolAddModal("SSR"));
 }
 async function savePoolAttrs() {
   try {
@@ -2877,25 +2867,125 @@ async function savePoolAttrs() {
 async function resetPoolAttrs() {
   if (!(await uiConfirm("直接清空全部武器自定义属性（攻击加成/描述）？文件不受影响，旧数据不保留。", "恢复默认"))) return;
   try {
-    const r = await getBridge().apiPost("weapons/pool/attrs", { attrs: {} });
+    const r = await getBridge().apiPost("weapons/pool/attrs", { attrs: {}, full: 1 });
     if (r && r.error) throw new Error(r.error);
     POOL_ATTRS = {}; POOL_ATTRS_DIRTY = false;
     toast("已恢复默认", "ok"); await loadPool();
   } catch (e) { toast("恢复失败: " + e.message, "bad"); }
 }
 function poolUploadTo(rar) {
-  // 总览页＋添加：直接上传进指定稀有度
-  const inp = document.createElement("input"); inp.type = "file"; inp.accept = "image/*";
-  inp.onchange = async (e) => {
-    const file = e.target.files[0]; if (!file) return;
-    try {
-      const fd = new FormData(); fd.append("file", file);
-      const r = await getBridge().apiPost("weapons/pool/upload?rar=" + encodeURIComponent(rar || "SSR"), fd);
-      if (r && r.error) throw new Error(r.error);
-      toast("已上传", "ok"); await loadPool();
-    } catch (err) { toast("上传失败: " + err.message, "bad"); }
-  };
-  inp.click();
+  openPoolAddModal(rar || "SSR");
+}
+let _POOL_ADD_FILE = null;
+let _POOL_ADD_SRC = "";
+function openPoolAddModal(defRar) {
+  const modal = document.getElementById("appModal");
+  if (!modal) return;
+  _POOL_ADD_FILE = null; _POOL_ADD_SRC = "";
+  const icon = document.getElementById("appModalIcon");
+  const title = document.getElementById("appModalTitle");
+  const content = document.getElementById("appModalContent");
+  const inputWrap = document.getElementById("appModalInputWrap");
+  const cancelBtn = document.getElementById("appModalCancel");
+  const okBtn = document.getElementById("appModalOk");
+  if (icon) icon.textContent = "🎰";
+  if (title) title.textContent = "添加武器";
+  if (inputWrap) inputWrap.style.display = "none";
+  content.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;gap:8px">
+        <div style="flex:2"><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">武器名（即文件名）：</label>
+          <input id="poolAddName" style="width:100%;padding:6px 10px;border-radius:8px" placeholder="如：雷鸣剑"></div>
+        <div style="flex:1"><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">稀有度：</label>
+          <select id="poolAddRar" style="width:100%;padding:6px 10px;border-radius:8px">${["SSR", "SR", "R"].map((r) => `<option value="${r}"${r === (defRar || "SSR") ? " selected" : ""}>${r}</option>`).join("")}</select></div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <div style="flex:1"><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">攻击加成（默认0）：</label>
+          <input id="poolAddAtk" type="number" value="0" style="width:100%;padding:6px 10px;border-radius:8px"></div>
+        <div style="flex:2"><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">描述（可选）：</label>
+          <input id="poolAddDesc" style="width:100%;padding:6px 10px;border-radius:8px" placeholder="详情页展示"></div>
+      </div>
+      <div><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">图片：</label>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <button class="ghost sm" id="poolAddPickUpload">外置选图（本地上传）</button>
+          <button class="ghost sm" id="poolAddPickBuiltin">内置选图（服务器文件）</button>
+          <span id="poolAddImgTip" style="font-size:11.5px;color:var(--muted)">未选择</span>
+        </div></div>
+      <div class="hint">图片必选其一；数值保存后在池行可改；文件即池，添加即时生效</div>
+    </div>`;
+  const setTip = (t) => { const el = document.getElementById("poolAddImgTip"); if (el) el.textContent = t; };
+  document.getElementById("poolAddPickUpload")?.addEventListener("click", () => {
+    const inp = document.createElement("input"); inp.type = "file"; inp.accept = "image/*";
+    inp.onchange = (e) => {
+      const file = e.target.files[0]; if (!file) return;
+      _POOL_ADD_FILE = file; _POOL_ADD_SRC = "";
+      setTip("本地：" + file.name);
+    };
+    inp.click();
+  });
+  document.getElementById("poolAddPickBuiltin")?.addEventListener("click", async () => {
+    modal.className = "";
+    window.SHOP_PICK_TARGET = "__pooladd__"; window.SHOP_PICK_KIND = "pooladd";
+    toast("已进入根目录，请单击选中图片后点“确定绑定”", "ok");
+    document.querySelectorAll(".tabs button").forEach(x => x.classList.remove("on"));
+    const rb = document.querySelector("[data-tab=\"imgs\"]"); if (rb) rb.classList.add("on");
+    document.querySelectorAll(".tab").forEach(x => x.classList.remove("on"));
+    const tab = document.getElementById("tab-imgs"); if (tab) tab.classList.add("on");
+    await loadImages("");
+    const old = document.getElementById("shopPickTip"); if (old) old.remove();
+    const tip = document.createElement("div"); tip.id = "shopPickTip"; tip.style = "background:var(--accSoft);border:1px solid var(--acc);padding:8px 12px;border-radius:8px;margin-bottom:10px";
+    tip.innerHTML = `<b>为新武器选择内置图：</b> 请在下方根目录单击选中图片文件，然后 <button class="ghost sm" id="btnShopPickConfirm">确定绑定</button> <button class="ghost sm" id="btnShopPickCancel">取消</button>`;
+    const panel = document.querySelector("#tab-imgs .panel"); if (panel) panel.prepend(tip);
+    const backToModal = () => {
+      tip.remove(); window.SHOP_PICK_TARGET = null; window.SHOP_PICK_KIND = null;
+      modal.className = "show";
+    };
+    document.getElementById("btnShopPickConfirm")?.addEventListener("click", () => {
+      const sel = IMG_SELECTED;
+      if (!sel) { toast("请先选中图片文件", "bad"); return; }
+      const ext = (sel.split(".").pop() || "").toLowerCase();
+      if (!["png", "jpg", "jpeg", "gif", "webp", "bmp", "ico"].includes(ext)) { toast("请选择图片文件", "bad"); return; }
+      if (window._imgIsDir && window._imgIsDir(sel)) { toast("不能选择文件夹", "bad"); return; }
+      _POOL_ADD_FILE = null; _POOL_ADD_SRC = sel;
+      backToModal(); setTip("内置：" + sel);
+    });
+    document.getElementById("btnShopPickCancel")?.addEventListener("click", () => { backToModal(); });
+  });
+  if (cancelBtn) {
+    cancelBtn.style.display = "";
+    cancelBtn.textContent = "取消";
+    cancelBtn.onclick = () => { modal.className = ""; };
+  }
+  if (okBtn) {
+    okBtn.textContent = "确定添加";
+    okBtn.style.background = "var(--acc)";
+    okBtn.style.borderColor = "transparent";
+    okBtn.onclick = async () => {
+      const n = (document.getElementById("poolAddName")?.value || "").trim();
+      const rar = (document.getElementById("poolAddRar")?.value || "SSR");
+      const atk = Math.max(0, Number(document.getElementById("poolAddAtk")?.value) || 0);
+      const desc = (document.getElementById("poolAddDesc")?.value || "").trim();
+      if (!n) { toast("请填写武器名称", "bad"); return; }
+      try {
+        if (_POOL_ADD_FILE) {
+          const fd = new FormData(); fd.append("file", _POOL_ADD_FILE);
+          const r = await getBridge().apiPost("weapons/pool/upload?rar=" + encodeURIComponent(rar) + "&name=" + encodeURIComponent(n), fd);
+          if (r && r.error) throw new Error(r.error);
+        } else if (_POOL_ADD_SRC) {
+          const r = await getBridge().apiPost("weapons/pool/replace_path", { rar, name: n, src: _POOL_ADD_SRC });
+          if (r && r.error) throw new Error(r.error);
+        } else { toast("请先选一张图片", "bad"); return; }
+        if (atk || desc) {
+          const r2 = await getBridge().apiPost("weapons/pool/attrs", { attrs: { [n]: { atk, desc } } });
+          if (r2 && r2.error) throw new Error(r2.error);
+        }
+        modal.className = "";
+        toast("已添加", "ok"); await loadPool();
+      } catch (e) { toast("添加失败: " + e.message, "bad"); }
+    };
+  }
+  modal.className = "show";
+  setTimeout(() => { try { document.getElementById("poolAddName")?.focus(); } catch (e) {} }, 50);
 }
 function parseShopRide(raw) {
   // 兼容旧调用：只返回数据对象
@@ -2923,14 +3013,17 @@ function renderShopRideBox(forceOpen = false) {
     let price = 0, img = "";
     if (val && typeof val === "object" && !Array.isArray(val)) { price = val.price ?? 0; img = val.img ?? ""; }
     else price = Number(val) || 0;
-    // 自动匹配坐骑图片：若无图，尝试按名称匹配 img/坐骑图标 或 gacha_img
-    if (!img && window._shopImgMap && window._shopImgMap[name]) img = window._shopImgMap[name];
-    const imgPreview = img ? `<img src="${esc(img)}" style="width:40px;height:40px;object-fit:cover;border:1px solid var(--line);border-radius:6px" onerror="this.style.display='none'">` : `<span style="color:var(--muted);font-size:11px">无图</span>`;
+    // 自动匹配坐骑图片：自定义优先，否则按名称匹配坐骑图标目录
+    let autoImg = "";
+    if (!img) { try { autoImg = `data/img/坐骑图标/${name}.jpg`; } catch (e) { autoImg = ""; } }
+    const showImg = img || autoImg;
+    const imgPreview = showImg ? `<img src="${esc(showImg)}" style="width:40px;height:40px;object-fit:cover;border:1px solid var(--line);border-radius:6px" onerror="this.style.display='none'">` : `<span style="color:var(--muted);font-size:11px">无图</span>`;
+    const imgTag = img ? "自定义" : (autoImg ? "自动匹配" : "");
     html += `<div class="s-fields" data-ride-item="${esc(name)}" style="margin-top:8px">` +
       `<div class="s-row"><small>坐骑名</small><input data-ride-name value="${esc(name)}"></div>` +
       `<div class="s-row"><small>价格</small><input type="number" data-ride-price value="${esc(price)}" style="width:90px"></div>` +
       `<div class="s-row" style="flex:1"><small>图片路径</small><input data-ride-img value="${esc(img)}" placeholder="data/img/..."></div>` +
-      `<div style="display:flex;gap:4px;align-items:center">${imgPreview}<button class="ghost sm" data-ride-pick="${esc(name)}">选图</button><button class="ghost sm" data-ride-pick-builtin="${esc(name)}">内置选图</button><button class="s-del" data-ride-del="${esc(name)}">删除</button></div>` +
+      `<div style="display:flex;gap:4px;align-items:center">${imgPreview}${imgTag ? `<span style="font-size:11px;color:var(--muted)">${imgTag}</span>` : ""}<button class="ghost sm" data-ride-pick="${esc(name)}">选图</button><button class="ghost sm" data-ride-pick-builtin="${esc(name)}">内置选图</button><button class="s-del" data-ride-del="${esc(name)}">删除</button></div>` +
       `</div>`;
   });
   html += `<div style="margin-top:8px"><button class="ghost sm" id="btnRideAdd">＋ 添加坐骑</button> <button class="ghost sm" id="btnRideReset">恢复默认</button></div></details>`;
@@ -3037,10 +3130,40 @@ function openRideAddModal() {
         <input id="rideAddName" style="width:100%;padding:6px 10px;border-radius:8px" placeholder="如：汗血宝马"></div>
       <div><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">价格：</label>
         <input id="rideAddPrice" type="number" value="500000" style="width:100%;padding:6px 10px;border-radius:8px"></div>
-      <div><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">图片路径（可选，留空用默认图）：</label>
-        <input id="rideAddImg" style="width:100%;padding:6px 10px;border-radius:8px" placeholder="data/img/坐骑图标/xxx.jpg"></div>
+      <div><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">图片路径（可选，留空自动匹配）：</label>
+        <input id="rideAddImg" style="width:100%;padding:6px 10px;border-radius:8px" placeholder="data/img/坐骑图标/xxx.jpg">
+        <div style="margin-top:6px"><button class="ghost sm" id="rideAddPickBuiltin">内置选图（服务器文件）</button></div></div>
       <div class="hint">保存后记得点商城页「保存」持久化；图片也可在列表中用“选图/内置选图”绑定</div>
     </div>`;
+  document.getElementById("rideAddPickBuiltin")?.addEventListener("click", async () => {
+    modal.className = "";
+    window.SHOP_PICK_TARGET = "__rideadd__"; window.SHOP_PICK_KIND = "rideadd";
+    toast("已进入根目录，请单击选中图片后点“确定绑定”", "ok");
+    document.querySelectorAll(".tabs button").forEach(x => x.classList.remove("on"));
+    const rb = document.querySelector("[data-tab=\"imgs\"]"); if (rb) rb.classList.add("on");
+    document.querySelectorAll(".tab").forEach(x => x.classList.remove("on"));
+    const tab = document.getElementById("tab-imgs"); if (tab) tab.classList.add("on");
+    await loadImages("");
+    const old = document.getElementById("shopPickTip"); if (old) old.remove();
+    const tip = document.createElement("div"); tip.id = "shopPickTip"; tip.style = "background:var(--accSoft);border:1px solid var(--acc);padding:8px 12px;border-radius:8px;margin-bottom:10px";
+    tip.innerHTML = `<b>为新坐骑选择内置图：</b> 请在下方根目录单击选中图片文件，然后 <button class="ghost sm" id="btnShopPickConfirm">确定绑定</button> <button class="ghost sm" id="btnShopPickCancel">取消</button>`;
+    const panel = document.querySelector("#tab-imgs .panel"); if (panel) panel.prepend(tip);
+    const backToModal = () => {
+      tip.remove(); window.SHOP_PICK_TARGET = null; window.SHOP_PICK_KIND = null;
+      modal.className = "show";
+    };
+    document.getElementById("btnShopPickConfirm")?.addEventListener("click", () => {
+      const sel = IMG_SELECTED;
+      if (!sel) { toast("请先选中图片文件", "bad"); return; }
+      const ext = (sel.split(".").pop() || "").toLowerCase();
+      if (!["png", "jpg", "jpeg", "gif", "webp", "bmp", "ico"].includes(ext)) { toast("请选择图片文件", "bad"); return; }
+      if (window._imgIsDir && window._imgIsDir(sel)) { toast("不能选择文件夹", "bad"); return; }
+      backToModal();
+      const inp = document.getElementById("rideAddImg");
+      if (inp) inp.value = sel;
+    });
+    document.getElementById("btnShopPickCancel")?.addEventListener("click", () => { backToModal(); });
+  });
   if (cancelBtn) {
     cancelBtn.style.display = "";
     cancelBtn.textContent = "取消";
@@ -3522,6 +3645,7 @@ function renderBackups(d, _q) {
       <button class="ghost sm" style="pointer-events:none">进入 ➔</button>
     </div>`;
   });
+  const _sc = (d && d.sidecar && d.sidecar.ok) ? d.sidecar : null;
   (d.files || []).forEach((x) => {
     if (q && !x.name.toLowerCase().includes(q)) return;
     const selCls = window.BACKUP_SELECTED === x.path ? ' selected' : '';
@@ -3529,7 +3653,7 @@ function renderBackups(d, _q) {
       <div class="bk-icon">💾</div>
       <div class="bk-info">
         <div class="bk-name">${esc(x.name)}</div>
-        <div class="bk-meta"><span>📦 大小: ${esc(x.size || "0KB")}</span><span>🕒 备份时间: ${esc(x.mtime || "")}</span></div>
+        <div class="bk-meta"><span>📦 大小: ${esc(x.size || "0KB")}</span><span>🕒 备份时间: ${esc(x.mtime || "")}${_sc ? ` <span title="文件锁配合防多进程/热重载打出双份备份（.xb_last_backup.json${_sc.time ? "，最近：" + esc(_sc.time) : ""}）" style="color:var(--ok)">🔒 防重保护中</span>` : ""}</span></div>
       </div>
       <span style="font-size:12px;color:var(--muted)">${selCls ? '✓ 已选中' : '单击选中'}</span>
     </div>`;
