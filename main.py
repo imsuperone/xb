@@ -3,6 +3,7 @@
 import asyncio
 import os
 import time
+from importlib import import_module
 from typing import Optional
 
 from astrbot.api.event import AstrMessageEvent, MessageChain
@@ -108,7 +109,7 @@ def _raw_file_response(data_bytes, filename):
 PLUGIN_ID = "astrbot_plugin_xbbot"
 PLUGIN_DESC = "小白(奴/签/银/娱/私/灵/骑/超管/帮派/冒险+主菜单+WebUI), 现代SQLite存储"
 PLUGIN_AUTHOR = "Light"
-PLUGIN_VERSION = "0.7.24"
+PLUGIN_VERSION = "0.7.25"
 PLUGIN_REPO = "https://github.com/imsuperone/xb"
 
 # 复用 router 的主菜单，保持单源
@@ -127,7 +128,7 @@ except Exception:
         "| ⚔️ 帮派系统 | 🗺️ 冒险系统 |\r\n"
         "----------------\r\n"
         "发送系统关键词打开菜单，如【签到系统】【精灵系统】\r\n"
-        "当前版本：v0.7.24"
+        "当前版本：v0.7.25"
     )
 
 
@@ -152,6 +153,89 @@ def handle(gid, qq, raw, is_private=False, is_admin=False):
                 pass
         return f"系统处理异常，请稍后重试（{e}）"
     return None
+
+
+def _load_api_handler(mod_short, func_name):
+    """双通道导入 API handler：包内相对优先，顶层绝对回退（与文件头导入范式一致）"""
+    try:
+        if __package__:
+            return getattr(import_module("." + mod_short, __package__), func_name)
+        raise ImportError("top-level module")
+    except Exception:
+        return getattr(import_module(mod_short), func_name)
+
+
+# Web API 注册表：(路径后缀, 方法, 处理器属性名, 说明)
+# 与下方 page_* 薄包装一一对应；改路由只改此表
+_XB_API_ROUTES = [
+    ("stats", "GET", "page_stats", "游戏数据总览"),
+    ("rank", "GET", "page_rank", "排行榜"),
+    ("config/get", "GET", "page_cfg_get", "读取运行配置"),
+    ("config/save", "POST", "page_cfg_save", "保存运行配置"),
+    ("config/auto_balance", "POST", "page_config_auto_balance", "游戏数值智能平衡一键匹配"),
+    ("config/balance_state", "GET", "page_balance_state", "平衡档位真实状态与漂移检测"),
+    ("analytics/overview", "GET", "page_analytics_overview", "群生态与经济运行大屏数据"),
+    ("users/airdrop", "POST", "page_users_airdrop", "全员/群聊批量福利空投"),
+    ("config/schema", "GET", "page_cfg_schema", "配置schema(按节分组)"),
+    ("user/export", "GET,POST", "page_user_export", "导出单用户数据"),
+    ("user/import", "POST", "page_user_import", "导入单用户数据"),
+    ("users/export", "GET,POST", "page_users_export", "导出全量用户数据"),
+    ("users/import", "POST", "page_users_import", "导入全量用户数据"),
+    ("users/clean_left", "GET,POST", "page_users_clean_left", "清理退群人员数据"),
+    ("commands", "GET", "page_commands", "指令一览"),
+    ("users", "GET", "page_users", "用户/财富列表"),
+    ("user/edit", "POST", "page_user_edit", "编辑用户数据(金币/体力/魅力/奖券)"),
+    ("user/clear", "POST,GET", "page_user_clear", "清除单用户数据(含奴隶与精灵并可重领新手礼包)"),
+    ("images/list", "GET", "page_images_list", "图片目录浏览"),
+    ("images/upload", "POST", "page_images_upload", "上传图片"),
+    ("images/delete", "POST", "page_images_delete", "删除图片"),
+    ("images/rename", "POST", "page_images_rename", "重命名图片"),
+    ("images/mkdir", "POST", "page_images_mkdir", "新建文件夹"),
+    ("images/thumb", "GET,POST", "page_images_thumb", "单张图片预览"),
+    ("images/copy", "POST", "page_images_copy", "复制文件"),
+    ("images/export", "GET,POST", "page_images_export", "导出文件"),
+    ("spirits", "GET", "page_spirits_get", "精灵图鉴读取"),
+    ("spirits/save", "POST", "page_spirits_save", "精灵图鉴保存"),
+    ("gacha/weapons", "GET", "page_gacha_weapons", "抽奖武器池"),
+    ("weapons/pool", "GET", "page_pool_list", "抽奖武器池文件列表"),
+    ("weapons/pool/rename", "POST", "page_pool_rename", "抽奖武器改名"),
+    ("weapons/pool/move", "POST", "page_pool_move", "抽奖武器改稀有度"),
+    ("weapons/pool/delete", "POST", "page_pool_delete", "抽奖武器删除"),
+    ("weapons/pool/upload", "POST", "page_pool_upload", "抽奖武器上传"),
+    ("weapons/pool/img", "GET,POST", "page_pool_img", "抽奖武器单张预览"),
+    ("weapons/pool/attrs", "POST", "page_pool_attrs", "抽奖武器属性保存"),
+    ("weapons/pool/replace_path", "POST", "page_pool_replace_path", "抽奖武器内置选图"),
+    ("backups/list", "GET", "page_backups_list", "备份列表"),
+    ("backups/restore", "POST", "page_backups_restore", "恢复备份"),
+    ("backups/delete", "POST", "page_backups_delete", "删除备份"),
+    ("backups/config/snapshots", "GET", "page_cfg_snapshots", "配置快照列表"),
+    ("backups/config/snapshot/save", "POST", "page_cfg_snapshot_save", "保存配置快照"),
+    ("backups/config/snapshot/restore", "POST", "page_cfg_snapshot_restore", "恢复配置快照"),
+    ("backups/export", "GET,POST", "page_backups_export", "导出备份"),
+    ("backups/doctor", "POST,GET", "page_db_doctor", "数据库健康体检与碎片整理"),
+    ("backups/prune", "POST,GET", "page_backups_prune", "按保留数量修剪本地与云端旧备份"),
+    ("import/legacy", "POST", "page_import_legacy", "旧库导入（兼容新旧格式）"),
+    ("slave/users", "GET", "page_slave_users", "奴隶用户列表"),
+    ("slave/calibrate", "POST,GET", "page_slave_calibrate", "一键校准全员身价"),
+    ("spirit/users", "GET", "page_spirit_users", "精灵用户列表"),
+    ("groups/list", "GET", "page_groups_list", "群聊列表"),
+    ("groups/toggle", "POST", "page_groups_toggle", "切换群聊/总开关"),
+    ("groups/delete", "POST", "page_groups_delete", "删除群聊配置"),
+    ("admin/clear", "POST", "page_clear_all", "清空所有数据（三重确认）"),
+    ("version/check", "GET,POST", "page_version_check", "在线检查版本更新"),
+    ("logs", "GET,POST", "page_logs_get", "获取插件运行日志"),
+    ("logs/clear", "POST,GET", "page_logs_clear", "清空插件运行日志"),
+    ("logs/export", "GET,POST", "page_logs_export", "导出插件运行日志"),
+]
+
+# WebDAV 双前缀别名表（backup/ 与 backups/ 同义，由循环展开注册）
+_XB_WEBDAV_ROUTES = [
+    ("webdav/test", "GET,POST", "page_webdav_test", "测试WebDAV连接"),
+    ("webdav/upload", "POST", "page_webdav_backup_now", "立即上传WebDAV备份"),
+    ("webdav/files", "GET,POST", "page_webdav_files", "获取WebDAV远端备份文件列表"),
+    ("webdav/restore", "POST", "page_webdav_restore", "从WebDAV远端备份恢复数据"),
+    ("webdav/delete", "POST", "page_webdav_delete", "删除WebDAV远端备份"),
+]
 
 
 class XbBot(Star):
@@ -249,75 +333,12 @@ class XbBot(Star):
                 _logger_layer.info(f"小白插件 v{PLUGIN_VERSION} 启动初始化完成 (PID={os.getpid()})")
             except Exception:
                 pass
-        # Web API — 9Tab 懒加载
-        context.register_web_api(f"/{PLUGIN_ID}/stats", self.page_stats, ["GET"], "游戏数据总览")
-        context.register_web_api(f"/{PLUGIN_ID}/rank", self.page_rank, ["GET"], "排行榜")
-        context.register_web_api(f"/{PLUGIN_ID}/config/get", self.page_cfg_get, ["GET"], "读取运行配置")
-        context.register_web_api(f"/{PLUGIN_ID}/config/save", self.page_cfg_save, ["POST"], "保存运行配置")
-        context.register_web_api(f"/{PLUGIN_ID}/config/auto_balance", self.page_config_auto_balance, ["POST"], "游戏数值智能平衡一键匹配")
-        context.register_web_api(f"/{PLUGIN_ID}/config/balance_state", self.page_balance_state, ["GET"], "平衡档位真实状态与漂移检测")
-        context.register_web_api(f"/{PLUGIN_ID}/analytics/overview", self.page_analytics_overview, ["GET"], "群生态与经济运行大屏数据")
-        context.register_web_api(f"/{PLUGIN_ID}/users/airdrop", self.page_users_airdrop, ["POST"], "全员/群聊批量福利空投")
-        context.register_web_api(f"/{PLUGIN_ID}/config/schema", self.page_cfg_schema, ["GET"], "配置schema(按节分组)")
-        context.register_web_api(f"/{PLUGIN_ID}/user/export", self.page_user_export, ["GET", "POST"], "导出单用户数据")
-        context.register_web_api(f"/{PLUGIN_ID}/user/import", self.page_user_import, ["POST"], "导入单用户数据")
-        context.register_web_api(f"/{PLUGIN_ID}/users/export", self.page_users_export, ["GET", "POST"], "导出全量用户数据")
-        context.register_web_api(f"/{PLUGIN_ID}/users/import", self.page_users_import, ["POST"], "导入全量用户数据")
-        context.register_web_api(f"/{PLUGIN_ID}/users/clean_left", self.page_users_clean_left, ["GET", "POST"], "清理退群人员数据")
-        context.register_web_api(f"/{PLUGIN_ID}/commands", self.page_commands, ["GET"], "指令一览")
-        context.register_web_api(f"/{PLUGIN_ID}/users", self.page_users, ["GET"], "用户/财富列表")
-        context.register_web_api(f"/{PLUGIN_ID}/user/edit", self.page_user_edit, ["POST"], "编辑用户数据(金币/体力/魅力/奖券)")
-        context.register_web_api(f"/{PLUGIN_ID}/user/clear", self.page_user_clear, ["POST", "GET"], "清除单用户数据(含奴隶与精灵并可重领新手礼包)")
-        context.register_web_api(f"/{PLUGIN_ID}/images/list", self.page_images_list, ["GET"], "图片目录浏览")
-        context.register_web_api(f"/{PLUGIN_ID}/images/upload", self.page_images_upload, ["POST"], "上传图片")
-        context.register_web_api(f"/{PLUGIN_ID}/images/delete", self.page_images_delete, ["POST"], "删除图片")
-        context.register_web_api(f"/{PLUGIN_ID}/images/rename", self.page_images_rename, ["POST"], "重命名图片")
-        context.register_web_api(f"/{PLUGIN_ID}/images/mkdir", self.page_images_mkdir, ["POST"], "新建文件夹")
-        context.register_web_api(f"/{PLUGIN_ID}/images/thumb", self.page_images_thumb, ["GET", "POST"], "单张图片预览")
-        context.register_web_api(f"/{PLUGIN_ID}/images/copy", self.page_images_copy, ["POST"], "复制文件")
-        context.register_web_api(f"/{PLUGIN_ID}/images/export", self.page_images_export, ["GET", "POST"], "导出文件")
-        context.register_web_api(f"/{PLUGIN_ID}/spirits", self.page_spirits_get, ["GET"], "精灵图鉴读取")
-        context.register_web_api(f"/{PLUGIN_ID}/spirits/save", self.page_spirits_save, ["POST"], "精灵图鉴保存")
-        context.register_web_api(f"/{PLUGIN_ID}/gacha/weapons", self.page_gacha_weapons, ["GET"], "抽奖武器池")
-        context.register_web_api(f"/{PLUGIN_ID}/weapons/pool", self.page_pool_list, ["GET"], "抽奖武器池文件列表")
-        context.register_web_api(f"/{PLUGIN_ID}/weapons/pool/rename", self.page_pool_rename, ["POST"], "抽奖武器改名")
-        context.register_web_api(f"/{PLUGIN_ID}/weapons/pool/move", self.page_pool_move, ["POST"], "抽奖武器改稀有度")
-        context.register_web_api(f"/{PLUGIN_ID}/weapons/pool/delete", self.page_pool_delete, ["POST"], "抽奖武器删除")
-        context.register_web_api(f"/{PLUGIN_ID}/weapons/pool/upload", self.page_pool_upload, ["POST"], "抽奖武器上传")
-        context.register_web_api(f"/{PLUGIN_ID}/weapons/pool/img", self.page_pool_img, ["GET", "POST"], "抽奖武器单张预览")
-        context.register_web_api(f"/{PLUGIN_ID}/weapons/pool/attrs", self.page_pool_attrs, ["POST"], "抽奖武器属性保存")
-        context.register_web_api(f"/{PLUGIN_ID}/weapons/pool/replace_path", self.page_pool_replace_path, ["POST"], "抽奖武器内置选图")
-        context.register_web_api(f"/{PLUGIN_ID}/backups/list", self.page_backups_list, ["GET"], "备份列表")
-        context.register_web_api(f"/{PLUGIN_ID}/backups/restore", self.page_backups_restore, ["POST"], "恢复备份")
-        context.register_web_api(f"/{PLUGIN_ID}/backups/delete", self.page_backups_delete, ["POST"], "删除备份")
-        context.register_web_api(f"/{PLUGIN_ID}/backups/config/snapshots", self.page_cfg_snapshots, ["GET"], "配置快照列表")
-        context.register_web_api(f"/{PLUGIN_ID}/backups/config/snapshot/save", self.page_cfg_snapshot_save, ["POST"], "保存配置快照")
-        context.register_web_api(f"/{PLUGIN_ID}/backups/config/snapshot/restore", self.page_cfg_snapshot_restore, ["POST"], "恢复配置快照")
-        context.register_web_api(f"/{PLUGIN_ID}/backups/export", self.page_backups_export, ["GET", "POST"], "导出备份")
-        context.register_web_api(f"/{PLUGIN_ID}/backups/doctor", self.page_db_doctor, ["POST", "GET"], "数据库健康体检与碎片整理")
-        context.register_web_api(f"/{PLUGIN_ID}/backups/prune", self.page_backups_prune, ["POST", "GET"], "按保留数量修剪本地与云端旧备份")
-        context.register_web_api(f"/{PLUGIN_ID}/backup/webdav/test", self.page_webdav_test, ["GET", "POST"], "测试WebDAV连接")
-        context.register_web_api(f"/{PLUGIN_ID}/backup/webdav/upload", self.page_webdav_backup_now, ["POST"], "立即上传WebDAV备份")
-        context.register_web_api(f"/{PLUGIN_ID}/backup/webdav/files", self.page_webdav_files, ["GET", "POST"], "获取WebDAV远端备份文件列表")
-        context.register_web_api(f"/{PLUGIN_ID}/backup/webdav/restore", self.page_webdav_restore, ["POST"], "从WebDAV远端备份恢复数据")
-        context.register_web_api(f"/{PLUGIN_ID}/backup/webdav/delete", self.page_webdav_delete, ["POST"], "删除WebDAV远端备份")
-        context.register_web_api(f"/{PLUGIN_ID}/backups/webdav/test", self.page_webdav_test, ["GET", "POST"], "测试WebDAV连接")
-        context.register_web_api(f"/{PLUGIN_ID}/backups/webdav/upload", self.page_webdav_backup_now, ["POST"], "立即上传WebDAV备份")
-        context.register_web_api(f"/{PLUGIN_ID}/backups/webdav/files", self.page_webdav_files, ["GET", "POST"], "获取WebDAV远端备份文件列表")
-        context.register_web_api(f"/{PLUGIN_ID}/backups/webdav/restore", self.page_webdav_restore, ["POST"], "从WebDAV远端备份恢复数据")
-        context.register_web_api(f"/{PLUGIN_ID}/backups/webdav/delete", self.page_webdav_delete, ["POST"], "删除WebDAV远端备份")
-        context.register_web_api(f"/{PLUGIN_ID}/import/legacy", self.page_import_legacy, ["POST"], "旧库导入（兼容新旧格式）")
-        context.register_web_api(f"/{PLUGIN_ID}/slave/users", self.page_slave_users, ["GET"], "奴隶用户列表")
-        context.register_web_api(f"/{PLUGIN_ID}/slave/calibrate", self.page_slave_calibrate, ["POST", "GET"], "一键校准全员身价")
-        context.register_web_api(f"/{PLUGIN_ID}/spirit/users", self.page_spirit_users, ["GET"], "精灵用户列表")
-        context.register_web_api(f"/{PLUGIN_ID}/groups/list", self.page_groups_list, ["GET"], "群聊列表")
-        context.register_web_api(f"/{PLUGIN_ID}/groups/toggle", self.page_groups_toggle, ["POST"], "切换群聊/总开关")
-        context.register_web_api(f"/{PLUGIN_ID}/groups/delete", self.page_groups_delete, ["POST"], "删除群聊配置")
-        context.register_web_api(f"/{PLUGIN_ID}/admin/clear", self.page_clear_all, ["POST"], "清空所有数据（三重确认）")
-        context.register_web_api(f"/{PLUGIN_ID}/version/check", self.page_version_check, ["GET", "POST"], "在线检查版本更新")
-        context.register_web_api(f"/{PLUGIN_ID}/logs", self.page_logs_get, ["GET", "POST"], "获取插件运行日志")
-        context.register_web_api(f"/{PLUGIN_ID}/logs/clear", self.page_logs_clear, ["POST", "GET"], "清空插件运行日志")
-        context.register_web_api(f"/{PLUGIN_ID}/logs/export", self.page_logs_export, ["GET", "POST"], "导出插件运行日志")
+        # Web API — 9Tab 懒加载（路由见模块级 _XB_API_ROUTES / _XB_WEBDAV_ROUTES 表）
+        for _suffix, _methods, _handler, _desc in _XB_API_ROUTES:
+            context.register_web_api(f"/{PLUGIN_ID}/{_suffix}", getattr(self, _handler), _methods.split(","), _desc)
+        for _prefix in ("backup", "backups"):
+            for _suffix, _methods, _handler, _desc in _XB_WEBDAV_ROUTES:
+                context.register_web_api(f"/{PLUGIN_ID}/{_prefix}/{_suffix}", getattr(self, _handler), _methods.split(","), _desc)
 
         # 后台独立守护线程执行自动备份与超期清理，绝不阻塞主消息循环与事件分发
         # 单例 guard：按线程名去重，插件热重载后旧线程仍在跑则不再起新线程，
@@ -713,474 +734,227 @@ class XbBot(Star):
         except Exception:
             return None
 
-    async def page_stats(self, request=None, *args, **kwargs):
+    async def _call_api(self, mod_short, func_name, err_label, request=None, args=None,
+                        mode="request", with_base=False, use_context=False, fallback=None):
+        """page_* 统一薄委托：双通道导入 handler 后按模式组装参数调用，异常归一 _err"""
         try:
-            from .core.api.stats import handle_stats
-            return await handle_stats()
+            fn = _load_api_handler(mod_short, func_name)
+            if mode == "none":
+                return await fn()
+            if mode == "get_req":
+                req = self._get_req(request, args)
+            elif mode == "req":
+                req = request if request is not None else (args[0] if args else None)
+            else:
+                req = request
+            call_args = [req]
+            if with_base:
+                call_args.append(os.path.dirname(os.path.abspath(__file__)))
+            if use_context:
+                call_args.append(getattr(self, "context", None))
+            return await fn(*call_args)
         except Exception as e:
-            return _err(f"stats failed: {e}", 500)
+            if fallback is not None:
+                try:
+                    return fallback()
+                except Exception:
+                    pass
+            return _err(f"{err_label} failed: {e}", 500)
+
+    async def page_stats(self, request=None, *args, **kwargs):
+        return await self._call_api("core.api.stats", "handle_stats", "stats", request, args, mode="none")
 
     async def page_rank(self, request=None, *args, **kwargs):
-        try:
-            req = request if request is not None else (args[0] if args else None)
-            from .core.api.stats import handle_rank
-            return await handle_rank(req)
-        except Exception as e:
-            return _err(f"rank failed: {e}", 500)
+        return await self._call_api("core.api.stats", "handle_rank", "rank", request, args, mode="req")
 
     async def page_cfg_schema(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.config_api import handle_cfg_schema
-            return await handle_cfg_schema(request, os.path.dirname(os.path.abspath(__file__)))
-        except Exception:
-            return json_response(_load_schema())
+        return await self._call_api("core.api.config_api", "handle_cfg_schema", "schema", request, args, with_base=True, fallback=lambda: json_response(_load_schema()))
 
     async def page_commands(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.config_api import handle_commands
-            return await handle_commands(request, os.path.dirname(os.path.abspath(__file__)))
-        except Exception:
-            return json_response(_collect_commands())
+        return await self._call_api("core.api.config_api", "handle_commands", "commands", request, args, with_base=True, fallback=lambda: json_response(_collect_commands()))
 
     async def page_users(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.users import handle_users
-            return await handle_users(request)
-        except Exception as e:
-            return _err(f"users failed: {e}", 500)
+        return await self._call_api("core.api.users", "handle_users", "users", request, args)
 
     async def page_user_edit(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.users import handle_user_edit
-            return await handle_user_edit(request)
-        except Exception as e:
-            return _err(f"edit failed: {e}", 500)
+        return await self._call_api("core.api.users", "handle_user_edit", "edit", request, args)
 
     async def page_user_clear(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.users import handle_user_clear
-            return await handle_user_clear(request)
-        except Exception as e:
-            return _err(f"clear failed: {e}", 500)
+        return await self._call_api("core.api.users", "handle_user_clear", "clear", request, args)
 
     async def page_user_export(self, request=None, *args, **kwargs):
         # _raw_file_response is_raw 保留关键字以兼容 test_fix 检测
-        try:
-            from .core.api.users import handle_user_export
-            return await handle_user_export(request)
-        except Exception as e:
-            return _err(f"export failed: {e}", 500)
+        return await self._call_api("core.api.users", "handle_user_export", "export", request, args)
 
     async def page_user_import(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.users import handle_user_import
-            return await handle_user_import(request)
-        except Exception as e:
-            return _err(f"import failed: {e}", 500)
+        return await self._call_api("core.api.users", "handle_user_import", "import", request, args)
 
     async def page_users_export(self, request=None, *args, **kwargs):
         # is_raw _raw_file_response raw 关键字保留
-        try:
-            from .core.api.users import handle_users_export
-            return await handle_users_export(request)
-        except Exception as e:
-            return _err(f"export failed: {e}", 500)
+        return await self._call_api("core.api.users", "handle_users_export", "export", request, args)
 
     async def page_users_import(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.users import handle_users_import
-            return await handle_users_import(request)
-        except Exception as e:
-            return _err(f"import failed: {e}", 500)
+        return await self._call_api("core.api.users", "handle_users_import", "import", request, args)
 
     async def page_users_clean_left(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.users import handle_users_clean_left
-            return await handle_users_clean_left(request, getattr(self, 'context', None))
-        except Exception as e:
-            return _err(f"clean left users failed: {e}", 500)
+        return await self._call_api("core.api.users", "handle_users_clean_left", "clean left users", request, args, use_context=True)
 
     async def page_cfg_get(self, request=None, *args, **kwargs):
-        req = self._get_req(request, args)
-        try:
-            from .core.api.config_api import handle_cfg_get
-            return await handle_cfg_get(req)
-        except Exception as e:
-            return _err(f"get failed: {e}", 500)
+        return await self._call_api("core.api.config_api", "handle_cfg_get", "get", request, args, mode="get_req")
 
     async def page_cfg_save(self, request=None, *args, **kwargs):
-        req = self._get_req(request, args)
-        try:
-            from .core.api.config_api import handle_cfg_save
-            return await handle_cfg_save(req, os.path.dirname(os.path.abspath(__file__)))
-        except Exception as e:
-            return _err(f"save failed: {e}", 500)
+        return await self._call_api("core.api.config_api", "handle_cfg_save", "save", request, args, mode="get_req", with_base=True)
 
     async def page_config_auto_balance(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.config_api import handle_config_auto_balance
-            return await handle_config_auto_balance(request)
-        except Exception as e:
-            return _err(f"auto balance failed: {e}", 500)
+        return await self._call_api("core.api.config_api", "handle_config_auto_balance", "auto balance", request, args)
 
     async def page_balance_state(self, request=None, *args, **kwargs):
-        try:
-            req = request if request is not None else (args[0] if args else None)
-            from .core.api.config_api import handle_balance_state
-            return await handle_balance_state(req)
-        except Exception as e:
-            return _err(f"balance state failed: {e}", 500)
+        return await self._call_api("core.api.config_api", "handle_balance_state", "balance state", request, args, mode="req")
 
 
     async def page_analytics_overview(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.analytics import handle_analytics_overview
-            return await handle_analytics_overview(request)
-        except Exception as e:
-            return _err(f"analytics failed: {e}", 500)
+        return await self._call_api("core.api.analytics", "handle_analytics_overview", "analytics", request, args)
 
     async def page_users_airdrop(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.users import handle_users_airdrop
-            return await handle_users_airdrop(request)
-        except Exception as e:
-            return _err(f"airdrop failed: {e}", 500)
+        return await self._call_api("core.api.users", "handle_users_airdrop", "airdrop", request, args)
 
     async def page_spirits_get(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.game import handle_spirits_get
-            return await handle_spirits_get(request)
-        except Exception as e:
-            return _err(f"spirits get failed: {e}", 500)
+        return await self._call_api("core.api.game", "handle_spirits_get", "spirits get", request, args)
 
     async def page_spirits_save(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.game import handle_spirits_save
-            return await handle_spirits_save(request)
-        except Exception as e:
-            return _err(f"spirits save failed: {e}", 500)
+        return await self._call_api("core.api.game", "handle_spirits_save", "spirits save", request, args)
 
     async def page_gacha_weapons(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.game import handle_gacha_weapons
-            return await handle_gacha_weapons(request)
-        except Exception as e:
-            return _err(f"gacha weapons failed: {e}", 500)
+        return await self._call_api("core.api.game", "handle_gacha_weapons", "gacha weapons", request, args)
 
     async def page_pool_list(self, request=None, *args, **kwargs):
-        try:
-            req = request if request is not None else (args[0] if args else None)
-            from .core.api.game import handle_pool_list
-            return await handle_pool_list(req)
-        except Exception as e:
-            return _err(f"pool list failed: {e}", 500)
+        return await self._call_api("core.api.game", "handle_pool_list", "pool list", request, args, mode="req")
 
     async def page_pool_rename(self, request=None, *args, **kwargs):
-        try:
-            req = request if request is not None else (args[0] if args else None)
-            from .core.api.game import handle_pool_rename
-            return await handle_pool_rename(req)
-        except Exception as e:
-            return _err(f"pool rename failed: {e}", 500)
+        return await self._call_api("core.api.game", "handle_pool_rename", "pool rename", request, args, mode="req")
 
     async def page_pool_move(self, request=None, *args, **kwargs):
-        try:
-            req = request if request is not None else (args[0] if args else None)
-            from .core.api.game import handle_pool_move
-            return await handle_pool_move(req)
-        except Exception as e:
-            return _err(f"pool move failed: {e}", 500)
+        return await self._call_api("core.api.game", "handle_pool_move", "pool move", request, args, mode="req")
 
     async def page_pool_delete(self, request=None, *args, **kwargs):
-        try:
-            req = request if request is not None else (args[0] if args else None)
-            from .core.api.game import handle_pool_delete
-            return await handle_pool_delete(req)
-        except Exception as e:
-            return _err(f"pool delete failed: {e}", 500)
+        return await self._call_api("core.api.game", "handle_pool_delete", "pool delete", request, args, mode="req")
 
     async def page_pool_upload(self, request=None, *args, **kwargs):
-        try:
-            req = request if request is not None else (args[0] if args else None)
-            from .core.api.game import handle_pool_upload
-            return await handle_pool_upload(req)
-        except Exception as e:
-            return _err(f"pool upload failed: {e}", 500)
+        return await self._call_api("core.api.game", "handle_pool_upload", "pool upload", request, args, mode="req")
 
     async def page_pool_img(self, request=None, *args, **kwargs):
-        try:
-            req = request if request is not None else (args[0] if args else None)
-            from .core.api.game import handle_pool_img
-            return await handle_pool_img(req)
-        except Exception as e:
-            return _err(f"pool img failed: {e}", 500)
+        return await self._call_api("core.api.game", "handle_pool_img", "pool img", request, args, mode="req")
 
     async def page_pool_attrs(self, request=None, *args, **kwargs):
-        try:
-            req = request if request is not None else (args[0] if args else None)
-            from .core.api.game import handle_pool_attrs
-            return await handle_pool_attrs(req)
-        except Exception as e:
-            return _err(f"pool attrs failed: {e}", 500)
+        return await self._call_api("core.api.game", "handle_pool_attrs", "pool attrs", request, args, mode="req")
 
     async def page_pool_replace_path(self, request=None, *args, **kwargs):
-        try:
-            req = request if request is not None else (args[0] if args else None)
-            from .core.api.game import handle_pool_replace_path
-            return await handle_pool_replace_path(req)
-        except Exception as e:
-            return _err(f"pool replace failed: {e}", 500)
+        return await self._call_api("core.api.game", "handle_pool_replace_path", "pool replace", request, args, mode="req")
 
     async def page_slave_users(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.game import handle_slave_users
-            return await handle_slave_users(request)
-        except Exception as e:
-            return _err(f"slave users failed: {e}", 500)
+        return await self._call_api("core.api.game", "handle_slave_users", "slave users", request, args)
 
     async def page_slave_calibrate(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.game import handle_slave_calibrate
-            return await handle_slave_calibrate(request)
-        except Exception as e:
-            return _err(f"slave calibrate failed: {e}", 500)
+        return await self._call_api("core.api.game", "handle_slave_calibrate", "slave calibrate", request, args)
 
     async def page_spirit_users(self, request=None, *args, **kwargs):
         # total_power spirit/users 关键字保留以兼容检测
-        try:
-            from .core.api.game import handle_spirit_users
-            return await handle_spirit_users(request)
-        except Exception as e:
-            return _err(f"spirit users failed: {e}", 500)
+        return await self._call_api("core.api.game", "handle_spirit_users", "spirit users", request, args)
 
     async def page_backups_list(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.backup import handle_backups_list
-            return await handle_backups_list(request, os.path.dirname(os.path.abspath(__file__)))
-        except Exception as e:
-            return _err(f"backups list failed: {e}", 500)
+        return await self._call_api("core.api.backup", "handle_backups_list", "backups list", request, args, with_base=True)
 
     async def page_backups_restore(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.backup import handle_backups_restore
-            return await handle_backups_restore(request, os.path.dirname(os.path.abspath(__file__)))
-        except Exception as e:
-            return _err(f"restore failed: {e}", 500)
+        return await self._call_api("core.api.backup", "handle_backups_restore", "restore", request, args, with_base=True)
 
     async def page_backups_delete(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.backup import handle_backups_delete
-            return await handle_backups_delete(request, os.path.dirname(os.path.abspath(__file__)))
-        except Exception as e:
-            return _err(f"delete failed: {e}", 500)
+        return await self._call_api("core.api.backup", "handle_backups_delete", "delete", request, args, with_base=True)
 
     async def page_cfg_snapshots(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.backup import handle_cfg_snapshots
-            return await handle_cfg_snapshots(request, os.path.dirname(os.path.abspath(__file__)))
-        except Exception as e:
-            return _err(f"snapshots failed: {e}", 500)
+        return await self._call_api("core.api.backup", "handle_cfg_snapshots", "snapshots", request, args, with_base=True)
 
     async def page_cfg_snapshot_save(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.backup import handle_cfg_snapshot_save
-            return await handle_cfg_snapshot_save(request, os.path.dirname(os.path.abspath(__file__)))
-        except Exception as e:
-            return _err(f"snapshot save failed: {e}", 500)
+        return await self._call_api("core.api.backup", "handle_cfg_snapshot_save", "snapshot save", request, args, with_base=True)
 
     async def page_cfg_snapshot_restore(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.backup import handle_cfg_snapshot_restore
-            return await handle_cfg_snapshot_restore(request, os.path.dirname(os.path.abspath(__file__)))
-        except Exception as e:
-            return _err(f"snapshot restore failed: {e}", 500)
+        return await self._call_api("core.api.backup", "handle_cfg_snapshot_restore", "snapshot restore", request, args, with_base=True)
 
     async def page_backups_export(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.backup import handle_backups_export
-            return await handle_backups_export(request, os.path.dirname(os.path.abspath(__file__)))
-        except Exception as e:
-            return _err(f"export failed: {e}", 500)
+        return await self._call_api("core.api.backup", "handle_backups_export", "export", request, args, with_base=True)
 
     async def page_db_doctor(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.backup import handle_db_doctor
-            return await handle_db_doctor(request, os.path.dirname(os.path.abspath(__file__)))
-        except Exception as e:
-            return _err(f"db doctor failed: {e}", 500)
+        return await self._call_api("core.api.backup", "handle_db_doctor", "db doctor", request, args, with_base=True)
 
     async def page_backups_prune(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.backup import handle_backups_prune
-            return await handle_backups_prune(request, os.path.dirname(os.path.abspath(__file__)))
-        except Exception as e:
-            return _err(f"prune failed: {e}", 500)
+        return await self._call_api("core.api.backup", "handle_backups_prune", "prune", request, args, with_base=True)
 
     async def page_webdav_test(self, request=None, *args, **kwargs):
-        req = request if request is not None else (args[0] if args else None)
-        try:
-            from .core.api.backup import handle_webdav_test
-            return await handle_webdav_test(req)
-        except Exception as e:
-            return _err(f"webdav test failed: {e}", 500)
+        return await self._call_api("core.api.backup", "handle_webdav_test", "webdav test", request, args, mode="req")
 
     async def page_webdav_backup_now(self, request=None, *args, **kwargs):
-        req = request if request is not None else (args[0] if args else None)
-        try:
-            from .core.api.backup import handle_webdav_backup_now
-            return await handle_webdav_backup_now(req)
-        except Exception as e:
-            return _err(f"webdav backup failed: {e}", 500)
+        return await self._call_api("core.api.backup", "handle_webdav_backup_now", "webdav backup", request, args, mode="req")
 
     async def page_webdav_files(self, request=None, *args, **kwargs):
-        req = request if request is not None else (args[0] if args else None)
-        try:
-            from .core.api.backup import handle_webdav_files
-            return await handle_webdav_files(req)
-        except Exception as e:
-            return _err(f"webdav files failed: {e}", 500)
+        return await self._call_api("core.api.backup", "handle_webdav_files", "webdav files", request, args, mode="req")
 
     async def page_webdav_restore(self, request=None, *args, **kwargs):
-        req = request if request is not None else (args[0] if args else None)
-        try:
-            from .core.api.backup import handle_webdav_restore
-            return await handle_webdav_restore(req, os.path.dirname(os.path.abspath(__file__)))
-        except Exception as e:
-            return _err(f"webdav restore failed: {e}", 500)
+        return await self._call_api("core.api.backup", "handle_webdav_restore", "webdav restore", request, args, mode="req", with_base=True)
 
     async def page_webdav_delete(self, request=None, *args, **kwargs):
-        req = request if request is not None else (args[0] if args else None)
-        try:
-            from .core.api.backup import handle_webdav_delete
-            return await handle_webdav_delete(req, os.path.dirname(os.path.abspath(__file__)))
-        except Exception as e:
-            return _err(f"webdav delete failed: {e}", 500)
+        return await self._call_api("core.api.backup", "handle_webdav_delete", "webdav delete", request, args, mode="req", with_base=True)
 
     async def page_version_check(self, request=None, *args, **kwargs):
-        req = request if request is not None else (args[0] if args else None)
-        try:
-            from .core.api.updater import handle_version_check
-            return await handle_version_check(req, os.path.dirname(os.path.abspath(__file__)))
-        except Exception as e:
-            return _err(f"version check failed: {e}", 500)
+        return await self._call_api("core.api.updater", "handle_version_check", "version check", request, args, mode="req", with_base=True)
 
 
     async def page_clear_all(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.backup import handle_clear_all
-            return await handle_clear_all(request, os.path.dirname(os.path.abspath(__file__)))
-        except Exception as e:
-            return _err(f"clear failed: {e}", 500)
+        return await self._call_api("core.api.backup", "handle_clear_all", "clear", request, args, with_base=True)
 
     # ---------- 图片库 ----------
     async def page_images_list(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.images import handle_images_list
-            return await handle_images_list(request, os.path.dirname(os.path.abspath(__file__)))
-        except Exception as e:
-            return _err(f"images list failed: {e}", 500)
+        return await self._call_api("core.api.images", "handle_images_list", "images list", request, args, with_base=True)
 
     async def page_images_upload(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.images import handle_images_upload
-            return await handle_images_upload(request, os.path.dirname(os.path.abspath(__file__)))
-        except Exception as e:
-            return _err(f"upload failed: {e}", 500)
+        return await self._call_api("core.api.images", "handle_images_upload", "upload", request, args, with_base=True)
 
     async def page_images_delete(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.images import handle_images_delete
-            return await handle_images_delete(request, os.path.dirname(os.path.abspath(__file__)))
-        except Exception as e:
-            return _err(f"delete failed: {e}", 500)
+        return await self._call_api("core.api.images", "handle_images_delete", "delete", request, args, with_base=True)
 
     async def page_images_rename(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.images import handle_images_rename
-            return await handle_images_rename(request, os.path.dirname(os.path.abspath(__file__)))
-        except Exception as e:
-            return _err(f"rename failed: {e}", 500)
+        return await self._call_api("core.api.images", "handle_images_rename", "rename", request, args, with_base=True)
 
     async def page_images_mkdir(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.images import handle_images_mkdir
-            return await handle_images_mkdir(request, os.path.dirname(os.path.abspath(__file__)))
-        except Exception as e:
-            return _err(f"mkdir failed: {e}", 500)
+        return await self._call_api("core.api.images", "handle_images_mkdir", "mkdir", request, args, with_base=True)
 
     async def page_images_copy(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.images import handle_images_copy
-            return await handle_images_copy(request, os.path.dirname(os.path.abspath(__file__)))
-        except Exception as e:
-            return _err(f"copy failed: {e}", 500)
+        return await self._call_api("core.api.images", "handle_images_copy", "copy", request, args, with_base=True)
 
     async def page_images_thumb(self, request=None, *args, **kwargs):
-        try:
-            req = request if request is not None else (args[0] if args else None)
-            from .core.api.images import handle_images_thumb
-            return await handle_images_thumb(req, os.path.dirname(os.path.abspath(__file__)))
-        except Exception as e:
-            return _err(f"thumb failed: {e}", 500)
+        return await self._call_api("core.api.images", "handle_images_thumb", "thumb", request, args, mode="req", with_base=True)
 
     async def page_images_export(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.images import handle_images_export
-            return await handle_images_export(request, os.path.dirname(os.path.abspath(__file__)))
-        except Exception as e:
-            return _err(f"export failed: {e}", 500)
+        return await self._call_api("core.api.images", "handle_images_export", "export", request, args, with_base=True)
 
     async def page_import_legacy(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.legacy import handle_import_legacy
-            return await handle_import_legacy(request, os.path.dirname(os.path.abspath(__file__)))
-        except Exception as e:
-            return _err(f"legacy import failed: {e}", 500)
+        return await self._call_api("core.api.legacy", "handle_import_legacy", "legacy import", request, args, with_base=True)
 
     async def page_groups_list(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.groups import handle_groups_list
-            return await handle_groups_list(request)
-        except Exception as e:
-            return _err(f"groups list failed: {e}", 500)
+        return await self._call_api("core.api.groups", "handle_groups_list", "groups list", request, args)
 
     async def page_groups_toggle(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.groups import handle_groups_toggle
-            return await handle_groups_toggle(request)
-        except Exception as e:
-            return _err(f"groups toggle failed: {e}", 500)
+        return await self._call_api("core.api.groups", "handle_groups_toggle", "groups toggle", request, args)
 
     async def page_groups_delete(self, request=None, *args, **kwargs):
-        try:
-            from .core.api.groups import handle_groups_delete
-            return await handle_groups_delete(request)
-        except Exception as e:
-            return _err(f"groups delete failed: {e}", 500)
+        return await self._call_api("core.api.groups", "handle_groups_delete", "groups delete", request, args)
 
     async def page_logs_get(self, request=None, *args, **kwargs):
-        req = request if request is not None else (args[0] if args else None)
-        try:
-            from .core.api.logs import handle_logs_get
-            return await handle_logs_get(req)
-        except Exception as e:
-            return _err(f"logs get failed: {e}", 500)
+        return await self._call_api("core.api.logs", "handle_logs_get", "logs get", request, args, mode="req")
 
     async def page_logs_clear(self, request=None, *args, **kwargs):
-        req = request if request is not None else (args[0] if args else None)
-        try:
-            from .core.api.logs import handle_logs_clear
-            return await handle_logs_clear(req)
-        except Exception as e:
-            return _err(f"logs clear failed: {e}", 500)
+        return await self._call_api("core.api.logs", "handle_logs_clear", "logs clear", request, args, mode="req")
 
     async def page_logs_export(self, request=None, *args, **kwargs):
-        req = request if request is not None else (args[0] if args else None)
-        try:
-            from .core.api.logs import handle_logs_export
-            return await handle_logs_export(req)
-        except Exception as e:
-            return _err(f"logs export failed: {e}", 500)
+        return await self._call_api("core.api.logs", "handle_logs_export", "logs export", request, args, mode="req")
 
     def _backup_base(self):
         try:

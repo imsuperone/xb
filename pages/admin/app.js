@@ -1599,7 +1599,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.7.24"
+        version: res.version || "0.7.25"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
