@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """群组开关 API — 总开关 + 按群开关"""
+import asyncio
 import json
 from astrbot.api.web import json_response
 from .helpers import _err, get_req_query, get_req_json
@@ -10,39 +11,52 @@ except ImportError:
     import store as ST
 
 async def handle_groups_list(request=None):
-    gids = set()
-    try:
-        if ST._DB is not None:
-            for (gid,) in ST._DB.execute("SELECT DISTINCT gid FROM wallet").fetchall():
-                if str(gid).isdigit(): gids.add(str(gid))
-            for (gid,) in ST._DB.execute("SELECT DISTINCT gid FROM accounts").fetchall():
-                if str(gid).isdigit(): gids.add(str(gid))
-            for (gid,) in ST._DB.execute("SELECT DISTINCT gid FROM groups").fetchall():
-                if str(gid).isdigit(): gids.add(str(gid))
-    except Exception:
-        pass
-    try:
-        sec = ST._CONFIG.get("群组开关配置") if hasattr(ST, "_CONFIG") and isinstance(ST._CONFIG, dict) else {}
-        if isinstance(sec, dict):
-            for k in sec.keys():
-                if str(k).isdigit():
-                    gids.add(str(k))
-    except Exception:
-        pass
-
-    out = []
-    for gid in sorted(gids, key=lambda x: int(x) if str(x).isdigit() else 0):
-        enabled = ST.cfg("群组开关配置", str(gid), "真") != "假"
-        cnt = 0
+    def _work():
+        _lock = getattr(ST, "_LOCK", None)
+        if _lock is not None:
+            _lock.acquire()
         try:
-            if ST._DB is not None and str(gid).isdigit():
-                cnt = ST._DB.execute("SELECT COUNT(DISTINCT qq) FROM wallet WHERE gid=?", (int(gid),)).fetchone()[0]
-        except Exception:
-            cnt = 0
-        out.append({"gid": str(gid), "enabled": enabled, "member_count": int(cnt or 0), "is_test": str(gid) == "999999"})
-    
-    total_enabled = ST.cfg("总开关配置", "总开关", "真") == "真"
-    return json_response({"total_enabled": total_enabled, "groups": out})
+            gids = set()
+            try:
+                if ST._DB is not None:
+                    for (gid,) in ST._DB.execute("SELECT DISTINCT gid FROM wallet").fetchall():
+                        if str(gid).isdigit(): gids.add(str(gid))
+                    for (gid,) in ST._DB.execute("SELECT DISTINCT gid FROM accounts").fetchall():
+                        if str(gid).isdigit(): gids.add(str(gid))
+                    for (gid,) in ST._DB.execute("SELECT DISTINCT gid FROM groups").fetchall():
+                        if str(gid).isdigit(): gids.add(str(gid))
+            except Exception:
+                pass
+            try:
+                sec = ST._CONFIG.get("群组开关配置") if hasattr(ST, "_CONFIG") and isinstance(ST._CONFIG, dict) else {}
+                if isinstance(sec, dict):
+                    for k in sec.keys():
+                        if str(k).isdigit():
+                            gids.add(str(k))
+            except Exception:
+                pass
+
+            out = []
+            for gid in sorted(gids, key=lambda x: int(x) if str(x).isdigit() else 0):
+                enabled = ST.cfg("群组开关配置", str(gid), "真") != "假"
+                cnt = 0
+                try:
+                    if ST._DB is not None and str(gid).isdigit():
+                        row = ST._DB.execute("SELECT COUNT(DISTINCT qq) FROM wallet WHERE gid=?", (int(gid),)).fetchone()
+                        cnt = row[0] if row and row[0] is not None else 0
+                except Exception:
+                    cnt = 0
+                out.append({"gid": str(gid), "enabled": enabled, "member_count": int(cnt or 0), "is_test": str(gid) == "999999"})
+            total_enabled = ST.cfg("总开关配置", "总开关", "真") == "真"
+            return {"total_enabled": total_enabled, "groups": out}
+        finally:
+            if _lock is not None:
+                try:
+                    _lock.release()
+                except Exception:
+                    pass
+    data = await asyncio.to_thread(_work)
+    return json_response(data)
 
 async def handle_groups_toggle(request):
     data = await get_req_json(request, default={})

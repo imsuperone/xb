@@ -3846,5 +3846,61 @@
         "description": "维护时提示信息（仅维护开关为真时生效）"
       }
     }
+  },
+  "系统开关配置": {
+    "type": "object",
+    "description": "按系统总开关：系统名+系统->真/假，假=该系统全群关闭（超管直放）",
+    "items": {
+      "奴隶系统": {
+        "type": "string",
+        "default": "真",
+        "description": "奴隶系统总开关"
+      },
+      "签到系统": {
+        "type": "string",
+        "default": "真",
+        "description": "签到系统总开关"
+      },
+      "银行系统": {
+        "type": "string",
+        "default": "真",
+        "description": "银行系统总开关"
+      },
+      "娱乐系统": {
+        "type": "string",
+        "default": "真",
+        "description": "娱乐系统总开关"
+      },
+      "精灵系统": {
+        "type": "string",
+        "default": "真",
+        "description": "精灵系统总开关"
+      },
+      "坐骑系统": {
+        "type": "string",
+        "default": "真",
+        "description": "坐骑系统总开关"
+      },
+      "帮派系统": {
+        "type": "string",
+        "default": "真",
+        "description": "帮派系统总开关"
+      },
+      "超管系统": {
+        "type": "string",
+        "default": "真",
+        "description": "超管系统总开关"
+      },
+      "聊天系统": {
+        "type": "string",
+        "default": "真",
+        "description": "聊天系统总开关"
+      },
+      "冒险系统": {
+        "type": "string",
+        "default": "真",
+        "description": "冒险系统总开关"
+      }
+    }
   }
 }

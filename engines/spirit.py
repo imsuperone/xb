@@ -313,21 +313,6 @@ def _img_path(path):
         return ""
 
 
-def _img_cq(path):
-    """CQ 图片段（遗留兼容；引擎内部已统一走元组 _img_path）"""
-    try:
-        import os as _os2
-        p = _img_path(path)
-        if not p:
-            return ""
-        pp = p.replace("\\", "/")
-        if not pp.startswith("/"):
-            pp = "/" + pp
-        return f"[CQ:image,file=file://{pp}]"
-    except Exception:
-        return ""
-
-
 def cmd_shop():
     lines = ["欢迎来到精灵商城！", "━━━━━━━━━━━━━━"]
     for name, d in _SHOP().items():

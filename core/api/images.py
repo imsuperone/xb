@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """图片/文件库 API — 浏览/上传/删除/重命名/新建/复制/导出"""
+import asyncio
 import base64
 import os
 import time
@@ -39,36 +40,40 @@ async def handle_images_list(request, plugin_base=""):
     root = _safe_path(rel, base)
     if not root:
         return _err("bad dir", 400)
-    if not os.path.exists(root):
-        return json_response({"dir": str(rel or ""), "dirs": [], "files": []})
-    if os.path.isfile(root):
-        # 单文件
-        try:
-            sz = f"{os.path.getsize(root)//1024}KB"
-            mtime = time.strftime("%Y-%m-%d %H:%M", time.localtime(os.path.getmtime(root)))
-        except Exception:
-            sz = ""; mtime = ""
-        return json_response({"dir": str(rel or ""), "dirs": [], "files": [{"name": os.path.basename(root), "path": rel, "size": sz, "mtime": mtime}]})
-    dirs, files = [], []
-    for name in sorted(os.listdir(root)):
-        f = os.path.join(root, name)
-        r = os.path.relpath(f, base).replace(os.sep, "/")
-        if os.path.isdir(f):
+
+    def _work():
+        if not os.path.exists(root):
+            return {"dir": str(rel or ""), "dirs": [], "files": []}
+        if os.path.isfile(root):
+            # 单文件
             try:
-                mtime = time.strftime("%Y-%m-%d %H:%M", time.localtime(os.path.getmtime(f)))
-            except Exception:
-                mtime = ""
-            dirs.append({"name": name, "path": r, "mtime": mtime})
-        elif os.path.isfile(f):
-            try:
-                sz = f"{os.path.getsize(f)//1024}KB"
-                mtime = time.strftime("%Y-%m-%d %H:%M", time.localtime(os.path.getmtime(f)))
+                sz = f"{os.path.getsize(root)//1024}KB"
+                mtime = time.strftime("%Y-%m-%d %H:%M", time.localtime(os.path.getmtime(root)))
             except Exception:
                 sz = ""; mtime = ""
-            files.append({"name": name, "path": r, "size": sz, "mtime": mtime})
-    dirs.sort(key=lambda x: x["name"])
-    files.sort(key=lambda x: x["name"])
-    return json_response({"dir": str(rel or ""), "dirs": dirs, "files": files})
+            return {"dir": str(rel or ""), "dirs": [], "files": [{"name": os.path.basename(root), "path": rel, "size": sz, "mtime": mtime}]}
+        dirs, files = [], []
+        for name in sorted(os.listdir(root)):
+            f = os.path.join(root, name)
+            r = os.path.relpath(f, base).replace(os.sep, "/")
+            if os.path.isdir(f):
+                try:
+                    mtime = time.strftime("%Y-%m-%d %H:%M", time.localtime(os.path.getmtime(f)))
+                except Exception:
+                    mtime = ""
+                dirs.append({"name": name, "path": r, "mtime": mtime})
+            elif os.path.isfile(f):
+                try:
+                    sz = f"{os.path.getsize(f)//1024}KB"
+                    mtime = time.strftime("%Y-%m-%d %H:%M", time.localtime(os.path.getmtime(f)))
+                except Exception:
+                    sz = ""; mtime = ""
+                files.append({"name": name, "path": r, "size": sz, "mtime": mtime})
+        dirs.sort(key=lambda x: x["name"])
+        files.sort(key=lambda x: x["name"])
+        return {"dir": str(rel or ""), "dirs": dirs, "files": files}
+    data = await asyncio.to_thread(_work)
+    return json_response(data)
 
 
 async def handle_images_upload(request, plugin_base=""):
@@ -300,7 +305,8 @@ async def handle_images_export(request, plugin_base=""):
         # 兜底：如果指定路径不存在，尝试 fallback 到根目录
         fp = base
         rel = ""
-    try:
+
+    def _work():
         if os.path.isdir(fp):
             import zipfile, io
             buf = io.BytesIO()
@@ -309,6 +315,8 @@ async def handle_images_export(request, plugin_base=""):
                     dirs[:] = [d for d in dirs if d not in ("__pycache__", ".git") and not (os.path.relpath(os.path.join(root, d), fp).replace("\\", "/").startswith("data/backups"))]
                     for fn in files:
                         if fn.endswith((".db-wal", ".db-shm", ".db-journal", ".pyc", ".tmp", ".lock", ".log", ".db")):
+                            continue
+                        if fn in ("webdav_secret.json", "config.json"):
                             continue
                         full_p = os.path.join(root, fn)
                         rel_p = os.path.relpath(full_p, fp)
@@ -323,12 +331,18 @@ async def handle_images_export(request, plugin_base=""):
             b64 = base64.b64encode(data).decode()
             dirname = os.path.basename(fp) or "root"
             fn = f"{dirname}_{int(time.time())}.zip"
-            return json_response({"ok": True, "path": rel, "data": b64, "size": len(data), "filename": fn})
+            return {"ok": True, "path": rel, "data": b64, "size": len(data), "filename": fn}
         else:
             if os.path.getsize(fp) > 50 * 1024 * 1024:
-                return _err("file too large", 400)
-            data = open(fp, "rb").read()
+                raise ValueError("file too large")
+            with open(fp, "rb") as f:
+                data = f.read()
             b64 = base64.b64encode(data).decode()
-            return json_response({"ok": True, "path": rel, "data": b64, "size": len(data), "filename": os.path.basename(fp)})
+            return {"ok": True, "path": rel, "data": b64, "size": len(data), "filename": os.path.basename(fp)}
+    try:
+        res = await asyncio.to_thread(_work)
+        return json_response(res)
+    except ValueError as e:
+        return _err(str(e), 400)
     except Exception as e:
         return _err(f"export failed: {e}", 500)

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """小白机器人 - 群生态与宏观经济数据大屏分析引擎 (SQL 聚合 + 3s 轻量缓存)"""
+import asyncio
 import time
 from astrbot.api.web import json_response
 from .helpers import _err
@@ -20,9 +21,9 @@ async def handle_analytics_overview(request):
     if _CACHE_DATA is not None and (now - _CACHE_TIME) < _CACHE_TTL:
         return json_response(_CACHE_DATA)
 
-    try:
+    def _work():
         if ST._DB is None:
-            return json_response({"ok": True, "summary": {}, "tiers": [], "activity_24h": []})
+            return {"ok": True, "summary": {}, "tiers": [], "activity_24h": []}
 
         _lock = getattr(ST, "_LOCK", None)
         if _lock is not None:
@@ -137,6 +138,10 @@ async def handle_analytics_overview(request):
             ],
             "activity_24h": activity_curve
         }
+        return result
+
+    try:
+        result = await asyncio.to_thread(_work)
         _CACHE_DATA = result
         _CACHE_TIME = now
         return json_response(result)

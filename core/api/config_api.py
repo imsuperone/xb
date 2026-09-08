@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """配置 API — schema / commands / get / save / spirits / auto_balance (覆盖28大系统全套平衡预设)"""
+import asyncio
 import os
 import json
 import time
@@ -475,7 +476,7 @@ async def handle_config_auto_balance(request):
         except Exception:
             pass
         try:
-            ST.backup_user_data(force=True)
+            await asyncio.to_thread(ST.backup_user_data, True)
         except Exception:
             pass
 
@@ -508,43 +509,51 @@ async def handle_config_auto_balance(request):
         #    仅补齐零/空身价（正身价保留，避免新老玩家双轨套利；需重置请用清空指令）
         calibrated_slaves = 0
         target_init_price = int(target_preset.get("费用配置", {}).get("初始身价", 500))
-        try:
-            if ST._DB is not None:
-                _cur = ST._DB.cursor()
-                _cur.execute("SELECT DISTINCT gid FROM groups")
-                _gids = [str(r[0]) for r in _cur.fetchall()]
-                for _gid in _gids:
-                    try:
-                        _g = ST.group(_gid)
-                        _users = getattr(_g, "_users", {}) or {}
-                        for _qq, _u in list(_users.items()):
-                            try:
-                                if not isinstance(_u, dict):
-                                    continue
+
+        def _calibrate():
+            count = 0
+            try:
+                if ST._DB is not None:
+                    _cur = ST._DB.cursor()
+                    _cur.execute("SELECT DISTINCT gid FROM groups")
+                    _gids = [str(r[0]) for r in _cur.fetchall()]
+                    for _gid in _gids:
+                        try:
+                            _g = ST.group(_gid)
+                            _users = getattr(_g, "_users", {}) or {}
+                            for _qq, _u in list(_users.items()):
                                 try:
-                                    _cur_p = int(float(_u.get("price") or _u.get("worth") or 0))
-                                except Exception:
-                                    _cur_p = 0
-                                if _cur_p <= 0:
-                                    _u["price"] = target_init_price
-                                    _u["worth"] = target_init_price
+                                    if not isinstance(_u, dict):
+                                        continue
                                     try:
-                                        if hasattr(_g, "mark_dirty"):
-                                            _g.mark_dirty(_qq)
-                                        else:
-                                            _g._dirty = True
-                                            _g._dirty_qqs.add(str(_qq))
+                                        _cur_p = int(float(_u.get("price") or _u.get("worth") or 0))
                                     except Exception:
+                                        _cur_p = 0
+                                    if _cur_p <= 0:
+                                        _u["price"] = target_init_price
+                                        _u["worth"] = target_init_price
                                         try:
-                                            _g._dirty = True
+                                            if hasattr(_g, "mark_dirty"):
+                                                _g.mark_dirty(_qq)
+                                            else:
+                                                _g._dirty = True
+                                                _g._dirty_qqs.add(str(_qq))
                                         except Exception:
-                                            pass
-                                    calibrated_slaves += 1
-                            except Exception:
-                                pass
-                        ST.save_group(_gid)
-                    except Exception:
-                        pass
+                                            try:
+                                                _g._dirty = True
+                                            except Exception:
+                                                pass
+                                        count += 1
+                                except Exception:
+                                    pass
+                            ST.save_group(_gid)
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+            return count
+        try:
+            calibrated_slaves = await asyncio.to_thread(_calibrate)
         except Exception:
             pass
 

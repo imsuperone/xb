@@ -57,13 +57,8 @@ function getBridge() {
         if (typeof rawBridge.download === "function") {
           return rawBridge.download(ep, cleanParams, filename);
         }
-      },
-      upload(endpoint, file) {
-        const { ep } = cleanEndpointAndParams(endpoint);
-        if (typeof rawBridge.upload === "function") {
-          return rawBridge.upload(ep, file);
-        }
       }
+      // 注：rawBridge.upload 已移除，上传一律走 postFile base64-JSON，禁裸 FormData 走桥
     };
   }
 
@@ -127,11 +122,8 @@ function getBridge() {
       return await r.json();
     },
     async upload(endpoint, file) {
-      const { ep } = cleanEndpointAndParams(endpoint);
-      const fd = new FormData();
-      fd.append("file", file);
-      const r = await fetch(`/${PLUGIN_ID}/` + ep, { method: "POST", body: fd });
-      return await r.json();
+      // 已收口：禁用裸 FormData，一律走 postFile base64-JSON（法则12）
+      return postFile(endpoint, {}, file);
     }
   };
 }
@@ -1607,7 +1599,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.7.23"
+        version: res.version || "0.7.24"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -3307,7 +3299,12 @@ function parseShopRide(raw) {
 function syncShopRaw() {
   try {
     const el = document.getElementById("shopRide");
-    if (el) el.value = JSON.stringify(SHOP_RIDE, null, 2);
+    if (el) {
+      el.value = JSON.stringify(SHOP_RIDE, null, 2);
+      // 只读镜像：手工改 JSON 不回读，以内存态为准，避免静默丢弃
+      el.readOnly = true;
+      el.title = "只读镜像，以上方卡片编辑+保存为准";
+    }
   } catch (e) {}
 }
 function renderShopRideBox(forceOpen = false) {
@@ -3434,9 +3431,21 @@ function renderShopRideBox(forceOpen = false) {
   if (addBtn) addBtn.addEventListener("click", () => openRideAddModal());
   const resetBtn = document.getElementById("btnRideReset");
   if (resetBtn) resetBtn.addEventListener("click", async () => {
-    if (!(await uiConfirm("直接恢复坐骑商城为内置默认？旧数据不保留（点上方保存生效）。", "恢复默认"))) return;
-    SHOP_RIDE = JSON.parse(JSON.stringify(DEFAULT_RIDE_SHOP));
-    SHOP_DIRTY=true; syncShopRaw(); renderShopRideBox(true); toast("已恢复默认，需保存","ok");
+    if (!(await uiConfirm("直接恢复坐骑商城为内置默认？旧数据不保留。", "恢复默认"))) return;
+    try {
+      SHOP_RIDE = JSON.parse(JSON.stringify(DEFAULT_RIDE_SHOP));
+      const cleanRide = {};
+      Object.entries(SHOP_RIDE).forEach(([k, v]) => {
+        if (v && typeof v === "object" && !Array.isArray(v)) {
+          if (!v.img) cleanRide[k] = v.price;
+          else cleanRide[k] = v;
+        } else cleanRide[k] = v;
+      });
+      await getBridge().apiPost("config/save", { "商城图鉴": { "ride_shop": JSON.stringify(cleanRide) } });
+      SHOP_DIRTY = false; SHOP_RIDE_CUSTOM = true;
+      syncShopRaw(); renderShopRideBox(true);
+      toast("已恢复默认", "ok");
+    } catch (e) { toast("恢复失败: " + e.message, "bad"); }
   });
 }
 // 添加坐骑表单窗：名称 + 价格 + 图片路径一次填完

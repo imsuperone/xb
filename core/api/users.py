@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """用户管理 API — 列表/编辑/单用户导出导入/全量导出导入"""
+import asyncio
 import base64
 import json
 import time
@@ -17,7 +18,7 @@ except ImportError:
     except ImportError:
         import slave  # type: ignore
 
-PLUGIN_VERSION = "0.7.23"
+PLUGIN_VERSION = "0.7.24"
 
 
 def _extract_param(request, key, default=""):
@@ -71,47 +72,70 @@ async def handle_users(request):
         except Exception:
             pass
     if gid_filter and gid_filter.isdigit():
-        try:
-            rows = ST._DB.execute(
-                "SELECT w.gid, w.qq, w.money, a.data FROM wallet w "
-                "LEFT JOIN accounts a ON a.gid=w.gid AND a.qq=w.qq WHERE w.gid=? "
-                "ORDER BY w.money DESC LIMIT ? OFFSET ?", (int(gid_filter), _limit, _offset)).fetchall() if ST._DB else []
-        except Exception:
-            rows = ST._DB.execute(
-                "SELECT w.gid, w.qq, w.money, a.data FROM wallet w "
-                "LEFT JOIN accounts a ON a.gid=w.gid AND a.qq=w.qq "
-                "ORDER BY w.money DESC LIMIT ? OFFSET ?", (_limit, _offset)).fetchall() if ST._DB else []
+        _gid_i = int(gid_filter)
     else:
-        rows = ST._DB.execute(
-            "SELECT w.gid, w.qq, w.money, a.data FROM wallet w "
-            "LEFT JOIN accounts a ON a.gid=w.gid AND a.qq=w.qq "
-            "ORDER BY w.money DESC LIMIT ? OFFSET ?", (_limit, _offset)).fetchall() if ST._DB else []
-    out = []
-    for sqm, qq, money, data in rows:
-        kv = {}
+        _gid_i = None
+    _lim, _off = _limit, _offset
+
+    def _work():
+        _lock = getattr(ST, "_LOCK", None)
+        if _lock is not None:
+            _lock.acquire()
         try:
-            kv = json.loads(data) if data else {}
-        except Exception:
-            kv = {}
-        _nm = ""
-        try:
-            if hasattr(slave, "get_note_name"):
-                _nm = slave.get_note_name(str(sqm), str(qq)) or ""
-            if not _nm:
-                _nm = slave.fetch_card(str(sqm), str(qq)) or ""
-        except Exception:
-            _nm = ""
-        if not _nm:
-            _nm = nm.get(str(qq), "")
-        out.append({
-            "gid": str(sqm), "qq": str(qq),
-            "name": _nm, "money": int(money or 0),
-            "stamina": int(float(kv.get("stamina", "0") or 0)),
-            "charm": int(float(kv.get("charm", "0") or 0)),
-            "lottery_tickets": int(float(kv.get("lottery_tickets", "0") or 0)),
-            "deposit": int(float(kv.get("deposit", "0") or 0)),
-            "sign": int(float(kv.get("sign_count", "0") or 0)),
-        })
+            if _gid_i is not None:
+                try:
+                    rows = ST._DB.execute(
+                        "SELECT w.gid, w.qq, w.money, a.data FROM wallet w "
+                        "LEFT JOIN accounts a ON a.gid=w.gid AND a.qq=w.qq WHERE w.gid=? "
+                        "ORDER BY w.money DESC LIMIT ? OFFSET ?", (_gid_i, _lim, _off)).fetchall() if ST._DB else []
+                except Exception:
+                    try:
+                        rows = ST._DB.execute(
+                            "SELECT w.gid, w.qq, w.money, a.data FROM wallet w "
+                            "LEFT JOIN accounts a ON a.gid=w.gid AND a.qq=w.qq "
+                            "ORDER BY w.money DESC LIMIT ? OFFSET ?", (_lim, _off)).fetchall() if ST._DB else []
+                    except Exception:
+                        rows = []
+            else:
+                try:
+                    rows = ST._DB.execute(
+                        "SELECT w.gid, w.qq, w.money, a.data FROM wallet w "
+                        "LEFT JOIN accounts a ON a.gid=w.gid AND a.qq=w.qq "
+                        "ORDER BY w.money DESC LIMIT ? OFFSET ?", (_lim, _off)).fetchall() if ST._DB else []
+                except Exception:
+                    rows = []
+            out = []
+            for sqm, qq, money, data in rows:
+                kv = {}
+                try:
+                    kv = json.loads(data) if data else {}
+                except Exception:
+                    kv = {}
+                _nm = ""
+                try:
+                    if hasattr(slave, "get_note_name"):
+                        _nm = slave.get_note_name(str(sqm), str(qq)) or ""
+                except Exception:
+                    _nm = ""
+                if not _nm:
+                    _nm = nm.get(str(qq), "")
+                out.append({
+                    "gid": str(sqm), "qq": str(qq),
+                    "name": _nm, "money": int(money or 0),
+                    "stamina": int(float(kv.get("stamina", "0") or 0)),
+                    "charm": int(float(kv.get("charm", "0") or 0)),
+                    "lottery_tickets": int(float(kv.get("lottery_tickets", "0") or 0)),
+                    "deposit": int(float(kv.get("deposit", "0") or 0)),
+                    "sign": int(float(kv.get("sign_count", "0") or 0)),
+                })
+            return out
+        finally:
+            if _lock is not None:
+                try:
+                    _lock.release()
+                except Exception:
+                    pass
+    out = await asyncio.to_thread(_work)
     return json_response(out)
 
 
@@ -679,46 +703,64 @@ async def handle_users_airdrop(request):
         except Exception:
             pass
 
-        cur = ST._DB.cursor()
-        targets = set() # set of (gid, qq)
+        def _collect_targets():
+            _lock = getattr(ST, "_LOCK", None)
+            if _lock is not None:
+                _lock.acquire()
+            try:
+                cur = ST._DB.cursor()
+                targets = set() # set of (gid, qq)
 
-        if target_gid:
-            gid_arg = int(target_gid) if target_gid.isdigit() else str(target_gid)
-            cur.execute("SELECT gid, qq FROM wallet WHERE gid = ?", (gid_arg,))
-            for r in cur.fetchall():
-                targets.add((str(r[0]), str(r[1])))
-            cur.execute("SELECT gid, qq FROM accounts WHERE gid = ?", (gid_arg,))
-            for r in cur.fetchall():
-                targets.add((str(r[0]), str(r[1])))
-        else:
-            cur.execute("SELECT gid, qq FROM wallet")
-            for r in cur.fetchall():
-                targets.add((str(r[0]), str(r[1])))
-            cur.execute("SELECT gid, qq FROM accounts")
-            for r in cur.fetchall():
-                targets.add((str(r[0]), str(r[1])))
+                if target_gid:
+                    gid_arg = int(target_gid) if target_gid.isdigit() else str(target_gid)
+                    cur.execute("SELECT gid, qq FROM wallet WHERE gid = ?", (gid_arg,))
+                    for r in cur.fetchall():
+                        targets.add((str(r[0]), str(r[1])))
+                    cur.execute("SELECT gid, qq FROM accounts WHERE gid = ?", (gid_arg,))
+                    for r in cur.fetchall():
+                        targets.add((str(r[0]), str(r[1])))
+                else:
+                    cur.execute("SELECT gid, qq FROM wallet")
+                    for r in cur.fetchall():
+                        targets.add((str(r[0]), str(r[1])))
+                    cur.execute("SELECT gid, qq FROM accounts")
+                    for r in cur.fetchall():
+                        targets.add((str(r[0]), str(r[1])))
+                return targets
+            finally:
+                if _lock is not None:
+                    try:
+                        _lock.release()
+                    except Exception:
+                        pass
+
+        targets = await asyncio.to_thread(_collect_targets)
 
         if not targets:
             return _err("未找到符合发放条件的目标用户", 404)
 
-        try:
-            success_count = _airdrop_batch(targets, add_money, add_stamina, add_tickets)
-        except Exception:
-            # 批量失败降级为逐用户老路径，保证发放不中断
-            success_count = 0
-            for g, q in targets:
-                try:
-                    if add_money > 0:
-                        ST.coins_add(g, q, add_money)
-                    if add_stamina > 0:
-                        ST.acct_add(g, q, "stamina", add_stamina)
-                    if add_tickets > 0:
-                        ST.acct_add(g, q, "lottery_tickets", add_tickets)
-                    if add_stamina > 0 or add_tickets > 0:
-                        ST.acct_save(g, q)
-                    success_count += 1
-                except Exception:
-                    pass
+        def _do_airdrop():
+            try:
+                return _airdrop_batch(targets, add_money, add_stamina, add_tickets)
+            except Exception:
+                # 批量失败降级为逐用户老路径，保证发放不中断
+                success_count = 0
+                for g, q in targets:
+                    try:
+                        if add_money > 0:
+                            ST.coins_add(g, q, add_money)
+                        if add_stamina > 0:
+                            ST.acct_add(g, q, "stamina", add_stamina)
+                        if add_tickets > 0:
+                            ST.acct_add(g, q, "lottery_tickets", add_tickets)
+                        if add_stamina > 0 or add_tickets > 0:
+                            ST.acct_save(g, q)
+                        success_count += 1
+                    except Exception:
+                        pass
+                return success_count
+
+        success_count = await asyncio.to_thread(_do_airdrop)
 
         try:
             ST.flush_all()

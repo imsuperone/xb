@@ -108,7 +108,7 @@ def _raw_file_response(data_bytes, filename):
 PLUGIN_ID = "astrbot_plugin_xbbot"
 PLUGIN_DESC = "小白(奴/签/银/娱/私/灵/骑/超管/帮派/冒险+主菜单+WebUI), 现代SQLite存储"
 PLUGIN_AUTHOR = "Light"
-PLUGIN_VERSION = "0.7.23"
+PLUGIN_VERSION = "0.7.24"
 PLUGIN_REPO = "https://github.com/imsuperone/xb"
 
 # 复用 router 的主菜单，保持单源
@@ -127,7 +127,7 @@ except Exception:
         "| ⚔️ 帮派系统 | 🗺️ 冒险系统 |\r\n"
         "----------------\r\n"
         "发送系统关键词打开菜单，如【签到系统】【精灵系统】\r\n"
-        "当前版本：v0.7.23"
+        "当前版本：v0.7.24"
     )
 
 
@@ -540,31 +540,34 @@ class XbBot(Star):
                         pass
                     return  # 全静默（BY DESIGN，见 AIINFO）
                 try:
-                    try:
-                        ST.recall_set(f"admin_{qq}", str(int(time.time())))
-                    except Exception:
-                        pass
-                    admins = []
-                    try:
-                        _now_a = time.time()
-                        _ac = getattr(handle, "_admin_list_cache", None)
-                        # 30 秒缓存：超管列表低频指令，命中缓存免 DB 扫描
-                        if _ac and (_now_a - _ac[0] < 30):
-                            admins = list(_ac[1])
-                        else:
-                            with ST._LOCK:
-                                rows = ST._DB.execute("SELECT k FROM kv WHERE k LIKE 'admin_%'").fetchall() if ST._DB else []
-                            for r in rows:
-                                try:
-                                    q = str(r[0]).split("_", 1)[1]
-                                    if q.isdigit():
-                                        admins.append(q)
-                                except Exception:
-                                    pass
-                            admins = sorted(set(admins), key=lambda x: int(x))
-                            handle._admin_list_cache = (_now_a, list(admins))
-                    except Exception:
-                        pass
+                    def _fetch_admins():
+                        try:
+                            ST.recall_set(f"admin_{qq}", str(int(time.time())))
+                        except Exception:
+                            pass
+                        admins = []
+                        try:
+                            _now_a = time.time()
+                            _ac = getattr(handle, "_admin_list_cache", None)
+                            # 30 秒缓存：超管列表低频指令，命中缓存免 DB 扫描
+                            if _ac and (_now_a - _ac[0] < 30):
+                                admins = list(_ac[1])
+                            else:
+                                with ST._LOCK:
+                                    rows = ST._DB.execute("SELECT k FROM kv WHERE k LIKE 'admin_%'").fetchall() if ST._DB else []
+                                for r in rows:
+                                    try:
+                                        q = str(r[0]).split("_", 1)[1]
+                                        if q.isdigit():
+                                            admins.append(q)
+                                    except Exception:
+                                        pass
+                                admins = sorted(set(admins), key=lambda x: int(x))
+                                handle._admin_list_cache = (_now_a, list(admins))
+                        except Exception:
+                            pass
+                        return admins
+                    admins = await asyncio.to_thread(_fetch_admins)
                     if str(qq) not in admins:
                         admins.append(str(qq))
                         admins = sorted(set(admins), key=lambda x: int(x))

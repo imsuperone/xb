@@ -634,14 +634,20 @@ class Group:
                         _DB.execute("DELETE FROM groups WHERE gid=? AND qq=?", (int(self._gid), int(qq)))
                         _maybe_commit()
                     except Exception:
-                        pass
+                        try:
+                            _safe_rollback()
+                        except Exception:
+                            pass
                 return True
             elif _DB is not None:
                 try:
                     _DB.execute("DELETE FROM groups WHERE gid=? AND qq=?", (int(self._gid), int(qq)))
                     _maybe_commit()
                 except Exception:
-                    pass
+                    try:
+                        _safe_rollback()
+                    except Exception:
+                        pass
         return False
 
 def group(gid):
@@ -837,7 +843,10 @@ def user_clear(gid, qq):
                 _DB.execute("DELETE FROM groups WHERE gid=? AND qq=?", (gid_i, qq_i))
                 _force_commit()
             except Exception:
-                pass
+                try:
+                    _safe_rollback()
+                except Exception:
+                    pass
     return True
 
 # ==================== 6. 业务扩展：红包 / kv ====================
@@ -859,6 +868,17 @@ def redpack_put(gid, qq, pwd, amount):
 
 def redpack_get(gid, pwd):
     _ensure_db()
+    try:
+        with _RLOCK:
+            if _DB_R is not None:
+                try:
+                    return _DB_R.execute(
+                        "SELECT qq, amount FROM redpacks WHERE gid=? AND pwd=?",
+                        (int(gid), str(pwd))).fetchone()
+                except Exception:
+                    pass
+    except Exception:
+        pass
     with _LOCK:
         if _DB is None:
             return None
@@ -1033,23 +1053,29 @@ def init(db_path, config=None):
             if isinstance(config, dict):
                 set_config(config)
             return
-        d = os.path.dirname(db_path)
-        if d and not os.path.isdir(d):
-            os.makedirs(d, exist_ok=True)
-        # 切换库时旧读副本先失效，由 _read_conn 懒重建
         try:
-            if _DB_R is not None:
-                _DB_R.close()
+            d = os.path.dirname(db_path)
+            if d and not os.path.isdir(d):
+                os.makedirs(d, exist_ok=True)
+            # 切换库时旧读副本先失效，由 _read_conn 懒重建
+            try:
+                if _DB_R is not None:
+                    _DB_R.close()
+            except Exception:
+                pass
+            _DB_R = None
+            _DB = sqlite3.connect(db_path, timeout=30.0, check_same_thread=False)
+            _DB_PATH = db_path
+            _DB.executescript(_SQL_INIT)
+            _DB.commit()
+            _init_kv_cache()
+            if isinstance(config, dict):
+                set_config(config)
         except Exception:
-            pass
-        _DB_R = None
-        _DB = sqlite3.connect(db_path, timeout=30.0, check_same_thread=False)
-        _DB_PATH = db_path
-        _DB.executescript(_SQL_INIT)
-        _DB.commit()
-        _init_kv_cache()
-        if isinstance(config, dict):
-            set_config(config)
+            try:
+                _safe_rollback()
+            except Exception:
+                pass
 
 def flush_all():
     with _LOCK:

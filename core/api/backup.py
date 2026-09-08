@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """备份 API"""
+import asyncio
 import base64
 import json as _json
 import os
@@ -99,7 +100,8 @@ async def handle_backups_restore(request, plugin_base=""):
     src = _safe_backup(rel, _backup_base(plugin_base))
     if not src or not os.path.isfile(src) or not src.endswith(".db"):
         return _err("backup not found (need .db)", 404)
-    try:
+
+    def _work():
         import sqlite3
         cur_db = ST._DB
         with ST._LOCK:
@@ -118,6 +120,12 @@ async def handle_backups_restore(request, plugin_base=""):
             cur_db.commit()
             ST._ACC_CACHE.clear()
             ST._GROUP_CACHE.clear()
+            try:
+                ST._KV_CACHE.clear()
+            except Exception:
+                pass
+    try:
+        await asyncio.to_thread(_work)
         return json_response({"ok": True, "path": rel, "msg": "备份恢复成功！数据已实时加载生效。"})
     except Exception as e:
         return _err(f"restore failed: {e}", 500)
@@ -185,9 +193,14 @@ async def handle_backups_export(request, plugin_base=""):
             rel = os.path.relpath(fp, base).replace(os.sep, "/")
         else:
             return _err("file not found in directory", 404)
-    try:
+    def _work():
         if os.path.getsize(fp) > 50 * 1024 * 1024:
-            return _err("file too large", 400)
+            raise ValueError("file too large")
+        with open(fp, "rb") as f:
+            data = f.read()
+        import base64 as _b64
+        return _b64.b64encode(data).decode(), len(data)
+    try:
         is_raw = get_req_query(request, "raw", "") in ("1", "true", "yes") or get_req_query(request, "download", "") in ("1", "true", "yes")
         if not is_raw:
             try:
@@ -196,9 +209,10 @@ async def handle_backups_export(request, plugin_base=""):
                     is_raw = True
             except Exception:
                 pass
-        data = open(fp, "rb").read()
-        b64 = base64.b64encode(data).decode()
-        return json_response({"ok": True, "path": rel, "data": b64, "size": len(data), "filename": os.path.basename(fp)})
+        b64, size = await asyncio.to_thread(_work)
+        return json_response({"ok": True, "path": rel, "data": b64, "size": size, "filename": os.path.basename(fp)})
+    except ValueError as e:
+        return _err(str(e), 400)
     except Exception as e:
         return _err(f"export failed: {e}", 500)
 
@@ -210,42 +224,45 @@ async def handle_clear_all(request, plugin_base=""):
             return _err("need confirm=确认删除", 400)
         if p.get("confirm2") != "确认":
             return _err("need confirm2=确认", 400)
-        with ST._LOCK:
-            if ST._DB:
-                ST._DB.execute("DELETE FROM wallet")
-                ST._DB.execute("DELETE FROM accounts")
-                ST._DB.execute("DELETE FROM groups")
-                ST._DB.execute("DELETE FROM redpacks")
-                ST._DB.execute("DELETE FROM kv")
-                ST._DB.commit()
-                ST._ACC_CACHE.clear()
-                ST._GROUP_CACHE.clear()
-                # kv 内存缓存必须同步清空，否则开关/游戏锁/签到顺序等残留内存快照，清空后仍幽灵生效
-                try:
-                    if hasattr(ST, "_KV_CACHE_LOCK"):
-                        with ST._KV_CACHE_LOCK:
-                            ST._KV_CACHE.clear()
-                    else:
-                        ST._KV_CACHE.clear()
-                except Exception:
-                    pass
-                try:
-                    ST._DB.execute("DELETE FROM kv WHERE k='last_backup_ts'")
+
+        def _work():
+            with ST._LOCK:
+                if ST._DB:
+                    ST._DB.execute("DELETE FROM wallet")
+                    ST._DB.execute("DELETE FROM accounts")
+                    ST._DB.execute("DELETE FROM groups")
+                    ST._DB.execute("DELETE FROM redpacks")
+                    ST._DB.execute("DELETE FROM kv")
                     ST._DB.commit()
-                except Exception:
-                    pass
-                ST._last_backup = 0
-        try:
-            base = _backup_base(plugin_base)
-            if os.path.isdir(base):
-                for root, _, files in os.walk(base):
-                    for fn in files:
-                        try:
-                            os.remove(os.path.join(root, fn))
-                        except Exception:
-                            pass
-        except Exception:
-            pass
+                    ST._ACC_CACHE.clear()
+                    ST._GROUP_CACHE.clear()
+                    # kv 内存缓存必须同步清空，否则开关/游戏锁/签到顺序等残留内存快照，清空后仍幽灵生效
+                    try:
+                        if hasattr(ST, "_KV_CACHE_LOCK"):
+                            with ST._KV_CACHE_LOCK:
+                                ST._KV_CACHE.clear()
+                        else:
+                            ST._KV_CACHE.clear()
+                    except Exception:
+                        pass
+                    try:
+                        ST._DB.execute("DELETE FROM kv WHERE k='last_backup_ts'")
+                        ST._DB.commit()
+                    except Exception:
+                        pass
+                    ST._last_backup = 0
+            try:
+                base = _backup_base(plugin_base)
+                if os.path.isdir(base):
+                    for root, _, files in os.walk(base):
+                        for fn in files:
+                            try:
+                                os.remove(os.path.join(root, fn))
+                            except Exception:
+                                pass
+            except Exception:
+                pass
+        await asyncio.to_thread(_work)
         return json_response({"cleared": True})
     except Exception as e:
         return _err(f"clear failed: {e}", 500)
@@ -284,24 +301,28 @@ async def handle_db_doctor(request, plugin_base=""):
         if wal_path and os.path.isfile(wal_path):
             size_before += os.path.getsize(wal_path)
 
-        # 只读体检持锁快查；VACUUM/TRUNCATE 等重型整理移出锁外并 to_thread 执行，
+        # 只读体检移入后台线程；VACUUM/TRUNCATE 等重型整理同样后台并 60s 熔断，
         # 避免 WebUI 一次体检卡死全群读写数秒
-        with ST._LOCK:
-            cur = ST._DB.cursor()
+        def _check_work():
+            with ST._LOCK:
+                cur = ST._DB.cursor()
 
-            # 3. 运行完整性检查
-            cur.execute("PRAGMA integrity_check(10)")
-            integrity_rows = cur.fetchall()
-            integrity_status = "正常 (OK)" if (integrity_rows and integrity_rows[0][0] == "ok") else str(integrity_rows)
+                # 3. 运行完整性检查
+                cur.execute("PRAGMA integrity_check(10)")
+                integrity_rows = cur.fetchall()
+                integrity_status = "正常 (OK)" if (integrity_rows and integrity_rows[0][0] == "ok") else str(integrity_rows)
 
-            # 4. 统计各表数据行数
-            counts = {}
-            for tbl in ("wallet", "accounts", "groups", "redpacks", "kv"):
-                try:
-                    cur.execute(f"SELECT COUNT(*) FROM {tbl}")
-                    counts[tbl] = cur.fetchone()[0]
-                except Exception:
-                    counts[tbl] = 0
+                # 4. 统计各表数据行数
+                counts = {}
+                for tbl in ("wallet", "accounts", "groups", "redpacks", "kv"):
+                    try:
+                        cur.execute(f"SELECT COUNT(*) FROM {tbl}")
+                        counts[tbl] = cur.fetchone()[0]
+                    except Exception:
+                        counts[tbl] = 0
+            return integrity_status, counts
+
+        integrity_status, counts = await asyncio.to_thread(_check_work)
 
         # 5. WAL 截断与 VACUUM 碎片整理（锁外独立连接，后台线程，超时 60s 熔断）
         import asyncio as _aio

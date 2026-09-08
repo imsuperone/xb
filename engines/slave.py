@@ -1733,18 +1733,8 @@ def _weapon_img_path(name):
 
 
 def _sync_weapon_shop(name):
-    try:
-        ws = _weapon_shop()
-        if name not in ws:
-            # 自动同步抽奖武器至商城，默认价 50000 可在 WebUI 改
-            ws[name] = {"price": 50000, "atk": 0, "desc": "", "img": ""}
-            store.set_ini("商城图鉴", "weapon_shop", _json.dumps(ws, ensure_ascii=False))
-            try:
-                store.save_config()
-            except Exception:
-                pass
-    except Exception:
-        pass
+    # 已退役：weapon_shop 仅旧数据只读兼容，禁止再写（v0.7.16 起改抽奖池直管）
+    return
 
 def cmd_weapon_menu(gid, qq, st):
     # 复用 gacha 缓存，避免每消息 listdir
@@ -2186,19 +2176,6 @@ def _img_path(path):
     except Exception:
         return ""
 
-
-def _img_cq(path):
-    """CQ 图片段（遗留兼容，仅自定义回复解析用；引擎内部已统一走元组）"""
-    try:
-        p = _img_path(path)
-        if not p:
-            return ""
-        pp = p.replace("\\", "/")
-        if not pp.startswith("/"):
-            pp = "/" + pp
-        return f"[CQ:image,file=file://{pp}]"
-    except Exception:
-        return ""
 
 def init_slave(bot_uin="", note_names=None, import_wallet_dir=""):
     """适配层启动时调用: store 初始化 + 机器人QQ + 名片缓存 + (可选)旧drea钱包导入"""
