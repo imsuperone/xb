@@ -108,7 +108,7 @@ def _raw_file_response(data_bytes, filename):
 PLUGIN_ID = "astrbot_plugin_xbbot"
 PLUGIN_DESC = "小白(奴/签/银/娱/私/灵/骑/超管/帮派/冒险+主菜单+WebUI), 现代SQLite存储"
 PLUGIN_AUTHOR = "Light"
-PLUGIN_VERSION = "0.7.19"
+PLUGIN_VERSION = "0.7.20"
 PLUGIN_REPO = "https://github.com/imsuperone/xb"
 
 # 复用 router 的主菜单，保持单源
@@ -127,7 +127,7 @@ except Exception:
         "| ⚔️ 帮派系统 | 🗺️ 冒险系统 |\r\n"
         "----------------\r\n"
         "发送系统关键词打开菜单，如【签到系统】【精灵系统】\r\n"
-        "当前版本：v0.7.19"
+        "当前版本：v0.7.20"
     )
 
 
@@ -272,6 +272,7 @@ class XbBot(Star):
         context.register_web_api(f"/{PLUGIN_ID}/images/delete", self.page_images_delete, ["POST"], "删除图片")
         context.register_web_api(f"/{PLUGIN_ID}/images/rename", self.page_images_rename, ["POST"], "重命名图片")
         context.register_web_api(f"/{PLUGIN_ID}/images/mkdir", self.page_images_mkdir, ["POST"], "新建文件夹")
+        context.register_web_api(f"/{PLUGIN_ID}/images/thumb", self.page_images_thumb, ["GET", "POST"], "单张图片预览")
         context.register_web_api(f"/{PLUGIN_ID}/images/copy", self.page_images_copy, ["POST"], "复制文件")
         context.register_web_api(f"/{PLUGIN_ID}/images/export", self.page_images_export, ["GET", "POST"], "导出文件")
         context.register_web_api(f"/{PLUGIN_ID}/spirits", self.page_spirits_get, ["GET"], "精灵图鉴读取")
@@ -1101,6 +1102,14 @@ class XbBot(Star):
             return await handle_images_copy(request, os.path.dirname(os.path.abspath(__file__)))
         except Exception as e:
             return _err(f"copy failed: {e}", 500)
+
+    async def page_images_thumb(self, request=None, *args, **kwargs):
+        try:
+            req = request if request is not None else (args[0] if args else None)
+            from .core.api.images import handle_images_thumb
+            return await handle_images_thumb(req, os.path.dirname(os.path.abspath(__file__)))
+        except Exception as e:
+            return _err(f"thumb failed: {e}", 500)
 
     async def page_images_export(self, request=None, *args, **kwargs):
         try:

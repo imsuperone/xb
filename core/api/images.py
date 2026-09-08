@@ -194,6 +194,35 @@ async def handle_images_rename(request, plugin_base=""):
         return _err(f"rename failed: {e}", 500)
 
 
+async def handle_images_thumb(request, plugin_base=""):
+    """单张图片缩略图（base64 data URI，≤200KB，用于管理页预览，列表不批量下发）"""
+    p = await get_req_json(request, default={})
+    rel = str((p.get("path") or p.get("file") or "") if isinstance(p, dict) else "").strip()
+    if not rel:
+        rel = get_req_query(request, "path", "") or get_req_query(request, "file", "")
+    rel = str(rel).strip()
+    if not rel:
+        return _err("path required", 400)
+    base = _img_base(plugin_base)
+    fp = _safe_path(rel, base)
+    if not fp or not os.path.isfile(fp):
+        return _err("file not found", 404)
+    try:
+        if os.path.getsize(fp) > 200 * 1024:
+            return _err("too large", 400)
+        with open(fp, "rb") as f:
+            raw = f.read()
+        if not raw:
+            return _err("empty file", 400)
+        ext = os.path.splitext(fp)[1].lower().lstrip(".") or "png"
+        if ext == "jpg":
+            ext = "jpeg"
+        return json_response({"ok": True, "path": rel,
+                              "thumb": "data:image/%s;base64,%s" % (ext, base64.b64encode(raw).decode("ascii"))})
+    except Exception as e:
+        return _err(f"thumb failed: {e}", 500)
+
+
 async def handle_images_mkdir(request, plugin_base=""):
     p = await get_req_json(request, default={})
     rel = str((p.get("path") or p.get("dir") or p.get("name") or "") if isinstance(p, dict) else "").strip()
