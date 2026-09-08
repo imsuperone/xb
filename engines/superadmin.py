@@ -19,13 +19,13 @@ except ImportError:
 MENU = (
     "🔧 超管系统\r\n"
     "━━━━━━━━━━━━━━\r\n"
-    "📇 群列表　📊 应用统计　🔖 小白版本\r\n"
+    "📇 群列表　📊 应用统计　🔖 版本\r\n"
     "💸 扣钱 @QQ 金额　💳 充钱 @QQ 金额\r\n"
     "🧹 清空财富/体力/魅力/账户/精灵/用户 @QQ\r\n"
     "🔨 禁言 @QQ 分钟　🚪 踢人 @QQ\r\n"
-    "💾 备份xb　（立即备份全量数据，别名：备份/备份数据/xb备份）\r\n"
-    "🛠️ 开启维护/打开维护　关闭维护　维护信息 内容　查看维护\r\n"
-    "🔖 版本/检查更新（所有人可查）\r\n"
+    "💾 备份（立即备份全量数据）\r\n"
+    "🛠️ 开启维护　关闭维护　维护信息 内容　查看维护\r\n"
+    "🔖 检查更新（仅超管可查）\r\n"
     "━━━━━━━━━━━━━━\r\n"
     "⚠️ 全部指令仅限 AstrBot 机器人管理员\r\n"
     "💡 发送对应指令即可操作"
@@ -449,14 +449,15 @@ def _version():
                 except Exception:
                     pass
         if not ver:
-            ver = "0.7.26"
+            ver = "0.7.27"
         return f"小白版本：{ver}"
     except Exception:
-        return "小白版本：0.7.26"
+        return "小白版本：0.7.27"
 
 # ---- 统一入口（测试指令仅超管，WebUI可配但不显示于MENU，已删 个人信息） ----
 # 注意：凡 handle() 响应的别名必须同步进本表；非超管命中一律静默 None（BY DESIGN，见 AIINFO）
-_ADMIN_CMDS = ("群列表", "应用统计", "扣钱", "充钱", "清空", "重置", "禁言", "踢人", "备份xb", "备份", "备份数据", "xb备份", "测试webdav", "webdav测试", "开启维护", "打开维护", "关闭维护", "关闭维护模式", "维护信息", "查看维护", "小白版本", "版本", "xb版本", "插件版本", "检查更新", "小白更新", "检查版本", "查询更新", "更新", "查看更新", "小白升级", "测试testxb", "测试testxb1", "测试testxb2", "测试testxb3", "测试testxb4", "测试testxb5", "测试testxb6", "测试testxb7", "测试testxb8", "超管列表")
+# 超管指令一律精确单触发词，禁冗余别名/模糊词
+_ADMIN_CMDS = ("群列表", "应用统计", "扣钱", "充钱", "清空", "重置", "禁言", "踢人", "备份", "维护信息", "查看维护", "版本", "检查更新", "测试testxb", "测试testxb1", "测试testxb2", "测试testxb3", "测试testxb4", "测试testxb5", "测试testxb6", "测试testxb7", "测试testxb8", "超管列表", "测试图片", "webdav测试", "开启维护", "关闭维护")
 
 
 def _cmd_imgtest():
@@ -522,11 +523,15 @@ def handle(gid, qq, raw, is_admin=False):
     text = (raw or "").strip()
     if not text:
         return None
-    # 允许所有人查询版本
-    if text in ("小白版本", "版本", "xb版本", "插件版本"):
+    if not is_admin:
+        # 全静默：非超管命中任何超管指令（含版本/更新查询）无任何提示
+        for c in _ADMIN_CMDS:
+            if text.startswith(c):
+                return None
+        return None
+    if text == "版本":
         return _version()
-    # 允许所有人查询云端更新情况（只读无害，支持 更新/查询更新/检查更新/小白更新）
-    if text in ("检查更新", "小白更新", "检查版本", "查询更新", "更新", "查看更新", "小白升级"):
+    if text == "检查更新":
         try:
             info = None
             try:
@@ -554,15 +559,7 @@ def handle(gid, qq, raw, is_admin=False):
             return f"检查更新异常: {e}"
 
     if text in ST.wake("超管系统", "超管系统"):
-        if not is_admin:
-            return None  # 全静默：非超管命中超管指令无任何提示（BY DESIGN，见 AIINFO）
         return MENU
-    if not is_admin:
-        # 全静默：命中超管指令仅拦截不提示（BY DESIGN，见 AIINFO）
-        for c in _ADMIN_CMDS:
-            if text.startswith(c):
-                return None
-        return None
     if _cfg("开关", "真") != "真":
         return "【超管系统】已经被关闭了，无法使用该功能！"
     if text == "群列表":
@@ -579,16 +576,12 @@ def handle(gid, qq, raw, is_admin=False):
         return cmd_mute(gid, qq, text[2:].strip())
     if text.startswith("踢人"):
         return cmd_kick(gid, qq, text[2:].strip())
-    if text in ("备份xb", "备份", "备份数据", "xb备份"):
+    if text == "备份":
         return cmd_backup_xb()
-    if text.startswith("备份xb"):
-        return cmd_backup_xb()
-    # 测试图片：超管图片链路诊断；非超管静默无任何提示（不进 _ADMIN_CMDS 名单）
-    if text in ("测试图片", "测试发图", "图片测试"):
-        if not is_admin:
-            return None
+    # 测试图片：超管图片链路诊断（已在入口按超管全锁）
+    if text == "测试图片":
         return _cmd_imgtest()
-    if text in ("测试webdav", "webdav测试"):
+    if text == "webdav测试":
         try:
             from ..core import webdav as _wd
             ok, msg = _wd.test_connection()
@@ -600,9 +593,9 @@ def handle(gid, qq, raw, is_admin=False):
                 return f"【WebDAV测试】{'✅ 成功' if ok else '❌ 失败'}\r\n{msg}"
             except Exception as e:
                 return f"【WebDAV测试】❌ 模块调用异常: {e}"
-    if text in ("开启维护", "打开维护"):
+    if text == "开启维护":
         return _maint_on()
-    if text in ("关闭维护", "关闭维护模式"):
+    if text == "关闭维护":
         return _maint_off()
     if text.startswith("维护信息"):
         return _maint_msg(text[4:].strip())

@@ -5,13 +5,13 @@
 | 属性 | 值 |
 | :--- | :--- |
 | 插件 | `astrbot_plugin_xbbot`（小白统一模块） |
-| 当前版本 | `v0.7.26` |
+| 当前版本 | `v0.7.27` |
 | 作者 | Light (`faxlight@faxt.top`) |
 | 仓库 | `https://github.com/imsuperone/xb`（main） |
 | 主目录 | `astrbot_plugins/astrbot_plugin_xbbot` |
-| 发行包 | `astrbot_plugin_xbbot_v0.7.26.zip`（仓库根 / astrbot_plugins / backup 三端同步） |
+| 发行包 | `astrbot_plugin_xbbot_v0.7.27.zip`（仓库根 / astrbot_plugins / backup 三端同步） |
 | 依赖 | AstrBot >= 3.4.0，Python >= 3.10 |
-| 规模 | 41 模块 / 28 节 739 配置项 / 68 Web API / app.js 约 5000 行 / 179 DOM（0 重复） |
+| 规模 | 41 模块 / 29 节 928 配置项 / 68 Web API / app.js 约 5000 行 / 179 DOM（0 重复） |
 | 本卡与手册 | 根与插件目录各一份，内容同步；改一处必须同步另一处 |
 
 ## 🛡️ 十二大红线（1~7 为初版，8~12 为 v0.7.14~22 血泪新增，违反即回滚）
@@ -22,7 +22,7 @@
 4. **娱乐 30 秒自愈**：接龙等全系 30s 超时；【重置接龙】【结束接龙】秒释；接龙 20 金币 + 0 魅力。
 5. **版本 0.7.xx + 9 处强对齐**：`0.7.0`~`0.7.99` 递增，满 99 或用户明示才升段；9 处（`metadata.yaml`、`main.py`、`core/api/updater.py`、`core/api/users.py`、`engines/superadmin.py`、`pages/admin/index.html`、`pages/admin/app.js`、`CHANGELOG.md`、`README.md`）必须同值；比对走纪元算法 `(epoch, major, minor, patch)`。
 6. **WebDAV 安全**：OPTIONS 探测防 429；上海时区中文时间；删除二次确认 + 防抖；上传 5 秒防抖。
-7. **【超管全静默 BY DESIGN】非超管命中任何超管指令（超管系统/备份/禁言/踢人/清空/维护/测试/超管列表等）一律 `return None`，无任何提示。普通用户发了没反应 = 正常，绝不“修复”成有提示。仅 `版本/检查更新` 对所有人可查。**
+7. **【超管全静默 BY DESIGN】非超管命中任何超管指令（含 `版本/检查更新`，v0.7.27 起不再公开）及权限=超管的指令一律 `return None`，无任何提示。普通用户发了没反应 = 正常，绝不“修复”成有提示。超管指令一令一名，禁冗余别名。**
 8. **【图片元组直传】引擎发图一律 `(text, [path])` 元组，原生绝对路径直传；禁拼 `[CQ:image,…]` 字符串**（中文+斜杠在适配器侧不稳定，v0.7.13 实测 CQ 图丢失而元组正常）。`_build_chain` 的 CQ 解析仅为自定义回复兼容而保留。
 9. **【恢复默认按页隔离 + 硬清理】任何“恢复默认”只动本页范围，必须二次确认，旧数据不保留**（数据库自有备份可回滚）。禁全量重置；禁“删光保留 multiline 软恢复”式含糊文案。
 10. **【WebDAV 密钥分存】地址/用户名/应用密码只存数据目录独立 `webdav_secret.json`**，永不进 `_CONFIG`/DB 镜像/快照/备份/导出/回执。`ST.cfg` 运行时透明叠加；`config/get` 回填显示（密码恒空）；密码留空 = 保持不变。历史备份文件中的旧密钥洗不掉，新备份不再含。

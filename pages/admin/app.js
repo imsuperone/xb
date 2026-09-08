@@ -130,13 +130,9 @@ function getBridge() {
 let CFG = {};
 
 // 各配置节归属系统（用于分类）+ 必要/玩法分层
-// 必要配置页渲染以下全部节：基础开关 + 奖励/惩罚/概率数值节（签到/银行/娱乐/奴隶等），缺一不可调
-const NECESSARY_SECTIONS = ["总开关配置", "群组开关配置", "网络", "私聊配置", "维护配置",
-  "设置", "费用配置", "间隔配置", "概率配置", "祈福配置",
-  "签到配置", "抽奖配置", "新手配置", "点赞配置", "银行配置",
-  "娱乐配置", "精灵配置", "坐骑配置", "帮派配置", "冒险配置"];
+const NECESSARY_SECTIONS = ["总开关配置", "群组开关配置", "网络", "私聊配置", "维护配置"];
 // 备份配置（含 WebDAV）已迁移至「备份管理」Tab 专属卡片，不在配置页重复渲染
-// 唤醒词/系统开关/指令启用回复/自定义指令在「指令与玩法」页编辑，商城图鉴/精灵图鉴在商城图鉴页编辑，不在此重复
+const GAMEPLAY_SECTIONS = ["签到配置","抽奖配置","新手配置","点赞配置","银行配置","娱乐配置","精灵配置","坐骑配置","帮派配置","冒险配置","祈福配置","概率配置","唤醒词配置"];
 const SYSTEM_MAP = {
   "设置": "奴隶系统", "费用配置": "奴隶系统", "间隔配置": "奴隶系统",
   "概率配置": "奴隶系统", "祈福配置": "奴隶系统",
@@ -1607,7 +1603,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.7.26"
+        version: res.version || "0.7.27"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -1677,6 +1673,15 @@ async function importSingleUser() {
 // ---------- 指令(可编辑 唤醒词 / 回复内容 / 玩法数值) ----------
 let CMD_CFG = {};           // 运行时配置(嵌套 dict) 供指令页读取/保存
 let KNOWN_CMDS = new Set(); // 引擎指令白名单，供映射校验
+let CMD_ENG = {};           // 指令->所属引擎键，供数值映射与权限显示
+// 引擎->数值节：指令编辑器按所属系统自动列出全部可调数值（奖励/惩罚/概率/价格/间隔）
+const ENG_NUM_SECTIONS = {
+  slave: ["设置", "费用配置", "间隔配置", "概率配置", "祈福配置"],
+  sign: ["签到配置", "抽奖配置", "新手配置", "点赞配置"],
+  bank: ["银行配置"], ent: ["娱乐配置"], spirit: ["精灵配置"],
+  ride: ["坐骑配置"], guild: ["帮派配置"], adventure: ["冒险配置"],
+  superadmin: ["超管配置"],
+};
 const SYS_WAKE = {
   slave: "奴隶系统", sign: "签到系统", bank: "银行系统", ent: "娱乐系统",
   spirit: "精灵系统", ride: "坐骑系统",
@@ -1809,12 +1814,17 @@ async function loadCommands() {
     const custSec = CMD_CFG["自定义指令配置"] || {};
     const onSec = CMD_CFG["系统开关配置"] || {};       // 系统级启用
     const disSec = CMD_CFG["指令启用配置"] || {};       // 指令级启用(假=禁用)
+    const permSec = CMD_CFG["指令权限配置"] || {};       // 指令级权限(超管=仅超管)
     const setupSec = CMD_CFG["设置"] || {};
     const isOff = (v) => v === "假" || v === "0" || v === "false";
     const isOn = (v) => v === undefined || !isOff(v);
     const el = document.getElementById("cmdList");
     KNOWN_CMDS = new Set();
-    Object.values(cmds).forEach(arr => (arr||[]).forEach(c => KNOWN_CMDS.add(c)));
+    CMD_ENG = {};
+    Object.entries(cmds).forEach(([eng, arr]) => (arr || []).forEach((c) => {
+      KNOWN_CMDS.add(c);
+      if (!(c in CMD_ENG)) CMD_ENG[c] = eng;
+    }));
     const blockHtml = Object.keys(cmds).filter(k => k !== "chat")
       .map((k) => {
         const sys = map2sys[k] || k;
@@ -1831,8 +1841,9 @@ async function loadCommands() {
         const tags = items.map((c) => {
           const cOn = isOn(disSec[c]);
           const onBg = cOn ? "" : "off";
+          const isAdm = (((permSec[c] || "").trim()) === "超管");
           return `<a class="cmd-tag ${onBg}" data-on="${cOn ? "1" : "0"}" data-cmd="${esc(c)}" data-sys="${esc(sys)}">` +
-            `${cOn ? '<span style="color:var(--ok);font-size:10px">●</span>' : '<span style="color:var(--muted);font-size:10px">○</span>'} ${esc(c)}</a>`;
+            `${cOn ? '<span style="color:var(--ok);font-size:10px">●</span>' : '<span style="color:var(--muted);font-size:10px">○</span>'} ${isAdm ? "🔒" : ""}${esc(c)}</a>`;
         }).join("");
         return `<details class="cmd-block" data-sys="${esc(sys)}"><summary>` +
           `<span class="cmd-sys">${esc(sys)}</span>` +
@@ -1915,6 +1926,9 @@ function openCmdEditor() {
   const effKey = (sys === "自定义") ? (cmd || "") : (mapCmd || cmd || "");
   const onBox = document.getElementById("cmdModalOn");
   if (onBox) onBox.checked = !isOff(disSec[effKey]);
+  // 超管权限勾选：指令权限配置=超管（默认所有人）
+  const admBox = document.getElementById("cmdModalAdmin");
+  if (admBox) admBox.checked = (((CMD_CFG["指令权限配置"] || {})[effKey] || "").trim() === "超管");
   // 删除按钮: 仅编辑已有自定义指令时显示
   const delBtn = document.getElementById("btnCmdModalDelete");
   if (delBtn) delBtn.style.display = (sys === "自定义" && !isNew) ? "" : "none";
@@ -1954,13 +1968,19 @@ function renderCmdNums(numCmd, isNew) {
   }
   let nums = CMD_NUMS[numCmd] || [];
   if (!nums.length && numCmd) {
-    // 兜底：若未配置，尝试按系统主配置节自动列出相关数值键（避免“明明有花钱却无可改”）
+    // 通用兜底：按指令所属系统的全部数值节列出可调数值（int/float），保证每条指令都有变量可调
     try {
-      const secMap = {"买下":"间隔配置","折磨":"间隔配置","打赏":"费用配置","补偿":"费用配置","保护":"设置","买奴隶位":"设置","打架":"间隔配置","我要打工":"间隔配置","奴隶打工":"间隔配置","打工":"间隔配置","学习":"间隔配置","祈福":"祈福配置","我要祈福":"祈福配置","升星":"设置","升阶":"设置","签到":"签到配置","抽奖":"抽奖配置","存款":"银行配置","取款":"银行配置","转账":"银行配置","打劫":"银行配置","打劫银行":"银行配置","赌博":"银行配置","保释":"银行配置","我要越狱":"银行配置","精灵冒险":"精灵配置","丢弃精灵":"精灵配置"};
-      const sec = secMap[numCmd];
-      if (sec && CFG.schema && CFG.schema.groups && CFG.schema.groups[sec]) {
-        nums = CFG.schema.groups[sec].filter(it => /金|钱|费|价格|奖|罚|消耗|魅力|体力/.test(it.key+it.desc)).slice(0,6).map(it => [sec, it.key, it.key, it.type]);
-      }
+      const eng = (typeof CMD_ENG !== "undefined" && CMD_ENG[numCmd]) || "";
+      const secs = ENG_NUM_SECTIONS[eng] || [];
+      const out = [];
+      secs.forEach((sec) => {
+        const grp = (CFG.schema && CFG.schema.groups && CFG.schema.groups[sec]) || [];
+        grp.forEach((it) => {
+          if (out.length >= 10) return;
+          if (it.type === "int" || it.type === "float") out.push([sec, it.key, it.key, it.type]);
+        });
+      });
+      nums = out;
     } catch(e){}
   }
   if (!nums.length) {
@@ -2036,6 +2056,12 @@ async function saveCmdEditor() {
     const onBox = document.getElementById("cmdModalOn");
     disSec[effKey] = (onBox && onBox.checked) ? "真" : "假";
     payload["指令启用配置"] = disSec;
+
+    // 超管权限：勾选=超管（非超管静默），不勾选=所有人
+    const admBox = document.getElementById("cmdModalAdmin");
+    const permSec = {};
+    permSec[effKey] = (admBox && admBox.checked) ? "超管" : "所有人";
+    payload["指令权限配置"] = permSec;
 
     // 玩法数值(目标引擎指令)
     document.querySelectorAll("#cmdModal [data-cmd-num]").forEach((inp) => {

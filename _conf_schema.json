@@ -1397,16 +1397,6 @@
         "default": "真",
         "description": "【超管】指令启用开关(真/假；假=不再响应)"
       },
-      "xb备份": {
-        "type": "string",
-        "default": "真",
-        "description": "【超管】指令启用开关(真/假；假=不再响应)"
-      },
-      "xb版本": {
-        "type": "string",
-        "default": "真",
-        "description": "【超管】指令启用开关(真/假；假=不再响应)"
-      },
       "三十连抽": {
         "type": "string",
         "default": "真",
@@ -1493,11 +1483,6 @@
         "description": "【超管】指令启用开关(真/假；假=不再响应)"
       },
       "关闭维护": {
-        "type": "string",
-        "default": "真",
-        "description": "【超管】指令启用开关(真/假；假=不再响应)"
-      },
-      "关闭维护模式": {
         "type": "string",
         "default": "真",
         "description": "【超管】指令启用开关(真/假；假=不再响应)"
@@ -1652,16 +1637,6 @@
         "default": "真",
         "description": "【超管】指令启用开关(真/假；假=不再响应)"
       },
-      "备份xb": {
-        "type": "string",
-        "default": "真",
-        "description": "【超管】指令启用开关(真/假；假=不再响应)"
-      },
-      "备份数据": {
-        "type": "string",
-        "default": "真",
-        "description": "【超管】指令启用开关(真/假；假=不再响应)"
-      },
       "复活币排行": {
         "type": "string",
         "default": "真",
@@ -1706,21 +1681,6 @@
         "type": "string",
         "default": "真",
         "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
-      },
-      "小白升级": {
-        "type": "string",
-        "default": "真",
-        "description": "【超管】指令启用开关(真/假；假=不再响应)"
-      },
-      "小白更新": {
-        "type": "string",
-        "default": "真",
-        "description": "【超管】指令启用开关(真/假；假=不再响应)"
-      },
-      "小白版本": {
-        "type": "string",
-        "default": "真",
-        "description": "【超管】指令启用开关(真/假；假=不再响应)"
       },
       "帮派列表": {
         "type": "string",
@@ -1862,11 +1822,6 @@
         "default": "真",
         "description": "【帮派】指令启用开关(真/假；假=不再响应)"
       },
-      "我要": {
-        "type": "string",
-        "default": "真",
-        "description": "【银行】指令启用开关(真/假；假=不再响应)"
-      },
       "我要出狱": {
         "type": "string",
         "default": "真",
@@ -1921,11 +1876,6 @@
         "type": "string",
         "default": "真",
         "description": "【签到】指令启用开关(真/假；假=不再响应)"
-      },
-      "打开维护": {
-        "type": "string",
-        "default": "真",
-        "description": "【超管】指令启用开关(真/假；假=不再响应)"
       },
       "打架": {
         "type": "string",
@@ -1992,20 +1942,10 @@
         "default": "真",
         "description": "【娱乐】指令启用开关(真/假；假=不再响应)"
       },
-      "插件版本": {
-        "type": "string",
-        "default": "真",
-        "description": "【超管】指令启用开关(真/假；假=不再响应)"
-      },
       "携带精灵": {
         "type": "string",
         "default": "真",
         "description": "【精灵】指令启用开关(真/假；假=不再响应)"
-      },
-      "更新": {
-        "type": "string",
-        "default": "真",
-        "description": "【超管】指令启用开关(真/假；假=不再响应)"
       },
       "查接龙": {
         "type": "string",
@@ -2026,11 +1966,6 @@
         "type": "string",
         "default": "真",
         "description": "【坐骑】指令启用开关(真/假；假=不再响应)"
-      },
-      "查看更新": {
-        "type": "string",
-        "default": "真",
-        "description": "【超管】指令启用开关(真/假；假=不再响应)"
       },
       "查看欢迎坐骑": {
         "type": "string",
@@ -2102,11 +2037,6 @@
         "default": "真",
         "description": "【超管】指令启用开关(真/假；假=不再响应)"
       },
-      "检查版本": {
-        "type": "string",
-        "default": "真",
-        "description": "【超管】指令启用开关(真/假；假=不再响应)"
-      },
       "武器升星": {
         "type": "string",
         "default": "真",
@@ -2163,11 +2093,6 @@
         "description": "【超管】指令启用开关(真/假；假=不再响应)"
       },
       "测试testxb8": {
-        "type": "string",
-        "default": "真",
-        "description": "【超管】指令启用开关(真/假；假=不再响应)"
-      },
-      "测试webdav": {
         "type": "string",
         "default": "真",
         "description": "【超管】指令启用开关(真/假；假=不再响应)"
@@ -2301,11 +2226,6 @@
         "type": "string",
         "default": "真",
         "description": "【超管】指令启用开关(真/假；假=不再响应)"
-      },
-      "自我": {
-        "type": "string",
-        "default": "真",
-        "description": "【银行】指令启用开关(真/假；假=不再响应)"
       },
       "自我保释": {
         "type": "string",
@@ -2521,6 +2441,21 @@
         "type": "string",
         "default": "真",
         "description": "【签到】指令启用开关(真/假；假=不再响应)"
+      },
+      "加入猜字谜": {
+        "type": "string",
+        "default": "真",
+        "description": "【娱乐】指令启用开关(真/假；假=不再响应)"
+      },
+      "退出猜字谜": {
+        "type": "string",
+        "default": "真",
+        "description": "【娱乐】指令启用开关(真/假；假=不再响应)"
+      },
+      "测试图片": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
       }
     }
   },
@@ -2658,16 +2593,6 @@
         "default": "",
         "description": "【超管】webdav测试回复模板(留空=默认；多个用 | 分隔随机取一)"
       },
-      "xb备份": {
-        "type": "text",
-        "default": "",
-        "description": "【超管】xb备份回复模板(留空=默认；多个用 | 分隔随机取一)"
-      },
-      "xb版本": {
-        "type": "text",
-        "default": "",
-        "description": "【超管】xb版本回复模板(留空=默认；多个用 | 分隔随机取一)"
-      },
       "三十连抽": {
         "type": "text",
         "default": "",
@@ -2742,11 +2667,6 @@
         "type": "text",
         "default": "",
         "description": "【超管】关闭维护回复模板(留空=默认；多个用 | 分隔随机取一)"
-      },
-      "关闭维护模式": {
-        "type": "text",
-        "default": "",
-        "description": "【超管】关闭维护模式回复模板(留空=默认；多个用 | 分隔随机取一)"
       },
       "冒险": {
         "type": "text",
@@ -2888,16 +2808,6 @@
         "default": "",
         "description": "【超管】备份回复模板(留空=默认；多个用 | 分隔随机取一)"
       },
-      "备份xb": {
-        "type": "text",
-        "default": "",
-        "description": "【超管】备份xb回复模板(留空=默认；多个用 | 分隔随机取一)"
-      },
-      "备份数据": {
-        "type": "text",
-        "default": "",
-        "description": "【超管】备份数据回复模板(留空=默认；多个用 | 分隔随机取一)"
-      },
       "复活币排行": {
         "type": "text",
         "default": "",
@@ -2937,21 +2847,6 @@
         "type": "text",
         "default": "",
         "description": "【奴隶】宝物菜单回复模板(留空=默认；多个用 | 分隔随机取一)"
-      },
-      "小白升级": {
-        "type": "text",
-        "default": "",
-        "description": "【超管】小白升级回复模板(留空=默认；多个用 | 分隔随机取一)"
-      },
-      "小白更新": {
-        "type": "text",
-        "default": "",
-        "description": "【超管】小白更新回复模板(留空=默认；多个用 | 分隔随机取一)"
-      },
-      "小白版本": {
-        "type": "text",
-        "default": "",
-        "description": "【超管】小白版本回复模板(留空=默认；多个用 | 分隔随机取一)"
       },
       "帮派列表": {
         "type": "text",
@@ -3088,11 +2983,6 @@
         "default": "",
         "description": "【帮派】我的贡献回复模板(留空=默认；多个用 | 分隔随机取一)"
       },
-      "我要": {
-        "type": "text",
-        "default": "",
-        "description": "【银行】我要回复模板(留空=默认；多个用 | 分隔随机取一)"
-      },
       "我要出狱": {
         "type": "text",
         "default": "",
@@ -3127,11 +3017,6 @@
         "type": "text",
         "default": "",
         "description": "【签到】打卡回复模板(留空=默认；多个用 | 分隔随机取一)"
-      },
-      "打开维护": {
-        "type": "text",
-        "default": "",
-        "description": "【超管】打开维护回复模板(留空=默认；多个用 | 分隔随机取一)"
       },
       "打架": {
         "type": "text",
@@ -3188,20 +3073,10 @@
         "default": "",
         "description": "【娱乐】接龙进度回复模板(留空=默认；多个用 | 分隔随机取一)"
       },
-      "插件版本": {
-        "type": "text",
-        "default": "",
-        "description": "【超管】插件版本回复模板(留空=默认；多个用 | 分隔随机取一)"
-      },
       "携带精灵": {
         "type": "text",
         "default": "",
         "description": "【精灵】携带精灵回复模板(留空=默认；多个用 | 分隔随机取一)"
-      },
-      "更新": {
-        "type": "text",
-        "default": "",
-        "description": "【超管】更新回复模板(留空=默认；多个用 | 分隔随机取一)"
       },
       "查接龙": {
         "type": "text",
@@ -3222,11 +3097,6 @@
         "type": "text",
         "default": "",
         "description": "【坐骑】查看坐骑回复模板(留空=默认；多个用 | 分隔随机取一)"
-      },
-      "查看更新": {
-        "type": "text",
-        "default": "",
-        "description": "【超管】查看更新回复模板(留空=默认；多个用 | 分隔随机取一)"
       },
       "查看欢迎坐骑": {
         "type": "text",
@@ -3298,11 +3168,6 @@
         "default": "",
         "description": "【超管】检查更新回复模板(留空=默认；多个用 | 分隔随机取一)"
       },
-      "检查版本": {
-        "type": "text",
-        "default": "",
-        "description": "【超管】检查版本回复模板(留空=默认；多个用 | 分隔随机取一)"
-      },
       "武器升星": {
         "type": "text",
         "default": "",
@@ -3362,11 +3227,6 @@
         "type": "text",
         "default": "",
         "description": "【超管】测试testxb8回复模板(留空=默认；多个用 | 分隔随机取一)"
-      },
-      "测试webdav": {
-        "type": "text",
-        "default": "",
-        "description": "【超管】测试webdav回复模板(留空=默认；多个用 | 分隔随机取一)"
       },
       "添加护法": {
         "type": "text",
@@ -3487,11 +3347,6 @@
         "type": "text",
         "default": "",
         "description": "【超管】群列表回复模板(留空=默认；多个用 | 分隔随机取一)"
-      },
-      "自我": {
-        "type": "text",
-        "default": "",
-        "description": "【银行】自我回复模板(留空=默认；多个用 | 分隔随机取一)"
       },
       "自我保释": {
         "type": "text",
@@ -3667,6 +3522,1102 @@
         "type": "text",
         "default": "",
         "description": "【签到】魅力榜回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "加入猜字谜": {
+        "type": "text",
+        "default": "",
+        "description": "【娱乐】加入猜字谜回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "退出猜字谜": {
+        "type": "text",
+        "default": "",
+        "description": "【娱乐】退出猜字谜回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "测试图片": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】测试图片回复模板(留空=默认；多个用 | 分隔随机取一)"
+      }
+    }
+  },
+  "指令权限配置": {
+    "type": "object",
+    "description": "指令权限：超管=仅超管可用（非超管静默无响应），默认所有人",
+    "items": {
+      "30连抽": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "50连抽": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "webdav测试": {
+        "type": "string",
+        "default": "超管",
+        "description": "【超管】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "三十连抽": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "丢弃坐骑": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【坐骑】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "丢弃精灵": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【精灵】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "个人排行": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【签到】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "个人财富榜": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【签到】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "买下": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "买奴隶位": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "二四点": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【娱乐】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "五十连抽": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "体力排行榜": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【签到】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "体力榜": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【签到】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "使用精灵球": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【精灵】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "保护": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "保释": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【银行】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "修改宣言": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【帮派】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "修筑城墙": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【帮派】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "充钱": {
+        "type": "string",
+        "default": "超管",
+        "description": "【超管】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "关闭维护": {
+        "type": "string",
+        "default": "超管",
+        "description": "【超管】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "冒险": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【冒险】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "冒险系统": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【冒险】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "出战状态": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【精灵】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "出战精灵": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【精灵】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "出狱": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【银行】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "出让帮派": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【帮派】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "切换坐骑": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【坐骑】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "创建帮派": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【帮派】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "加入二四点": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【娱乐】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "加入字谜": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【娱乐】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "加入帮派": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【帮派】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "加入急转弯": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【娱乐】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "加入接龙": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【娱乐】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "加入猜数": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【娱乐】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "加入答题": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【娱乐】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "劫狱": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【银行】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "十连抽": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "升星": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "升阶": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "发红包": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【银行】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "发起帮战": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【帮派】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "取款": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【银行】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "取消护法": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【帮派】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "同意加入帮派": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【帮派】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "同意邀请": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【帮派】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "回收出战精灵": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【精灵】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "回收欢迎坐骑": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【坐骑】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "坐骑商城": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【坐骑】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "坐骑系统": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【坐骑】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "备份": {
+        "type": "string",
+        "default": "超管",
+        "description": "【超管】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "复活币排行": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【冒险】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "奴隶打工": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "奴隶收工": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "奴隶系统": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "娱乐系统": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【娱乐】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "存款": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【银行】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "学习": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "宝物升阶": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "宝物菜单": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "帮派列表": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【帮派】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "帮派升级": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【帮派】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "帮派排行": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【帮派】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "帮派管理": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【帮派】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "帮派系统": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【帮派】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "帮派贡献": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【帮派】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "帮派邀请": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【帮派】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "应用统计": {
+        "type": "string",
+        "default": "超管",
+        "description": "【超管】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "开启维护": {
+        "type": "string",
+        "default": "超管",
+        "description": "【超管】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "开始二四点": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【娱乐】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "开始急转弯": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【娱乐】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "开始接龙": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【娱乐】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "开始猜字谜": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【娱乐】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "开始猜数": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【娱乐】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "开始答题": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【娱乐】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "强制取款": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【银行】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "当前冒险": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【冒险】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "当前接龙": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【娱乐】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "成员列表": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【帮派】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "我加入接龙": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【娱乐】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "我的信息": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "我的修筑": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【帮派】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "我的坐骑": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【坐骑】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "我的帮派": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【帮派】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "我的排行": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【签到】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "我的精灵": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【精灵】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "我的背包": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【精灵】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "我的贡献": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【帮派】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "我要出狱": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【银行】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "我要学习": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "我要打工": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "我要祈福": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "我要自由": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "我要越狱": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【银行】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "我要进监狱": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【银行】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "我要造反": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "打劫": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【银行】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "打劫银行": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【银行】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "打卡": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【签到】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "打架": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "扔炸弹": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【娱乐】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "扣钱": {
+        "type": "string",
+        "default": "超管",
+        "description": "【超管】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "折磨": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "抢红包": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【银行】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "抽奖": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【签到】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "抽武器": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "抽签": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【娱乐】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "挑战": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【精灵】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "排行榜": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "接受邀请": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【帮派】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "接龙词": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【娱乐】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "接龙进度": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【娱乐】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "携带精灵": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【精灵】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "查接龙": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【娱乐】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "查看出战精灵": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【精灵】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "查看地图": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【精灵】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "查看坐骑": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【坐骑】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "查看欢迎坐骑": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【坐骑】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "查看精灵": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【精灵】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "查看维护": {
+        "type": "string",
+        "default": "超管",
+        "description": "【超管】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "查询": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "查询冒险": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "查询地图": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "查询坐骑": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "查询帮派": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "查询更新": {
+        "type": "string",
+        "default": "超管",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "查询版本": {
+        "type": "string",
+        "default": "超管",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "查询精灵": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "查询维护": {
+        "type": "string",
+        "default": "超管",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "查询菜单": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "检查更新": {
+        "type": "string",
+        "default": "超管",
+        "description": "【超管】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "武器升星": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "武器菜单": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "每日点赞": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【签到】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "测试testxb": {
+        "type": "string",
+        "default": "超管",
+        "description": "【超管】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "测试testxb1": {
+        "type": "string",
+        "default": "超管",
+        "description": "【超管】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "测试testxb2": {
+        "type": "string",
+        "default": "超管",
+        "description": "【超管】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "测试testxb3": {
+        "type": "string",
+        "default": "超管",
+        "description": "【超管】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "测试testxb4": {
+        "type": "string",
+        "default": "超管",
+        "description": "【超管】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "测试testxb5": {
+        "type": "string",
+        "default": "超管",
+        "description": "【超管】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "测试testxb6": {
+        "type": "string",
+        "default": "超管",
+        "description": "【超管】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "测试testxb7": {
+        "type": "string",
+        "default": "超管",
+        "description": "【超管】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "测试testxb8": {
+        "type": "string",
+        "default": "超管",
+        "description": "【超管】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "添加护法": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【帮派】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "清空": {
+        "type": "string",
+        "default": "超管",
+        "description": "【超管】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "点赞": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【签到】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "版本": {
+        "type": "string",
+        "default": "超管",
+        "description": "【超管】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "猜拳": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【娱乐】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "祈福": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "禁言": {
+        "type": "string",
+        "default": "超管",
+        "description": "【超管】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "移出帮派": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【帮派】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "签到": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【签到】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "签到排行": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "签到排行榜": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "签到榜": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【签到】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "签到系统": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【签到】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "管理帮派": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【帮派】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "精灵冒险": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【精灵】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "精灵列表": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【精灵】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "精灵商城": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【精灵】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "精灵地图": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【精灵】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "精灵对战": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【精灵】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "精灵排行": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【精灵】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "精灵系统": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【精灵】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "结束冒险": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【冒险】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "结束接龙": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【娱乐】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "维护信息": {
+        "type": "string",
+        "default": "超管",
+        "description": "【超管】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "羁绊": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【精灵】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "群列表": {
+        "type": "string",
+        "default": "超管",
+        "description": "【超管】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "自我保释": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【银行】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "补偿": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "解散帮派": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【帮派】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "讨好": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "讨好主人": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "设置欢迎坐骑": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【坐骑】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "财富榜": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【签到】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "购买": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【精灵】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "购买体力": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【签到】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "购买坐骑": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【精灵】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "购买奴隶位": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "购买魅力": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【签到】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "赌博": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【银行】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "赎身": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "超管列表": {
+        "type": "string",
+        "default": "超管",
+        "description": "【超管】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "超管系统": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【超管】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "越狱": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【银行】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "踢人": {
+        "type": "string",
+        "default": "超管",
+        "description": "【超管】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "身价排行": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "身价排行榜": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "转账": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【银行】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "进化": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【精灵】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "进监狱": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【银行】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "退出二四点": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【娱乐】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "退出字谜": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【娱乐】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "退出帮派": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【帮派】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "退出急转弯": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【娱乐】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "退出接龙": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【娱乐】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "退出猜数": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【娱乐】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "退出答题": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【娱乐】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "选择": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【冒险】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "造反": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "释放": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "重置": {
+        "type": "string",
+        "default": "超管",
+        "description": "【超管】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "重置接龙": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【娱乐】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "银行系统": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【银行】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "领养精灵": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【精灵】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "领取帮派福利": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【帮派】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "领取新人礼包": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【签到】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "领取新手礼包": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【签到】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "领取精灵礼包": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【精灵】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "魅力排行榜": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【签到】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "魅力榜": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【签到】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "加入猜字谜": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【娱乐】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "退出猜字谜": {
+        "type": "string",
+        "default": "所有人",
+        "description": "【娱乐】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
+      },
+      "测试图片": {
+        "type": "string",
+        "default": "超管",
+        "description": "【超管】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
       }
     }
   },

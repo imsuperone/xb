@@ -1,6 +1,6 @@
 # 小白机器人 (astrbot_plugin_xbbot) — AI 开发者架构与交接手册 (AIREADME)
 
-> **当前版本**：`v0.7.26`
+> **当前版本**：`v0.7.27`
 > **对象**：接手本项目的 AI 编程助手与核心维护者
 > **定位**：AstrBot 大型群互动插件（奴隶/签到/银行/娱乐/私聊/精灵/坐骑/超管/帮派/冒险 10 引擎 + WebUI）
 > **红线唯一出处**：`AIINFO.md` 十二大红线 + 六条语义铁律，本手册只讲实现位置，不复述。
@@ -23,7 +23,7 @@ astrbot_plugin_xbbot/
 └── pages/admin/           # WebUI：14 Tab；商城/图鉴隔离；自研弹窗（禁原生 confirm/prompt）
 ```
 
-- **法则 7 全静默**：`superadmin.handle` / `main._dispatch`（超管列表/测试testxb）/ `dispatch` / `test_harness` 中所有 `is_admin=False` 分支一律 `return None`（保留 `stop_event`），禁任何“无权限”文案。`版本/检查更新`是公开只读例外。
+- **法则 7 全静默**：`superadmin.handle` / `main._dispatch`（超管列表/测试testxb）/ `dispatch` / `test_harness` 中所有 `is_admin=False` 分支一律 `return None`（保留 `stop_event`），禁任何“无权限”文案。v0.7.27 起`版本/检查更新`不再公开；`router._cmd_need_admin` 对权限=超管的指令同样静默；超管指令一令一名禁别名。
 - **法则 5**：9 处版本号 + `verify_plugin.py` 强校验；`updater._parse_version_tuple` 纪元比较。
 
 ## 2. 存储、备份与隐私（store.py）
@@ -39,8 +39,8 @@ astrbot_plugin_xbbot/
 
 ## 3. 指令体系（router.py）
 
-- 总开关 → 群开关 → 维护 → 私聊直走 chat → 主菜单 → 自定义（最长命中）→ 禁用拦截 → 9 引擎 → 超管。
-- `指令启用配置` 228 开关（默认真=行为不变，v0.7.26 起空格变体合并规范键，匹配空格无关）；`指令回复配置` 228 场景（默认空=内置回复）；`_collect_commands` 为唯一采集源，改引擎指令写法后重跑播种脚本（`Temp/opencode/seed_schema_075.py` 思路）。
+- 总开关 → 群开关 → 维护 → 私聊直走 chat → 主菜单 → 自定义（最长命中）→ 禁用拦截 → 超管权限拦截（非超管静默） → 9 引擎 → 超管。
+- `指令启用配置` 215 开关（默认真=行为不变，v0.7.26 起空格变体合并规范键，匹配空格无关；v0.7.27 去超管别名/噪音）；`指令回复配置` 215 场景（默认空=内置回复）；`指令权限配置` 215 位（默认所有人，30 键默认超管）；`_collect_commands` 为唯一采集源，改引擎指令写法后重跑播种脚本（`Temp/opencode/seed_schema_075.py` 思路）。
 - 昵称：`set/get/clear_note_name` + `find_qq_by_name`（精确 O(1)，模糊限本群）；`_AT_NAMES` 全局辅助。
 
 ## 4. 数值平衡（config_api.py PRESETS）
@@ -108,6 +108,7 @@ git add -A; git commit -m "..."; git push origin main; git tag vx.y.z -f; git pu
 
 | 版本 | 主题 |
 | :--- | :--- |
+| v0.7.27 | 超管全锁；每指令权限+数值全覆盖；采集去噪；数值调整改回指令页 |
 | v0.7.26 | 平衡弹窗可关；指令去空格重；必要配置放行数值节 |
 | v0.7.25 | 主入口精简；表驱动+统一委托 |
 | v0.7.24 | 全量审计修复；耗时异步化；存储加固 |

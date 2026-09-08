@@ -9,6 +9,8 @@ _REPLY_OVERRIDE_SEC = "指令回复配置"
 _DEFAULT_MARKERS = ("{回复}", "{默认}", "默认", "默认回复")
 _CUSTOM_SEC = "自定义指令配置"
 _DISABLE_SEC = "指令启用配置"
+_PERM_SEC = "指令权限配置"
+_ADMIN_ONLY = "超管"
 _SYS_ENG = {'slave': '奴隶', 'sign': '签到', 'bank': '银行', 'ent': '娱乐', 'spirit': '精灵', 'ride': '坐骑', 'guild': '帮派', 'superadmin': '超管', 'chat': '聊天', 'adventure': '冒险'}
 
 _MAIN_MENU = (
@@ -325,7 +327,7 @@ def _render_vars(tpl, gid, qq, store):
         return tpl
 
 
-_CUSTOM_IDX = {"ver": -1, "cmds": (), "dis": (), "ovr": (), "_fp": None}
+_CUSTOM_IDX = {"ver": -1, "cmds": (), "dis": (), "ovr": (), "adm": (), "_fp": None}
 
 def _custom_fp(store):
     try:
@@ -343,7 +345,8 @@ def _custom_fp(store):
         _c1 = store._CONFIG.get(_CUSTOM_SEC) if hasattr(store, "_CONFIG") else None
         _c2 = store._CONFIG.get(_DISABLE_SEC) if hasattr(store, "_CONFIG") else None
         _c3 = store._CONFIG.get(_REPLY_OVERRIDE_SEC) if hasattr(store, "_CONFIG") else None
-        return (_fp_sec(_c1), _fp_sec(_c2), _fp_sec(_c3))
+        _c4 = store._CONFIG.get(_PERM_SEC) if hasattr(store, "_CONFIG") else None
+        return (_fp_sec(_c1), _fp_sec(_c2), _fp_sec(_c3), _fp_sec(_c4))
     except Exception:
         return None
 
@@ -371,7 +374,7 @@ def _custom_idx(store):
             return _CUSTOM_IDX
     except Exception:
         pass
-    cmds, dis, ovr = (), (), ()
+    cmds, dis, ovr, adm = (), (), (), ()
     try:
         sec = store._CONFIG.get(_CUSTOM_SEC) if hasattr(store, "_CONFIG") else None
         if isinstance(sec, dict):
@@ -391,7 +394,13 @@ def _custom_idx(store):
     except Exception:
         pass
     try:
-        _CUSTOM_IDX["ver"], _CUSTOM_IDX["cmds"], _CUSTOM_IDX["dis"], _CUSTOM_IDX["ovr"] = ver, cmds, dis, ovr
+        sec4 = store._CONFIG.get(_PERM_SEC) if hasattr(store, "_CONFIG") else None
+        if isinstance(sec4, dict):
+            adm = tuple(sorted((str(k) for k, v in sec4.items() if str(k) and str(v).strip() == _ADMIN_ONLY), key=lambda x: len(_norm_cmd(x)), reverse=True))
+    except Exception:
+        pass
+    try:
+        _CUSTOM_IDX["ver"], _CUSTOM_IDX["cmds"], _CUSTOM_IDX["dis"], _CUSTOM_IDX["ovr"], _CUSTOM_IDX["adm"] = ver, cmds, dis, ovr, adm
         try:
             _CUSTOM_IDX["_fp"] = fp
         except Exception:
@@ -477,6 +486,36 @@ def _cmd_disabled(raw, store):
         return None
 
 
+def _cmd_need_admin(raw, store):
+    """指令超管权限：命中 指令权限配置=超管 的规范键（空格无关，最长匹配）时仅超管可用"""
+    try:
+        raw_n = _norm_cmd(raw)
+        if not raw_n:
+            return None
+        try:
+            _adm = _custom_idx(store).get("adm") or ()
+        except Exception:
+            _adm = ()
+        if _adm:
+            for k in _adm:
+                if raw_n.startswith(_norm_cmd(k)):
+                    return k
+            return None
+        sec = store._CONFIG.get(_PERM_SEC) if hasattr(store, "_CONFIG") else None
+        if not isinstance(sec, dict):
+            return None
+        hit = None
+        for k, v in sec.items():
+            k = str(k)
+            if not k or str(v).strip() != _ADMIN_ONLY:
+                continue
+            if raw_n.startswith(_norm_cmd(k)) and (hit is None or len(_norm_cmd(k)) > len(_norm_cmd(hit))):
+                hit = k
+        return hit
+    except Exception:
+        return None
+
+
 def handle(gid, qq, raw, is_private=False, is_admin=False, store=None, engines=None, chat_mod=None, superadmin_mod=None):
     # 自定义索引版本兜底：handle_cfg_save 直改 _CONFIG 不走 set_config 时 ver 未 bump，
     # 每次使用 _CUSTOM_IDX 前以 ver+内容指纹重建，避免 stale（群聊仍不走 chat，只补映射不断路）
@@ -533,6 +572,13 @@ def handle(gid, qq, raw, is_private=False, is_admin=False, store=None, engines=N
     dis = _cmd_disabled(raw, store) if store else None
     if dis:
         return "【指令】「%s」已被禁用，无法使用该功能！如需开启，请在指令页勾选启用。" % dis
+    # 超管权限：命中 指令权限配置=超管 的指令，非超管一律静默（与超管系统同规则）
+    if not is_admin and store:
+        try:
+            if _cmd_need_admin(raw, store):
+                return None
+        except Exception:
+            pass
     # 依次分发 9 引擎（批量守卫预计算，单消息18次读→0次）
     _batch_map = _batch_guard_map(gid, is_admin, store) if store and not is_private else {}
     if engines:

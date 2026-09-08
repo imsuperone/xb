@@ -144,10 +144,16 @@ def _collect_commands(base_dir="", store=None):
             src = "\n".join(_lines)
             cmds = []
 
+            # 采集噪音：否定守卫元组里的路由前缀（非独立指令）+ 单字选项（作开关会误伤所有同字开头消息）
+            # 来源：bank.py:1077（我要/自我）、ent.py:1124/1127（开始/加入/退出）、adventure.py:317（一/二/三）
+            _CMD_NOISE = {"我要", "自我", "开始", "加入", "退出"}
+
             def _add(_c):
                 _c = _c.strip()
                 # 规范键：去内部空格（查询坐骑/查询 坐骑系同一指令），一词一开关，禁一词多开关
                 _canon = _c.replace(" ", "")
+                if len(_canon) < 2 or _canon in _CMD_NOISE:
+                    return
                 if _canon and re.search(r"[\u4e00-\u9fff]", _canon) and _canon not in cmds:
                     cmds.append(_canon)
             # RE1 单串+元组：body 内再抽所有引号串，兼容 text.startswith(("a","b"))
