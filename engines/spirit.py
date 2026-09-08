@@ -256,24 +256,27 @@ def cmd_view(gid, qq, name):
     it = _wsp(sp, name)
     if not it:
         return "亲，您没有该精灵，请到野外冒险捕获吧！"
-    _img = ""
+    _pp = ""
     try:
         _base = _SPIRITS().get(it.get("name"), {}) or {}
         _imgp = str(_base.get("img", "") or "").strip()
         if _imgp:
-            _img = _img_cq(_imgp)
+            _pp = _img_path(_imgp)
     except Exception:
-        _img = ""
-    return (f"您的精灵【{it.get('name','?')}】\r\n"
+        _pp = ""
+    _txt = (f"您的精灵【{it.get('name','?')}】\r\n"
             f"属性：{it.get('type') or '-'}\r\n"
             f"等级：Lv.{it.get('level',1)}　经验：{it.get('exp',0)}/{_exp_need(it)}\r\n"
             f"生命：{it.get('hp',0)}　攻击：{it.get('atk',0)}　防御：{it.get('def',0)}\r\n"
             f"特攻：{it.get('spa',0)}　特防：{it.get('spd',0)}　速度：{it.get('spe',0)}\r\n"
-            f"总战力：{_power(it)}" + (_img or ""))
+            f"总战力：{_power(it)}")
+    if _pp:
+        return _txt, [_pp]
+    return _txt
 
 
-def _img_cq(path):
-    """CQ 图片段：支持 data/ 相对路径与绝对路径，文件缺失返回空"""
+def _img_path(path):
+    """元组图片路径：支持 data/ 相对与绝对，缺失返回空（图2路径）"""
     try:
         import os as _os2
         p = str(path or "").strip()
@@ -305,7 +308,19 @@ def _img_cq(path):
             p = _hit
         if not _os2.path.isfile(p):
             return ""
-        pp = _os2.path.abspath(p).replace("\\", "/")
+        return _os2.path.abspath(p)
+    except Exception:
+        return ""
+
+
+def _img_cq(path):
+    """CQ 图片段（遗留兼容；引擎内部已统一走元组 _img_path）"""
+    try:
+        import os as _os2
+        p = _img_path(path)
+        if not p:
+            return ""
+        pp = p.replace("\\", "/")
         if not pp.startswith("/"):
             pp = "/" + pp
         return f"[CQ:image,file=file://{pp}]"

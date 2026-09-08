@@ -449,10 +449,10 @@ def _version():
                 except Exception:
                     pass
         if not ver:
-            ver = "0.7.13"
+            ver = "0.7.14"
         return f"小白版本：{ver}"
     except Exception:
-        return "小白版本：0.7.13"
+        return "小白版本：0.7.14"
 
 # ---- 统一入口（测试指令仅超管，WebUI可配但不显示于MENU，已删 个人信息） ----
 # 注意：凡 handle() 响应的别名必须同步进本表；非超管命中一律静默 None（BY DESIGN，见 AIINFO）
@@ -460,10 +460,11 @@ _ADMIN_CMDS = ("群列表", "应用统计", "扣钱", "充钱", "清空", "重�
 
 
 def _cmd_imgtest():
-    """超管图片链路诊断：文本报告 + CQ 内嵌图 + 元组图一次同发，定位断点。
+    """超管图片链路诊断：文本报告 + 双图元组直传（图2路径，生产验证有效）。
 
-    发送后对照：图1(CQ 路径)与图2(元组路径)各应出现一张。
-    只见文字不见图→看缺哪张：缺图1=CQ解析/适配器问题；缺图2=元组链路问题；都没图=适配器发图整体失败或文件不可读。
+    发送后对照：图1/图2各应出现一张（均走元组）。
+    只见文字不见图→都没图=适配器发图整体失败或文件不可读；缺一张=对应文件缺失。
+    CQ 路径已退役（中文+斜杠在适配器侧不稳定），引擎内部不再拼CQ。
     """
     lines = ["🧪 图片链路诊断"]
     try:
@@ -510,11 +511,9 @@ def _cmd_imgtest():
             lines.append("图%d：%s（%dKB，存在✅）" % (i, os.path.basename(p), sz // 1024))
         except Exception:
             lines.append("图%d：%s" % (i, os.path.basename(p)))
-    lines.append("下面应出现 2 张图：图1 走 CQ 码路径，图2 走元组路径")
-    p0 = cands[0].replace("\\", "/")
-    cq = "[CQ:image,file=file://%s]" % (p0 if p0.startswith("/") else "/" + p0)
-    text = "\r\n".join(lines) + "\r\n" + cq
-    imgs = [cands[1] if len(cands) > 1 else cands[0]]
+    lines.append("下面应出现 2 张图：图1/图2 均走元组路径")
+    text = "\r\n".join(lines)
+    imgs = list(cands[:2]) if len(cands) >= 2 else list(cands[:1])
     return text, imgs
 
 
@@ -608,7 +607,7 @@ def handle(gid, qq, raw, is_admin=False):
         return _maint_msg(text[4:].strip())
     if text == "查看维护":
         sw = ST.cfg("维护配置", "维护开关", "假")
-        msg = ST.cfg("维护配置", "维护信息", "🚧 维护中，仅超管可用，请稍后再试。")
+        msg = ST.cfg("维护配置", "维护信息", "🚧 维护中")
         return f"维护开关：{sw}\r\n维护信息：{msg}"
     # 测试指令（WebUI 指令-超管系统可见，聊天不显示，仅 main._dispatch 处理）
     if text.startswith("测试testxb"):

@@ -439,10 +439,34 @@ def treasures_of(u):
     return [t for t in uget(u, "treasure").split("|") if t]
 
 
+def _treasure_effects_raw():
+    """宝物自定义效果表（商城图鉴 treasure_effects {名: 效果}）；空=未自定义"""
+    try:
+        v = store.cfg("商城图鉴", "treasure_effects", "")
+        if isinstance(v, dict) and v:
+            return v
+        if v:
+            d = _json.loads(v)
+            if isinstance(d, dict) and d:
+                return d
+    except Exception:
+        pass
+    return {}
+
+
 def _treasure_effect(tname):
-    """宝物效果文案统一口径：酒神/四象走专属，自增宝物走通用收藏（获取/升阶/详情三处共用）"""
+    """宝物效果文案统一口径：自定义效果 > 酒神/四象专属 > 通用收藏（获取/升阶/详情三处共用）"""
     try:
         t = str(tname or "")
+        try:
+            _custom = _treasure_effects_raw().get(t, "")
+            if isinstance(_custom, dict):
+                _custom = str(_custom.get("effect", "") or "")
+            _custom = str(_custom or "").strip()
+            if _custom:
+                return _custom
+        except Exception:
+            pass
         if "酒神" in t:
             return T.GOURD_EFFECT
         if "四象" in t or "护符" in t:
@@ -1450,9 +1474,9 @@ def cmd_gacha(gid, qq, st, count=1):
                 uset(u, name, "1")
                 if not st.has_option(str(qq), name + "升星"):
                     uset(u, name + "升星", "0")
-                cq = _img_cq(_os.path.abspath(imgpath))
-                if cq:
-                    imgs.append(cq)
+                _pp = _img_path(_os.path.abspath(imgpath))
+                if _pp:
+                    imgs.append(_pp)
                 got_ssr = True
                 results.append(f"🌟NEW! {name}")
         else:
@@ -1477,9 +1501,9 @@ def cmd_gacha(gid, qq, st, count=1):
     out += "\r\n" + (T.GACHA_TOTAL_EXP.format(exp=exp_total))
     out += "\r\n💡 R/SR已自动转为经验; SSR可装备出战"
     if imgs:
-        # 十连及以上展示最多10张，单抽展示1张
+        # 十连及以上展示最多10张，单抽展示1张；元组直传（图2路径，不再拼CQ字符串）
         lim = 10 if count >= 10 else 4
-        out += "\r\n" + "".join(imgs[:lim])
+        return out, imgs[:lim]
     return out
 
 
@@ -1569,12 +1593,64 @@ def _weapon_shop():
             pass
     return {}
 
+def _weapon_shop_raw():
+    """返回原始 weapon_shop 配置对象(可能含 {price,atk,desc,img})，供取图/数值用；空=未自定义"""
+    v = store.cfg("商城图鉴", "weapon_shop", "")
+    if isinstance(v, dict) and v:
+        return v
+    if v:
+        try:
+            d = _json.loads(v)
+            if isinstance(d, dict) and d:
+                return d
+        except Exception:
+            pass
+    return {}
+
+
+def _weapon_img_path(name):
+    """取武器绑定图片路径(优先配置的 img)，否则回退抽奖池文件；空即无图"""
+    try:
+        raw = _weapon_shop_raw()
+        if raw and isinstance(raw, dict):
+            v = raw.get(name)
+            if isinstance(v, dict) and str(v.get("img") or "").strip():
+                p = str(v.get("img")).strip()
+                if _os.path.isabs(p):
+                    if _os.path.isfile(p):
+                        return [_os.path.abspath(p)]
+                else:
+                    try:
+                        base = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+                        cand = _os.path.join(base, p)
+                        if _os.path.isfile(cand):
+                            return [_os.path.abspath(cand)]
+                    except Exception:
+                        pass
+                    if _os.path.isfile(p):
+                        return [_os.path.abspath(p)]
+                # 配置了但文件缺失则继续回退抽奖池，避免黑图
+    except Exception:
+        pass
+    try:
+        for rar in ("SSR", "SR", "R"):
+            for p in _gacha_pool(rar):
+                try:
+                    if _os.path.splitext(_os.path.basename(p))[0] == name and _os.path.isfile(p):
+                        return [_os.path.abspath(p)]
+                except Exception:
+                    continue
+    except Exception:
+        pass
+    return []
+
+
 def _sync_weapon_shop(name):
     try:
         ws = _weapon_shop()
         if name not in ws:
             # 自动同步抽奖武器至商城，默认价 50000 可在 WebUI 改
-            ws[name] = {"price": 50000, "atk": 0, "desc": ""}
+            ws[name] = {"price": 50000, "atk": 0, "desc": "", "img": ""}
             store.set_ini("商城图鉴", "weapon_shop", _json.dumps(ws, ensure_ascii=False))
             try:
                 store.save_config()
@@ -1987,13 +2063,19 @@ def _route_locked(gid, qq, raw):
         lv = star_of(u, q)
         table = STAR_ATK
         owned = q in weapons_of(u)
-        imgp = ssr_img_map.get(q, _os.path.join(DATA_DIR, "gacha_img", "SSR", q + ".png"))
-        img = _img_cq(imgp)
-        return (T.W_NAME.format(name=q) + f"★{lv}\r\n"
+        _lst = _weapon_img_path(q)
+        if _lst:
+            _pp = _lst[0]
+        else:
+            imgp = ssr_img_map.get(q, _os.path.join(DATA_DIR, "gacha_img", "SSR", q + ".png"))
+            _pp = _img_path(imgp)
+        _txt = (T.W_NAME.format(name=q) + f"★{lv}\r\n"
                 + T.W_EFFECT.format(atk=f"+{table[min(5, lv)]}") + "\r\n"
                 + T.W_5STAR_EFFECT + "\r\n"
-                + ("✔你已拥有" if owned else "✖未拥有")
-                + "\r\n" + img)
+                + ("✔你已拥有" if owned else "✖未拥有"))
+        if _pp:
+            return _txt, [_pp]
+        return _txt
 
     return None
 
@@ -2001,11 +2083,22 @@ def _route_locked(gid, qq, raw):
 
 _IMG_BASE = _os.path.join(DATA_DIR, "gacha_img")
 
-def _img_cq(path):
-    """CQ 图片段: 本地文件绝对路径(OneBot 原生支持 file:/// 本机读图)"""
+def _img_path(path):
+    """元组图片路径: 返回绝对路径供 (text, [path]) 元组直传（图2路径，生产验证有效）"""
     try:
         p = _os.path.abspath(path)
         if not _os.path.isfile(p):
+            return ""
+        return p
+    except Exception:
+        return ""
+
+
+def _img_cq(path):
+    """CQ 图片段（遗留兼容，仅自定义回复解析用；引擎内部已统一走元组）"""
+    try:
+        p = _img_path(path)
+        if not p:
             return ""
         pp = p.replace("\\", "/")
         if not pp.startswith("/"):

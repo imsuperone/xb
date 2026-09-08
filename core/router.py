@@ -488,7 +488,7 @@ def handle(gid, qq, raw, is_private=False, is_admin=False, store=None, engines=N
     # 维护开关
     try:
         if store and store.cfg("维护配置", "维护开关", "假") == "真" and not is_admin:
-            return store.cfg("维护配置", "维护信息", "🚧 维护中，仅超管可用，请稍后再试。")
+            return store.cfg("维护配置", "维护信息", "🚧 维护中")
     except Exception:
         pass
     if is_private:
