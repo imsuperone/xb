@@ -5,6 +5,7 @@
 平台操作: 禁言/踢人 通过 AstrBot 适配器 call_action 执行(见 main._do_platform)
 """
 import json
+import os
 import re
 
 try:
@@ -448,14 +449,73 @@ def _version():
                 except Exception:
                     pass
         if not ver:
-            ver = "0.7.11"
+            ver = "0.7.12"
         return f"小白版本：{ver}"
     except Exception:
-        return "小白版本：0.7.11"
+        return "小白版本：0.7.12"
 
 # ---- 统一入口（测试指令仅超管，WebUI可配但不显示于MENU，已删 个人信息） ----
 # 注意：凡 handle() 响应的别名必须同步进本表，否则非超管命中时走静默 None 而非无权限提醒
 _ADMIN_CMDS = ("群列表", "应用统计", "扣钱", "充钱", "清空", "重置", "禁言", "踢人", "备份xb", "备份", "备份数据", "xb备份", "测试webdav", "webdav测试", "开启维护", "打开维护", "关闭维护", "关闭维护模式", "维护信息", "查看维护", "小白版本", "版本", "xb版本", "插件版本", "检查更新", "小白更新", "检查版本", "查询更新", "更新", "查看更新", "小白升级", "测试testxb", "测试testxb1", "测试testxb2", "测试testxb3", "测试testxb4", "测试testxb5", "测试testxb6", "测试testxb7", "测试testxb8", "超管列表")
+
+
+def _cmd_imgtest():
+    """超管图片链路诊断：文本报告 + CQ 内嵌图 + 元组图一次同发，定位断点。
+
+    发送后对照：图1(CQ 路径)与图2(元组路径)各应出现一张。
+    只见文字不见图→看缺哪张：缺图1=CQ解析/适配器问题；缺图2=元组链路问题；都没图=适配器发图整体失败或文件不可读。
+    """
+    lines = ["🧪 图片链路诊断"]
+    try:
+        from ..core import platform as _plat
+        _bound = getattr(_plat, "_Image", None) is not None
+    except Exception:
+        try:
+            from core import platform as _plat
+            _bound = getattr(_plat, "_Image", None) is not None
+        except Exception:
+            _bound = False
+    lines.append("Image 组件绑定：%s" % ("✅ 已绑定" if _bound else "❌ 未绑定（图片将静默丢失）"))
+    cands = []
+    try:
+        base = os.path.dirname(os.path.abspath(__file__))
+        roots = [os.path.join(base, "..", "data", "gacha_img", "SSR"),
+                 os.path.join(base, "..", "data", "img", "坐骑图标"),
+                 os.path.join(base, "..", "data", "img")]
+        for r in roots:
+            try:
+                if os.path.isdir(r):
+                    for fn in sorted(os.listdir(r)):
+                        if fn.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp")):
+                            fp = os.path.abspath(os.path.join(r, fn))
+                            if os.path.isfile(fp):
+                                cands.append(fp)
+                                break
+            except Exception:
+                pass
+            if len(cands) >= 2:
+                break
+    except Exception:
+        pass
+    seen = []
+    for p in cands:
+        if p not in seen:
+            seen.append(p)
+    cands = seen[:2]
+    if not cands:
+        return "\r\n".join(lines + ["❌ 未找到任何可用图片文件", "请检查 data/gacha_img/SSR 与 data/img/坐骑图标 目录是否存在图片"])
+    for i, p in enumerate(cands, 1):
+        try:
+            sz = os.path.getsize(p)
+            lines.append("图%d：%s（%dKB，存在✅）" % (i, os.path.basename(p), sz // 1024))
+        except Exception:
+            lines.append("图%d：%s" % (i, os.path.basename(p)))
+    lines.append("下面应出现 2 张图：图1 走 CQ 码路径，图2 走元组路径")
+    p0 = cands[0].replace("\\", "/")
+    cq = "[CQ:image,file=file://%s]" % (p0 if p0.startswith("/") else "/" + p0)
+    text = "\r\n".join(lines) + "\r\n" + cq
+    imgs = [cands[1] if len(cands) > 1 else cands[0]]
+    return text, imgs
 
 
 def handle(gid, qq, raw, is_admin=False):
@@ -523,6 +583,11 @@ def handle(gid, qq, raw, is_admin=False):
         return cmd_backup_xb()
     if text.startswith("备份xb"):
         return cmd_backup_xb()
+    # 测试图片：超管图片链路诊断；非超管静默无任何提示（不进 _ADMIN_CMDS 名单）
+    if text in ("测试图片", "测试发图", "图片测试"):
+        if not is_admin:
+            return None
+        return _cmd_imgtest()
     if text in ("测试webdav", "webdav测试"):
         try:
             from ..core import webdav as _wd

@@ -38,7 +38,14 @@ def _build_chain(reply):
             return [Plain(reply)] if reply else []
         text, imgs = reply, []
     elif isinstance(reply, tuple):
-        text, imgs = (reply[0], list(reply[1] or []))
+        _second = reply[1] if len(reply) > 1 else []
+        # 兼容字符串单路径：list("C:/...") 会炸成单字，必须先包一层
+        if isinstance(_second, str):
+            _second = [_second] if _second.strip() else []
+        try:
+            text, imgs = (reply[0], list(_second or []))
+        except Exception:
+            text, imgs = (reply[0] if reply else "", [])
     else:
         s = str(reply) if reply is not None else ""
         if "[CQ:image," not in s:
