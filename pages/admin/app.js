@@ -1544,7 +1544,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.7.10"
+        version: res.version || "0.7.11"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -2113,9 +2113,10 @@ function renderSpiritCat() {
     }));
 }
 
-function spiritAttrCards(spirits, dropNames) {
+function spiritAttrCards(spirits, dropNames, assignMaps) {
   // 每个 drop 精灵一张属性卡(数据从 spirits dict 读, 缺失则 seed)
   // 进化目标下拉共用一份 datalist（首卡附带，避免重复 id）
+  // assignMaps 非空时每卡附带地图下拉 + 分配按钮（孤儿精灵上架用）
   let _dl = "";
   try {
     if (!window._spDlDone) {
@@ -2126,6 +2127,8 @@ function spiritAttrCards(spirits, dropNames) {
       }
     }
   } catch (e) {}
+  const _assignOpts = (assignMaps && assignMaps.length)
+    ? assignMaps.map((m) => `<option value="${esc(m)}">${esc(m)}</option>`).join("") : "";
   return dropNames.map((sn) => {
     const it = spirits[sn] || { type: "", hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0, lv: 0, evolve: "否" };
     const cells = SPIRIT_FIELDS.map(([fk, label]) => {
@@ -2137,6 +2140,7 @@ function spiritAttrCards(spirits, dropNames) {
       <div class="sp-name">✦ ${esc(sn)}</div>
       <div class="s-fields">${cells.join("")}
         <button class="s-del" data-del-spirit="${esc(sn)}">移除精灵</button></div>
+        ${_assignOpts ? `<div style="display:flex;gap:4px;margin-top:4px;align-items:center"><select data-assign-map="${esc(sn)}" style="flex:1;padding:4px 6px;border-radius:6px">${_assignOpts}</select><button class="ghost sm" data-assign-spirit="${esc(sn)}">分配进图</button></div>` : ""}
       </div>`;
   }).join("") + _dl;
 }
@@ -2216,7 +2220,7 @@ function renderMaps(q) {
       </div>
     </div>`;
   }).join("") + (_orphans.length
-    ? `<div class="s-mapcard open" style="margin-top:10px"><div class="s-maphead"><span class="s-mapname">🧩 未上架精灵 (${_orphans.length})</span><span class="s-maplv">不在任何地图掉落中</span></div><div class="s-mapbody"><div class="hint" style="margin-bottom:6px">这些精灵不会在野外遭遇，可编辑后加进某地图掉落，或直接移除</div><div class="sp-spirits">${spiritAttrCards(spirits, _orphans)}</div></div></div>`
+    ? `<div class="s-mapcard open" style="margin-top:10px"><div class="s-maphead"><span class="s-mapname">🧩 未上架精灵 (${_orphans.length})</span><span class="s-maplv">不在任何地图掉落中</span></div><div class="s-mapbody"><div class="hint" style="margin-bottom:6px">这些精灵不会在野外遭遇，可编辑后分配进图，或直接移除</div><div class="sp-spirits">${spiritAttrCards(spirits, _orphans, mapNames)}</div></div></div>`
     : ``) + `<button id="mapAddItem" class="ghost" style="margin-top:10px">＋ 添加地图</button>`;
 
   body.querySelectorAll("[data-map-toggle]").forEach((h) =>
@@ -2249,6 +2253,21 @@ function renderMaps(q) {
       SPIRIT_DIRTY = true;
       renderMaps(q);
       toast("已移除精灵，请点击上方「保存图鉴」持久化", "ok");
+    }));
+  body.querySelectorAll("[data-assign-spirit]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      const spName = b.dataset.assignSpirit;
+      const card = b.closest(".sp-card");
+      const sel = card ? card.querySelector("[data-assign-map]") : null;
+      const mk = sel ? sel.value : "";
+      if (!mk || !maps[mk]) { toast("请先选择目标地图", "bad"); return; }
+      const dd = maps[mk];
+      if (!Array.isArray(dd.drops)) dd.drops = [];
+      if (!dd.drops.map(String).includes(spName)) dd.drops.push(spName);
+      SPIRIT_OPEN[mk] = true;
+      SPIRIT_DIRTY = true;
+      renderMaps(q);
+      toast(`已将「${spName}」分配进「${mk}」，请保存图鉴`, "ok");
     }));
   body.querySelectorAll("[data-add-spirit]").forEach((b) =>
     b.addEventListener("click", async () => {
@@ -2886,24 +2905,64 @@ function renderShopRideBox(forceOpen = false) {
     inp.click();
   }));
   const addBtn = document.getElementById("btnRideAdd");
-  if (addBtn) addBtn.addEventListener("click", async () => {
-    let n = await uiPrompt("输入新坐骑名称：", "", "添加坐骑");
-    if (!n) return;
-    n = n.trim();
-    if (!n) return;
-    if (SHOP_RIDE[n] !== undefined) { toast("已存在同名坐骑", "bad"); return; }
-    SHOP_RIDE[n] = { price: 0, img: "" };
-    SHOP_DIRTY = true;
-    syncShopRaw();
-    renderShopRideBox(true);
-    toast("已添加坐骑，请设置价格并保存", "ok");
-  });
+  if (addBtn) addBtn.addEventListener("click", () => openRideAddModal());
   const resetBtn = document.getElementById("btnRideReset");
   if (resetBtn) resetBtn.addEventListener("click", async () => {
     SHOP_RIDE = { "企鹅":213250, "伞兵":500000, "宝驴":1000000, "保时捷":1500000, "法拉利":1500000, "玛莎拉蒂":1500000, "劳斯莱斯":1500000, "布加迪威龙":1500000, "私人航空":5000000 };
     SHOP_DIRTY=true; syncShopRaw(); renderShopRideBox(true); toast("已恢复默认，需保存","ok");
   });
 }
+// 添加坐骑表单窗：名称 + 价格 + 图片路径一次填完
+function openRideAddModal() {
+  const modal = document.getElementById("appModal");
+  if (!modal) return;
+  const icon = document.getElementById("appModalIcon");
+  const title = document.getElementById("appModalTitle");
+  const content = document.getElementById("appModalContent");
+  const inputWrap = document.getElementById("appModalInputWrap");
+  const cancelBtn = document.getElementById("appModalCancel");
+  const okBtn = document.getElementById("appModalOk");
+  if (icon) icon.textContent = "🐴";
+  if (title) title.textContent = "添加坐骑";
+  if (inputWrap) inputWrap.style.display = "none";
+  content.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">坐骑名称：</label>
+        <input id="rideAddName" style="width:100%;padding:6px 10px;border-radius:8px" placeholder="如：汗血宝马"></div>
+      <div><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">价格：</label>
+        <input id="rideAddPrice" type="number" value="500000" style="width:100%;padding:6px 10px;border-radius:8px"></div>
+      <div><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">图片路径（可选，留空用默认图）：</label>
+        <input id="rideAddImg" style="width:100%;padding:6px 10px;border-radius:8px" placeholder="data/img/坐骑图标/xxx.jpg"></div>
+      <div class="hint">保存后记得点商城页「保存」持久化；图片也可在列表中用“选图/内置选图”绑定</div>
+    </div>`;
+  if (cancelBtn) {
+    cancelBtn.style.display = "";
+    cancelBtn.textContent = "取消";
+    cancelBtn.onclick = () => { modal.className = ""; };
+  }
+  if (okBtn) {
+    okBtn.textContent = "确定添加";
+    okBtn.style.background = "var(--acc)";
+    okBtn.style.borderColor = "transparent";
+    okBtn.onclick = () => {
+      const n = (document.getElementById("rideAddName")?.value || "").trim();
+      const p = Number(document.getElementById("rideAddPrice")?.value) || 0;
+      const img = (document.getElementById("rideAddImg")?.value || "").trim();
+      if (!n) { toast("请填写坐骑名称", "bad"); return; }
+      if (SHOP_RIDE[n] !== undefined) { toast("已存在同名坐骑", "bad"); return; }
+      SHOP_RIDE[n] = { price: p, img };
+      SHOP_DIRTY = true;
+      syncShopRaw();
+      try { renderShopRideBox(true); } catch (e) {}
+      try { renderAtlas(); } catch (e) {}
+      modal.className = "";
+      toast("已添加坐骑，需保存", "ok");
+    };
+  }
+  modal.className = "show";
+  setTimeout(() => { try { document.getElementById("rideAddName")?.focus(); } catch (e) {} }, 50);
+}
+let ATLAS_CUR = "weapon";  // 总览分类：weapon | treasure | ride
 async function renderAtlas(curCfg){
   const box = document.getElementById("atlasBox");
   if (!box) return;
@@ -2922,7 +2981,10 @@ async function renderAtlas(curCfg){
     } catch(e) { Treas = ["酒神葫芦", "四象护符"]; }
     const weapons = Object.keys(SHOP_WEAPON || {});
     const rides = Object.keys(SHOP_RIDE || {});
-    let html = `<div style="display:flex;flex-direction:column;gap:8px">`;
+    const _tabs = [["weapon", "⚔️ 武器", weapons.length], ["treasure", "🎁 宝物", Treas.length], ["ride", "🐴 坐骑", rides.length]];
+    let html = `<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">` + _tabs.map(([k, label, n]) =>
+      `<button class="ghost sm" data-atlas-tab="${k}" ${ATLAS_CUR === k ? 'disabled style="opacity:.45"' : ""}>${label} (${n})</button>`
+    ).join("") + `</div><div style="display:flex;flex-direction:column;gap:8px">`;
     const mkSec = (title, items, addId, delAttr, sys) => {
       let h = `<div style="border:1px solid var(--line);border-radius:var(--radius-xs);padding:8px 10px;background:var(--panel2)"><div style="font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px">${title} (${items.length}) <button class="ghost sm" id="${addId}" style="margin-left:auto">＋ 添加</button></div><div style="display:flex;flex-wrap:wrap;gap:5px">`;
       if (!items.length) h += `<span style="color:var(--muted)">暂无</span>`;
@@ -2930,11 +2992,15 @@ async function renderAtlas(curCfg){
       h += `</div></div>`;
       return h;
     };
-    html += mkSec("奴隶系统-武器", weapons, "btnAtlasAddWeapon", "weapon", "奴隶系统-武器");
-    html += mkSec("奴隶系统-宝物", Treas, "btnAtlasAddTreasure", "treasure", "奴隶系统-宝物");
-    html += mkSec("坐骑系统-坐骑", rides, "btnAtlasAddRide", "ride", "坐骑系统-坐骑");
+    if (ATLAS_CUR === "weapon") html += mkSec("奴隶系统-武器", weapons, "btnAtlasAddWeapon", "weapon", "奴隶系统-武器");
+    else if (ATLAS_CUR === "treasure") html += mkSec("奴隶系统-宝物", Treas, "btnAtlasAddTreasure", "treasure", "奴隶系统-宝物");
+    else html += mkSec("坐骑系统-坐骑", rides, "btnAtlasAddRide", "ride", "坐骑系统-坐骑");
     html += `</div><div class="hint" style="margin-top:6px">点击 × 删除，＋ 添加；修改后点上方“保存”同步到 商城图鉴/设置</div>`;
     box.innerHTML = html;
+    box.querySelectorAll("[data-atlas-tab]").forEach((b) => b.addEventListener("click", () => {
+      ATLAS_CUR = b.dataset.atlasTab;
+      renderAtlas();
+    }));
     box.querySelectorAll("[data-atlas-del]").forEach(el => el.addEventListener("click", async () => {
       const [sys, name] = el.dataset.atlasDel.split("|");
       const _lastW = sys.includes("武器") && Object.keys(SHOP_WEAPON).length <= 1;
@@ -2962,11 +3028,7 @@ async function renderAtlas(curCfg){
       window._TREAS_DIRTY = true;
       toast("已添加宝物，请点击商城页「保存」持久化", "ok"); renderAtlas();
     });
-    document.getElementById("btnAtlasAddRide")?.addEventListener("click", async () => {
-      let n = await uiPrompt("输入坐骑名（坐骑系统-坐骑）：", "", "添加坐骑");
-      if (!n) return; n = n.trim(); if (!n) return;
-      SHOP_RIDE[n] = { price: 500000, img: "" }; SHOP_DIRTY = true; syncShopRaw(); renderShopRideBox(true); renderAtlas(); toast("已添加坐骑，需保存", "ok");
-    });
+    document.getElementById("btnAtlasAddRide")?.addEventListener("click", () => openRideAddModal());
   } catch (e) { box.innerHTML = `<span style="color:var(--muted)">图鉴加载失败: ${esc(e.message)}</span>`; }
 }
 

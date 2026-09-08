@@ -108,7 +108,7 @@ def _raw_file_response(data_bytes, filename):
 PLUGIN_ID = "astrbot_plugin_xbbot"
 PLUGIN_DESC = "小白(奴/签/银/娱/私/灵/骑/超管/帮派/冒险+主菜单+WebUI), 现代SQLite存储"
 PLUGIN_AUTHOR = "Light"
-PLUGIN_VERSION = "0.7.10"
+PLUGIN_VERSION = "0.7.11"
 PLUGIN_REPO = "https://github.com/imsuperone/xb"
 
 # 复用 router 的主菜单，保持单源
@@ -127,7 +127,7 @@ except Exception:
         "| ⚔️ 帮派系统 | 🗺️ 冒险系统 |\r\n"
         "----------------\r\n"
         "发送系统关键词打开菜单，如【签到系统】【精灵系统】\r\n"
-        "当前版本：v0.7.10"
+        "当前版本：v0.7.11"
     )
 
 
