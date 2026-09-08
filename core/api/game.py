@@ -409,25 +409,36 @@ async def handle_spirits_save(request):
 
 
 async def handle_gacha_weapons(request):
-    """抽奖武器池（gacha_img SSR/SR/R 文件名去扩展名，供武器商城对照同步）"""
+    """抽奖武器池（gacha_img SSR/SR/R 文件名去扩展名，供武器商城对照同步；附精确图片路径供自动匹配预览）"""
     import os as _os
     try:
         try:
             from ...engines import slave as _sl
         except ImportError:
             import slave as _sl  # type: ignore
-        out = {}
+        try:
+            _base = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+        except Exception:
+            _base = ""
+        out, img = {}, {}
         for rar in ("SSR", "SR", "R"):
             try:
                 names = []
                 for p in (_sl._gacha_pool(rar) or []):
                     try:
-                        names.append(_os.path.splitext(_os.path.basename(p))[0])
+                        nm = _os.path.splitext(_os.path.basename(p))[0]
+                        names.append(nm)
+                        try:
+                            rp = _os.path.relpath(p, _base).replace(_os.sep, "/") if _base else ""
+                            if rp and not rp.startswith(".."):
+                                img.setdefault(nm, rp)
+                        except Exception:
+                            pass
                     except Exception:
                         pass
                 out[rar] = sorted(set(names))
             except Exception:
                 out[rar] = []
-        return json_response({"ok": True, "pool": out})
+        return json_response({"ok": True, "pool": out, "img": img})
     except Exception as e:
         return _err(f"gacha weapons failed: {e}", 500)

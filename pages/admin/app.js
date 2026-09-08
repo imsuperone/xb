@@ -1254,19 +1254,27 @@ async function resetConfig() {
   const msg = document.getElementById("saveMsg");
   msg.className = "msg";
   try {
+    // 仅恢复本页实际展示的节（cfgForm 内已渲染行），不碰其他页（指令数值/商城/图鉴等）
+    const visibleSecs = new Set();
+    document.querySelectorAll("#cfgForm .cfg-row [data-key]").forEach((inp) => {
+      if (inp.dataset.sec) visibleSecs.add(inp.dataset.sec);
+    });
+    if (!visibleSecs.size) { toast("当前页无可恢复配置", "bad"); return; }
+    const secList = [...visibleSecs].sort();
+    if (!(await uiConfirm(`只恢复本页 ${secList.length} 节（${secList.join("、")}）为默认值？\n\n其他页（指令数值/商城/图鉴等）不受影响。`, "恢复本页默认"))) return;
     const { defaults } = CFG.schema;
     const payload = {};
     // defaults: {"系统__键": default}
     Object.keys(defaults).forEach((k) => {
       const [sec, key] = k.split("__");
-      if (!sec || !key) return;
+      if (!sec || !key || !visibleSecs.has(sec)) return;
       if (!payload[sec]) payload[sec] = {};
       payload[sec][key] = defaults[k];
     });
     const r = await getBridge().apiPost("config/save", payload);
-    msg.textContent = "已恢复默认: " + JSON.stringify(r);
+    msg.textContent = "已恢复本页默认（" + secList.join("、") + "）: " + JSON.stringify(r);
     msg.classList.add("ok");
-    toast("已恢复默认值", "ok");
+    toast("已恢复本页默认值", "ok");
     await loadConfig();
   } catch (e) {
     msg.textContent = "恢复失败: " + e.message;
@@ -1544,7 +1552,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.7.15"
+        version: res.version || "0.7.16"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -2152,6 +2160,131 @@ function renderSpiritBody() {
   try { if (ATLAS_CUR === "spirit") renderAtlas(); } catch (e) {}
 }
 
+function refreshSpiritViews() {
+  try {
+    const q = (document.getElementById("spiritSearch")?.value || "").trim().toLowerCase();
+    renderMaps(q);
+  } catch (e) {}
+  try { if (ATLAS_CUR === "spirit") renderAtlas(); } catch (e) {}
+}
+
+// 地图卡片 HTML（图鉴主体与总览精灵页签共用，同一可编辑样式）
+function spiritMapCardsHTML(mapNames, maps, spirits, q) {
+  return mapNames.map((mname) => {
+    const d = maps[mname] || {};
+    const drops = (d.drops || []).map(String);
+    const open = q ? true : !!SPIRIT_OPEN[mname];
+    return `<div class="s-mapcard ${open ? "open" : ""}" data-map="${esc(mname)}">
+      <div class="s-maphead" data-map-toggle="${esc(mname)}">
+        <span class="s-mapname">🗺 ${esc(mname)}</span>
+        <span class="s-maplv">Lv.${esc(d.lv ?? 1)}</span>
+        <span class="s-mapdrop">${esc(drops.join("、"))}</span>
+        <span class="s-arr">${open ? "▾" : "▸"}</span>
+      </div>
+      <div class="s-mapbody">
+        <div class="s-fields" style="margin-bottom:8px">
+          <div class="s-row"><small>推荐等级</small><input data-map-field="lv" value="${esc(d.lv ?? 1)}"></div>
+          <div class="s-row" style="flex:0 1 66%"><small>出没精灵(逗号分隔)</small><input data-map-field="drops" value="${esc(drops.join("，"))}"></div>
+          <button class="s-del" data-del-map="${esc(mname)}">删地图</button>
+        </div>
+        <div class="sp-spirits">${spiritAttrCards(spirits, drops)}</div>
+        <button class="ghost" data-add-spirit="${esc(mname)}">＋ 添加精灵</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+// 地图卡片事件绑定（两处共用；输入即时写回 SPIRIT，结构操作刷新两处视图）
+function bindSpiritMapCards(root) {
+  if (!root || !SPIRIT) return;
+  const maps = SPIRIT.maps || {};
+  const spirits = SPIRIT.spirits || {};
+  root.querySelectorAll("[data-map-toggle]").forEach((h) =>
+    h.addEventListener("click", () => {
+      const m = h.dataset.mapToggle;
+      SPIRIT_OPEN[m] = !SPIRIT_OPEN[m];
+      refreshSpiritViews();
+    }));
+  root.querySelectorAll("input[data-map-field]").forEach((inp) =>
+    inp.addEventListener("input", () => {
+      try {
+        const card = inp.closest(".s-mapcard");
+        const mname = card ? card.dataset.map : "";
+        if (!mname || mname === "__orphans__" || !maps[mname]) return;
+        const mo = maps[mname];
+        if (inp.dataset.mapField === "lv") mo.lv = Number(inp.value) || 1;
+        else if (inp.dataset.mapField === "drops") mo.drops = String(inp.value).split(/[,，]/).map((s) => s.trim()).filter(Boolean);
+        SPIRIT_DIRTY = true;
+      } catch (e) {}
+    }));
+  root.querySelectorAll("input[data-sp-spirit]").forEach((inp) =>
+    inp.addEventListener("input", () => {
+      try {
+        const card = inp.closest(".sp-card");
+        const sn = card ? card.dataset.sp : "";
+        if (!sn) return;
+        if (!spirits[sn]) spirits[sn] = {};
+        const o = spirits[sn];
+        const fk = inp.dataset.sField;
+        o[fk] = ["hp", "atk", "def", "spa", "spd", "spe", "lv"].includes(fk) ? (Number(inp.value) || 0) : inp.value;
+        SPIRIT_DIRTY = true;
+      } catch (e) {}
+    }));
+  root.querySelectorAll("[data-del-map]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      const k = b.dataset.delMap;
+      const _last = Object.keys(maps).length <= 1;
+      if (!(await uiConfirm("确认删除地图 \"" + k + "\"？（需点击上方「保存图鉴」生效）" + (_last ? "\n\n注意：这是最后一张，删光后运行时自动使用内置地图。" : ""), "删除地图"))) return;
+      delete maps[k];
+      SPIRIT_DIRTY = true;
+      refreshSpiritViews();
+      toast("已删除地图，请点击上方「保存图鉴」生效", "ok");
+    }));
+  root.querySelectorAll("[data-del-spirit]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      const spName = b.dataset.delSpirit;
+      if (!(await uiConfirm("确认移除精灵 \"" + spName + "\"？（需点击上方「保存图鉴」生效）", "移除精灵"))) return;
+      Object.keys(maps).forEach((mk) => {
+        maps[mk].drops = (maps[mk].drops || []).map(String).filter((x) => x !== spName);
+      });
+      try { if (spirits && spirits[spName]) delete spirits[spName]; } catch (e) {}
+      SPIRIT_DIRTY = true;
+      refreshSpiritViews();
+      toast("已移除精灵，请点击上方「保存图鉴」生效", "ok");
+    }));
+  root.querySelectorAll("[data-assign-spirit]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      const spName = b.dataset.assignSpirit;
+      const card = b.closest(".sp-card");
+      const sel = card ? card.querySelector("[data-assign-map]") : null;
+      const mk = sel ? sel.value : "";
+      if (!mk || !maps[mk]) { toast("请先选择目标地图", "bad"); return; }
+      const dd = maps[mk];
+      if (!Array.isArray(dd.drops)) dd.drops = [];
+      if (!dd.drops.map(String).includes(spName)) dd.drops.push(spName);
+      SPIRIT_OPEN[mk] = true;
+      SPIRIT_DIRTY = true;
+      refreshSpiritViews();
+      toast(`已将「${spName}」分配进「${mk}」，请保存图鉴`, "ok");
+    }));
+  root.querySelectorAll("[data-add-spirit]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      let n = await uiPrompt("输入要添加的精灵名称：", "", "添加精灵");
+      if (!n) return;
+      n = n.trim();
+      if (!n) return;
+      const mk = b.dataset.addSpirit;
+      const dd = maps[mk] || (maps[mk] = { lv: 1, drops: [] });
+      if (!Array.isArray(dd.drops)) dd.drops = [];
+      if (!dd.drops.map(String).includes(n)) dd.drops.push(n);
+      if (!spirits[n]) spirits[n] = { type: "", hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0, lv: 0, evolve: "否" };
+      SPIRIT_OPEN[mk] = true;
+      SPIRIT_DIRTY = true;
+      refreshSpiritViews();
+      toast("已添加精灵，请点击上方「保存图鉴」持久化", "ok");
+    }));
+}
+
 function renderMaps(q) {
   const body = document.getElementById("spiritBody");
   if (!body) return;
@@ -2173,7 +2306,7 @@ function renderMaps(q) {
       + (_bc ? ` <button class="ghost sm" id="btnSpiritUseBuiltinMaps">载入内置为起点</button>` : ``) + `</div>`
       + `<button id="mapAddItem" class="ghost" style="margin-top:10px">＋ 添加地图</button>`;
     document.getElementById("btnSpiritUseBuiltinMaps")?.addEventListener("click", () => {
-      if (_spiritLoadBuiltin("maps")) { renderMaps(q); toast("已载入内置地图，需保存", "ok"); }
+      if (_spiritLoadBuiltin("maps")) { refreshSpiritViews(); toast("已载入内置地图，需保存", "ok"); }
     });
     const addMap0 = document.getElementById("mapAddItem");
     if (addMap0) addMap0.addEventListener("click", async () => {
@@ -2185,7 +2318,7 @@ function renderMaps(q) {
       if (!_mps[n]) _mps[n] = { lv: 1, drops: [] };
       SPIRIT_OPEN[n] = true;
       SPIRIT_DIRTY = true;
-      renderMaps(q);
+      refreshSpiritViews();
       toast("已添加新地图，请点击上方「保存图鉴」持久化", "ok");
     });
     return;
@@ -2199,93 +2332,11 @@ function renderMaps(q) {
     Object.values(maps || {}).forEach((m) => ((m && m.drops) || []).map(String).forEach((s) => _used.add(s)));
     _orphans = Object.keys(spirits || {}).filter((n) => !_used.has(String(n)) && (!q || String(n).toLowerCase().includes(q)));
   } catch (e) {}
-  body.innerHTML = _unCustomBanner + mapNames.map((mname) => {
-    const d = maps[mname] || {};
-    const drops = (d.drops || []).map(String);
-    const open = q ? true : !!SPIRIT_OPEN[mname];
-    return `<div class="s-mapcard ${open ? "open" : ""}" data-map="${esc(mname)}">
-      <div class="s-maphead" data-map-toggle="${esc(mname)}">
-        <span class="s-mapname">🗺 ${esc(mname)}</span>
-        <span class="s-maplv">Lv.${esc(d.lv ?? 1)}</span>
-        <span class="s-mapdrop">${esc(drops.join("、"))}</span>
-        <span class="s-arr">${open ? "▾" : "▸"}</span>
-      </div>
-      <div class="s-mapbody">
-        <div class="s-fields" style="margin-bottom:8px">
-          <div class="s-row"><small>推荐等级</small><input data-map-field="lv" value="${esc(d.lv ?? 1)}"></div>
-          <div class="s-row" style="flex:0 1 66%"><small>出没精灵(逗号分隔)</small><input data-map-field="drops" value="${esc(drops.join("，"))}"></div>
-          <button class="s-del" data-del-map="${esc(mname)}">删地图</button>
-        </div>
-        <div class="sp-spirits">${spiritAttrCards(spirits, drops)}</div>
-        <button class="ghost" data-add-spirit="${esc(mname)}">＋ 添加精灵</button>
-      </div>
-    </div>`;
-  }).join("") + (_orphans.length
+  body.innerHTML = _unCustomBanner + spiritMapCardsHTML(mapNames, maps, spirits, q) + (_orphans.length
     ? `<div class="s-mapcard ${SPIRIT_OPEN["__orphans__"] ? "open" : ""}" data-map="__orphans__" style="margin-top:10px"><div class="s-maphead" data-map-toggle="__orphans__"><span class="s-mapname">🧩 未上架精灵 (${_orphans.length})</span><span class="s-maplv">不在任何地图掉落中</span><span class="s-arr">${SPIRIT_OPEN["__orphans__"] ? "▾" : "▸"}</span></div>${SPIRIT_OPEN["__orphans__"] ? `<div class="s-mapbody"><div class="hint" style="margin-bottom:6px">这些精灵不会在野外遭遇，可编辑后分配进图，或直接移除</div><div class="sp-spirits">${spiritAttrCards(spirits, _orphans, mapNames)}</div></div>` : ``}</div>`
     : ``) + `<button id="mapAddItem" class="ghost" style="margin-top:10px">＋ 添加地图</button>`;
 
-  body.querySelectorAll("[data-map-toggle]").forEach((h) =>
-    h.addEventListener("click", () => {
-      const m = h.dataset.mapToggle;
-      SPIRIT_OPEN[m] = !SPIRIT_OPEN[m];
-      renderMaps(q);
-    }));
-  body.querySelectorAll("input[data-map-field], input[data-sp-spirit]").forEach((inp) => {
-    inp.addEventListener("input", () => { SPIRIT_DIRTY = true; });
-  });
-  body.querySelectorAll("[data-del-map]").forEach((b) =>
-    b.addEventListener("click", async () => {
-      const k = b.dataset.delMap;
-      const _last = Object.keys(maps).length <= 1;
-      if (!(await uiConfirm("确认删除地图 \"" + k + "\"？（需点击上方「保存图鉴」生效）" + (_last ? "\n\n注意：这是最后一张，删光后运行时自动使用内置地图。" : ""), "删除地图"))) return;
-      delete maps[k];
-      SPIRIT_DIRTY = true;
-      renderMaps(q);
-      toast("已删除地图，请点击上方「保存图鉴」持久化", "ok");
-    }));
-  body.querySelectorAll("[data-del-spirit]").forEach((b) =>
-    b.addEventListener("click", async () => {
-      const spName = b.dataset.delSpirit;
-      if (!(await uiConfirm("确认移除精灵 \"" + spName + "\"？（需点击上方「保存图鉴」生效）", "移除精灵"))) return;
-      Object.keys(maps).forEach((mk) => {
-        maps[mk].drops = (maps[mk].drops || []).map(String).filter((x) => x !== spName);
-      });
-      try { if (spirits && spirits[spName]) delete spirits[spName]; } catch (e) {}
-      SPIRIT_DIRTY = true;
-      renderMaps(q);
-      toast("已移除精灵，请点击上方「保存图鉴」持久化", "ok");
-    }));
-  body.querySelectorAll("[data-assign-spirit]").forEach((b) =>
-    b.addEventListener("click", async () => {
-      const spName = b.dataset.assignSpirit;
-      const card = b.closest(".sp-card");
-      const sel = card ? card.querySelector("[data-assign-map]") : null;
-      const mk = sel ? sel.value : "";
-      if (!mk || !maps[mk]) { toast("请先选择目标地图", "bad"); return; }
-      const dd = maps[mk];
-      if (!Array.isArray(dd.drops)) dd.drops = [];
-      if (!dd.drops.map(String).includes(spName)) dd.drops.push(spName);
-      SPIRIT_OPEN[mk] = true;
-      SPIRIT_DIRTY = true;
-      renderMaps(q);
-      toast(`已将「${spName}」分配进「${mk}」，请保存图鉴`, "ok");
-    }));
-  body.querySelectorAll("[data-add-spirit]").forEach((b) =>
-    b.addEventListener("click", async () => {
-      let n = await uiPrompt("输入要添加的精灵名称：", "", "添加精灵");
-      if (!n) return;
-      n = n.trim();
-      if (!n) return;
-      const mk = b.dataset.addSpirit;
-      const dd = maps[mk] || { lv: 1, drops: [] };
-      if (!Array.isArray(dd.drops)) dd.drops = [];
-      if (!dd.drops.map(String).includes(n)) dd.drops.push(n);
-      if (!spirits[n]) spirits[n] = { type: "", hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0, lv: 0, evolve: "否" };
-      SPIRIT_OPEN[mk] = true;
-      SPIRIT_DIRTY = true;
-      renderMaps(q);
-      toast("已添加精灵，请点击上方「保存图鉴」持久化", "ok");
-    }));
+  bindSpiritMapCards(body);
   const addMap = document.getElementById("mapAddItem");
   if (addMap) addMap.addEventListener("click", async () => {
     let n = await uiPrompt("输入新地图名称：", "", "添加地图");
@@ -2295,7 +2346,7 @@ function renderMaps(q) {
     if (!maps[n]) maps[n] = { lv: 1, drops: [] };
     SPIRIT_OPEN[n] = true;
     SPIRIT_DIRTY = true;
-    renderMaps(q);
+    refreshSpiritViews();
     toast("已添加新地图，请点击上方「保存图鉴」持久化", "ok");
   });
 }
@@ -2630,6 +2681,25 @@ document.querySelectorAll("#varsHelp .var-tag").forEach(el => {
 // 精灵图鉴
 document.getElementById("btnSpiritLoad")?.addEventListener("click", loadSpirits);
 document.getElementById("btnSpiritSave")?.addEventListener("click", saveSpirits);
+document.getElementById("btnSpiritReset")?.addEventListener("click", async () => {
+  // 仅恢复精灵系统（地图/属性/道具）为内置，不碰其他页
+  if (!SPIRIT) { toast("请先加载图鉴", "bad"); return; }
+  if (!(await uiConfirm("只恢复精灵系统（精灵地图/属性/道具）为内置默认？\n\n商城、配置等其他页不受影响，点「保存图鉴」后生效。", "恢复精灵默认"))) return;
+  try {
+    const bi = (SPIRIT && SPIRIT._builtin) || {};
+    ["maps", "spirits", "shop"].forEach((k) => {
+      const b = bi[k];
+      SPIRIT[k] = (b && typeof b === "object") ? JSON.parse(JSON.stringify(b)) : {};
+    });
+    SPIRIT_CUSTOM = { maps: false, spirits: false, shop: false };
+    SPIRIT_DIRTY = true;
+    SPIRIT_OPEN = {};
+    renderSpiritBody();
+    try { renderShop(); } catch (e) {}
+    try { if (ATLAS_CUR === "spirit") renderAtlas(); } catch (e) {}
+    toast("已恢复精灵内置，需保存图鉴", "ok");
+  } catch (e) { toast("恢复失败: " + e.message, "bad"); }
+});
 document.getElementById("spiritSearch")?.addEventListener("input", () => { renderSpiritBodySearch(); try { renderShop((document.getElementById("spiritSearch").value || "").trim()); } catch (e) {} });
 document.getElementById("btnSpiritExport")?.addEventListener("click", exportSpirits);
 document.getElementById("btnSpiritImport")?.addEventListener("click", importSpirits);
@@ -2728,16 +2798,24 @@ function renderShopWeaponBox(forceOpen=false){
     let price=0, atk=0, desc="", img="";
     if(val && typeof val==="object"){ price=val.price??0; atk=val.atk??0; desc=val.desc??""; img=val.img??""; }
     else price=Number(val)||0;
-    if(!img){ try{ const p=`data/gacha_img/SSR/${name}.png`; if(window._shopImgMap && window._shopImgMap[name]) img=window._shopImgMap[name]; else img=""; }catch(e){ img=""; } }
-    const imgPreview=img?`<img src="${esc(img)}" style="width:36px;height:36px;object-fit:cover;border:1px solid var(--line);border-radius:6px" onerror="this.style.display='none'">`:`<span style="color:var(--muted);font-size:11px">无图</span>`;
-    html+=`<div class="s-fields" data-weapon-item="${esc(name)}" style="margin-top:8px">`+
+    // 图片自动匹配：自定义优先，否则按抽奖池精确路径（稀有度目录+真实扩展名）自动配图
+    let autoImg=""; try{ autoImg=String(((window._GACHA_IMG||{})[name])||""); }catch(e){ autoImg=""; }
+    if(!autoImg){ try{ ["SSR","SR","R"].forEach((rar)=>{ if(!autoImg && ((GACHA_WEAPONS&&GACHA_WEAPONS[rar])||[]).includes(name)) autoImg=`data/gacha_img/${rar}/${name}.png`; }); }catch(e){} }
+    const showImg=img||autoImg;
+    const imgSrc=showImg?`<img src="${esc(showImg)}" style="width:36px;height:36px;object-fit:cover;border:1px solid var(--line);border-radius:6px" onerror="this.style.display='none'">`:`<span style="color:var(--muted);font-size:11px">无图</span>`;
+    // 原始值参照：稀有度 + 内置默认价，一眼可观测
+    let _rar=""; try{ ["SSR","SR","R"].forEach((r)=>{ if(((GACHA_WEAPONS&&GACHA_WEAPONS[r])||[]).includes(name)) _rar=r; }); }catch(e){}
+    let _def=""; try{ const _d=WEAPON_DEFAULTS[name]; if(_d&&typeof _d==="object") _def=_d.price??""; else if(_d!==undefined) _def=_d; }catch(e){}
+    const _ref=(_rar||_def!=="")?`<div style="font-size:11px;color:var(--muted);margin:6px 2px 0">📌 原始：${_rar?esc(_rar)+" · ":""}${_def!==""?"默认价 "+esc(_def):""}${img?" · 图：自定义":(autoImg?" · 图：自动匹配":"")}</div>`:"";
+    html+=`<div data-weapon-item="${esc(name)}" style="margin-top:8px">`+_ref+
+      `<div class="s-fields">`+
       `<div class="s-row"><small>武器名</small><input data-weapon-name value="${esc(name)}"></div>`+
       `<div class="s-row"><small>价格</small><input type="number" data-weapon-price value="${esc(price)}" style="width:90px"></div>`+
       `<div class="s-row"><small>攻击</small><input type="number" data-weapon-atk value="${esc(atk)}" style="width:70px"></div>`+
       `<div class="s-row" style="flex:1"><small>描述</small><input data-weapon-desc value="${esc(desc)}" placeholder="可选"></div>`+
-      `<div class="s-row" style="flex:1"><small>图片路径</small><input data-weapon-img value="${esc(img)}" placeholder="data/gacha_img/..."></div>`+
-      `<div style="display:flex;gap:4px;align-items:center">${imgPreview}<button class="ghost sm" data-weapon-pick="${esc(name)}">选图</button><button class="ghost sm" data-weapon-pick-builtin="${esc(name)}">内置选图</button><button class="s-del" data-weapon-del="${esc(name)}">删除</button></div>`+
-      `</div>`;
+      `<div class="s-row" style="flex:1"><small>图片路径</small><input data-weapon-img value="${esc(img)}" placeholder="留空自动匹配"></div>`+
+      `<div style="display:flex;gap:4px;align-items:center">${imgSrc}<button class="ghost sm" data-weapon-pick="${esc(name)}">选图</button><button class="ghost sm" data-weapon-pick-builtin="${esc(name)}">内置选图</button><button class="s-del" data-weapon-del="${esc(name)}">删除</button></div>`+
+      `</div></div>`;
   });
   html+=`<div style="margin-top:8px"><button class="ghost sm" id="btnWeaponAdd">＋ 添加武器</button> <button class="ghost sm" id="btnWeaponReset">恢复默认</button> <button class="ghost sm" id="btnWeaponSyncGacha">一键同步抽奖武器进商城</button></div></details>`;
   // 抽奖武器池对照区（只读：来源为抽奖图片文件，删改去根目录）
@@ -3168,14 +3246,12 @@ async function renderAtlas(curCfg){
     }
     else if (ATLAS_CUR === "spirit") {
       const _maps = (() => { try { return (SPIRIT && SPIRIT.maps) || {}; } catch (e) { return {}; } })();
+      const _spirits = (() => { try { return (SPIRIT && SPIRIT.spirits) || {}; } catch (e) { return {}; } })();
       const _names = Object.keys(_maps);
       let h = `<div style="border:1px solid var(--line);border-radius:var(--radius-xs);padding:8px 10px;background:var(--panel2)"><div style="font-weight:600;margin-bottom:6px">精灵系统-精灵地图 (${_names.length})</div>`;
       if (!_names.length) h += `<span style="color:var(--muted)">暂无地图，去上方精灵图鉴添加</span>`;
-      else h += `<div style="display:flex;flex-direction:column;gap:6px">` + _names.map(m => {
-        const d = _maps[m] || {}; const drops = ((d.drops || []).map(String));
-        return `<div style="border:1px solid var(--line);border-radius:var(--radius-xs);padding:6px 8px;background:var(--panel)"><div style="font-weight:600">🗺 ${esc(m)} <span style="color:var(--muted);font-weight:400">Lv.${esc(d.lv ?? 1)} · ${drops.length} 只</span></div><div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">${drops.length ? drops.map(n => `<span class="badge" style="font-size:11px">${esc(n)}</span>`).join("") : `<span style="color:var(--muted)">空地图</span>`}</div></div>`;
-      }).join("") + `</div>`;
-      h += `<div class="hint" style="margin-top:6px">只读总览，编辑请到上方精灵图鉴</div></div>`;
+      else h += `<div id="atlasSpiritCards" style="display:flex;flex-direction:column;gap:8px">` + spiritMapCardsHTML(_names, _maps, _spirits, "") + `</div>`;
+      h += `<div class="hint" style="margin-top:6px">与上方精灵地图同款卡片，可直接改，点「保存图鉴」持久化</div></div>`;
       html += h;
     }
     else html += mkSec("坐骑系统-坐骑", rides, "btnAtlasAddRide", "ride", "坐骑系统-坐骑");
@@ -3199,6 +3275,10 @@ async function renderAtlas(curCfg){
       } else if (sys.includes("坐骑")) { delete SHOP_RIDE[name]; SHOP_DIRTY = true; syncShopRaw(); renderShopRideBox(true); }
       renderAtlas();
     }));
+    try {
+      const _sc = document.getElementById("atlasSpiritCards");
+      if (_sc) bindSpiritMapCards(_sc);
+    } catch (e) {}
     box.querySelectorAll("[data-atlas-edit-weapon]").forEach(el => el.addEventListener("click", () => openWeaponEditModal(el.dataset.atlasEditWeapon)));
     box.querySelectorAll("[data-atlas-edit-treasure]").forEach(el => el.addEventListener("click", async () => {
       const n = el.dataset.atlasEditTreasure;
@@ -3238,6 +3318,7 @@ async function loadShops() {
     try {
       const gachaData = await getBridge().apiGet("gacha/weapons").catch(() => null);
       if (gachaData && (gachaData.ok || gachaData.pool)) GACHA_WEAPONS = gachaData.pool || gachaData;
+      try { window._GACHA_IMG = (gachaData && gachaData.img && typeof gachaData.img === "object") ? gachaData.img : (window._GACHA_IMG || {}); } catch (e) {}
     } catch (e) {}
     const sec = (cur || {})["商城图鉴"] || {};
     const _rr = _parseShopInput(sec["ride_shop"], _normRideObj);
