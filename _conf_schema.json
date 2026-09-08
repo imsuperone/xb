@@ -2052,37 +2052,7 @@
         "default": "真",
         "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
       },
-      "查询 冒险": {
-        "type": "string",
-        "default": "真",
-        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
-      },
-      "查询 坐骑": {
-        "type": "string",
-        "default": "真",
-        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
-      },
-      "查询 帮派": {
-        "type": "string",
-        "default": "真",
-        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
-      },
-      "查询 版本": {
-        "type": "string",
-        "default": "真",
-        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
-      },
-      "查询 精灵": {
-        "type": "string",
-        "default": "真",
-        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
-      },
-      "查询 维护": {
-        "type": "string",
-        "default": "真",
-        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
-      },
-      "查询 菜单": {
+      "查询菜单": {
         "type": "string",
         "default": "真",
         "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
@@ -3278,37 +3248,7 @@
         "default": "",
         "description": "【奴隶】查询回复模板(留空=默认；多个用 | 分隔随机取一)"
       },
-      "查询 冒险": {
-        "type": "text",
-        "default": "",
-        "description": "【奴隶】查询 冒险回复模板(留空=默认；多个用 | 分隔随机取一)"
-      },
-      "查询 坐骑": {
-        "type": "text",
-        "default": "",
-        "description": "【奴隶】查询 坐骑回复模板(留空=默认；多个用 | 分隔随机取一)"
-      },
-      "查询 帮派": {
-        "type": "text",
-        "default": "",
-        "description": "【奴隶】查询 帮派回复模板(留空=默认；多个用 | 分隔随机取一)"
-      },
-      "查询 版本": {
-        "type": "text",
-        "default": "",
-        "description": "【奴隶】查询 版本回复模板(留空=默认；多个用 | 分隔随机取一)"
-      },
-      "查询 精灵": {
-        "type": "text",
-        "default": "",
-        "description": "【奴隶】查询 精灵回复模板(留空=默认；多个用 | 分隔随机取一)"
-      },
-      "查询 维护": {
-        "type": "text",
-        "default": "",
-        "description": "【奴隶】查询 维护回复模板(留空=默认；多个用 | 分隔随机取一)"
-      },
-      "查询 菜单": {
+      "查询菜单": {
         "type": "text",
         "default": "",
         "description": "【奴隶】查询 菜单回复模板(留空=默认；多个用 | 分隔随机取一)"

@@ -33,6 +33,15 @@ def _resolve_reply(cand, reply):
     return cand
 
 
+def _norm_cmd(s):
+    """指令规范形：去内部空格（查询坐骑≡查询 坐骑）。仅用于内置开关/回复/引擎匹配；
+    用户自定义触发词保持精确匹配，不走此函数（零行为变化）"""
+    try:
+        return str(s or "").replace(" ", "")
+    except Exception:
+        return ""
+
+
 def apply_reply_override(raw, reply, store):
     try:
         if not raw or not reply:
@@ -48,19 +57,21 @@ def apply_reply_override(raw, reply, store):
             kws = []
             _indexed = False
         if not kws:
-            # 回退：无索引时逐项最长匹配（语义与旧版一致）
+            # 回退：无索引时逐项最长匹配（语义与旧版一致，键按规范形比较）
             hit = None
+            raw_n = _norm_cmd(raw)
             for k in sec.keys():
                 k = str(k)
-                if isinstance(sec[k], str) and str(sec[k]).strip() and raw.startswith(k) and (hit is None or len(k) > len(hit)):
+                if isinstance(sec[k], str) and str(sec[k]).strip() and raw_n.startswith(_norm_cmd(k)) and (hit is None or len(_norm_cmd(k)) > len(_norm_cmd(hit))):
                     hit = k
             if hit is None:
                 return reply
         elif _indexed:
-            # 索引已按长度降序，首个命中即最长
+            # 索引已按长度降序，首个命中即最长（规范形比较，返回库中原键）
             hit = None
+            raw_n = _norm_cmd(raw)
             for k in kws:
-                if raw.startswith(k):
+                if raw_n.startswith(_norm_cmd(k)):
                     hit = k
                     break
             if hit is None:
@@ -263,8 +274,9 @@ def _matches_engine(raw, engine, store=None):
     if rt in (sysname + "系统", sysname + "菜单", sysname + "帮助"):
         return True
     cmds = _get_engine_cmds(engine, store)
+    rt_n = _norm_cmd(rt)
     for c in cmds:
-        if c and rt.startswith(c):
+        if c and rt_n.startswith(_norm_cmd(c)):
             return True
     return False
 
@@ -438,13 +450,14 @@ def _custom_cmd(raw, store):
 def _cmd_disabled(raw, store):
     try:
         raw = str(raw or "")
+        raw_n = _norm_cmd(raw)
         try:
             _dis = _custom_idx(store).get("dis") or ()
         except Exception:
             _dis = ()
         if _dis:
             for k in _dis:
-                if raw.startswith(k):
+                if raw_n.startswith(_norm_cmd(k)):
                     return k
             return None
         sec = store._CONFIG.get(_DISABLE_SEC) if hasattr(store, "_CONFIG") else None
@@ -457,7 +470,7 @@ def _cmd_disabled(raw, store):
                 continue
             if not (str(v).strip() == "假" or str(v).strip().lower() in ("0", "false")):
                 continue
-            if raw.startswith(k) and (hit is None or len(k) > len(hit)):
+            if raw_n.startswith(_norm_cmd(k)) and (hit is None or len(_norm_cmd(k)) > len(_norm_cmd(hit))):
                 hit = k
         return hit
     except Exception:

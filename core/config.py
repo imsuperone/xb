@@ -146,8 +146,10 @@ def _collect_commands(base_dir="", store=None):
 
             def _add(_c):
                 _c = _c.strip()
-                if _c and re.search(r"[\u4e00-\u9fff]", _c) and _c not in cmds:
-                    cmds.append(_c)
+                # 规范键：去内部空格（查询坐骑/查询 坐骑系同一指令），一词一开关，禁一词多开关
+                _canon = _c.replace(" ", "")
+                if _canon and re.search(r"[\u4e00-\u9fff]", _canon) and _canon not in cmds:
+                    cmds.append(_canon)
             # RE1 单串+元组：body 内再抽所有引号串，兼容 text.startswith(("a","b"))
             try:
                 for _body in _CMD_RE1.findall(src):

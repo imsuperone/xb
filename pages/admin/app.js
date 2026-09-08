@@ -130,9 +130,13 @@ function getBridge() {
 let CFG = {};
 
 // 各配置节归属系统（用于分类）+ 必要/玩法分层
-const NECESSARY_SECTIONS = ["总开关配置", "群组开关配置", "网络", "私聊配置", "维护配置"];
+// 必要配置页渲染以下全部节：基础开关 + 奖励/惩罚/概率数值节（签到/银行/娱乐/奴隶等），缺一不可调
+const NECESSARY_SECTIONS = ["总开关配置", "群组开关配置", "网络", "私聊配置", "维护配置",
+  "设置", "费用配置", "间隔配置", "概率配置", "祈福配置",
+  "签到配置", "抽奖配置", "新手配置", "点赞配置", "银行配置",
+  "娱乐配置", "精灵配置", "坐骑配置", "帮派配置", "冒险配置"];
 // 备份配置（含 WebDAV）已迁移至「备份管理」Tab 专属卡片，不在配置页重复渲染
-const GAMEPLAY_SECTIONS = ["签到配置","抽奖配置","新手配置","点赞配置","银行配置","娱乐配置","精灵配置","坐骑配置","帮派配置","冒险配置","祈福配置","概率配置","唤醒词配置"];
+// 唤醒词/系统开关/指令启用回复/自定义指令在「指令与玩法」页编辑，商城图鉴/精灵图鉴在商城图鉴页编辑，不在此重复
 const SYSTEM_MAP = {
   "设置": "奴隶系统", "费用配置": "奴隶系统", "间隔配置": "奴隶系统",
   "概率配置": "奴隶系统", "祈福配置": "奴隶系统",
@@ -1239,8 +1243,12 @@ async function openAutoBalanceModal() {
     cancelBtn.textContent = "取消";
     cancelBtn.onclick = () => { modal.className = ""; };
   }
+  const _closeBtn = document.getElementById("appModalClose");
+  if (_closeBtn) _closeBtn.onclick = () => { modal.className = ""; };
+  modal.onclick = (e) => { if (e.target === modal) modal.className = ""; };
   if (okBtn) {
     okBtn.textContent = "⚡ 一键智能匹配生效";
+    okBtn.disabled = false;
     okBtn.onclick = async () => {
       const sel = content.querySelector("input[name='balanceMode']:checked");
       const mode = sel ? sel.value : "standard";
@@ -1262,7 +1270,7 @@ async function openAutoBalanceModal() {
         toast("调优失败: " + err.message, "bad");
       } finally {
         okBtn.disabled = false;
-        okBtn.onclick = null;
+        okBtn.textContent = "⚡ 一键智能匹配生效";
       }
     };
   }
@@ -1599,7 +1607,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.7.25"
+        version: res.version || "0.7.26"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -3334,7 +3342,7 @@ function renderShopRideBox(forceOpen = false) {
       `<div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${showImg ? `<button class="ghost sm" data-ride-view="${esc(showImg)}">浏览图片</button>` : `<span style="color:var(--muted);font-size:11px">无图</span>`}<button class="ghost sm" data-ride-pick="${esc(name)}">外置选图</button><button class="ghost sm" data-ride-pick-builtin="${esc(name)}">内置选图</button><button class="s-del" data-ride-del="${esc(name)}">删除</button></div>` +
       `</div>`;
   });
-  html += `<div style="margin-top:8px"><button class="ghost sm" id="btnRideAdd">＋ 添加坐骑</button> <button class="ghost sm" id="btnRideReset">恢复默认</button></div></details>`;
+  html += `<div style="margin-top:8px"><button class="ghost sm" id="btnRideAdd">＋ 添加坐骑</button> <button class="ghost sm" id="btnRideReset">↩️ 恢复默认</button></div></details>`;
   box.innerHTML = html;
   box.querySelectorAll("[data-ride-name]").forEach(inp => inp.addEventListener("change", (e) => {
     const old = e.target.closest("[data-ride-item]").dataset.rideItem;
