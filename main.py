@@ -108,7 +108,7 @@ def _raw_file_response(data_bytes, filename):
 PLUGIN_ID = "astrbot_plugin_xbbot"
 PLUGIN_DESC = "小白(奴/签/银/娱/私/灵/骑/超管/帮派/冒险+主菜单+WebUI), 现代SQLite存储"
 PLUGIN_AUTHOR = "Light"
-PLUGIN_VERSION = "0.7.21"
+PLUGIN_VERSION = "0.7.22"
 PLUGIN_REPO = "https://github.com/imsuperone/xb"
 
 # 复用 router 的主菜单，保持单源
@@ -127,7 +127,7 @@ except Exception:
         "| ⚔️ 帮派系统 | 🗺️ 冒险系统 |\r\n"
         "----------------\r\n"
         "发送系统关键词打开菜单，如【签到系统】【精灵系统】\r\n"
-        "当前版本：v0.7.21"
+        "当前版本：v0.7.22"
     )
 
 
@@ -255,6 +255,7 @@ class XbBot(Star):
         context.register_web_api(f"/{PLUGIN_ID}/config/get", self.page_cfg_get, ["GET"], "读取运行配置")
         context.register_web_api(f"/{PLUGIN_ID}/config/save", self.page_cfg_save, ["POST"], "保存运行配置")
         context.register_web_api(f"/{PLUGIN_ID}/config/auto_balance", self.page_config_auto_balance, ["POST"], "游戏数值智能平衡一键匹配")
+        context.register_web_api(f"/{PLUGIN_ID}/config/balance_state", self.page_balance_state, ["GET"], "平衡档位真实状态与漂移检测")
         context.register_web_api(f"/{PLUGIN_ID}/analytics/overview", self.page_analytics_overview, ["GET"], "群生态与经济运行大屏数据")
         context.register_web_api(f"/{PLUGIN_ID}/users/airdrop", self.page_users_airdrop, ["POST"], "全员/群聊批量福利空投")
         context.register_web_api(f"/{PLUGIN_ID}/config/schema", self.page_cfg_schema, ["GET"], "配置schema(按节分组)")
@@ -818,6 +819,14 @@ class XbBot(Star):
             return await handle_config_auto_balance(request)
         except Exception as e:
             return _err(f"auto balance failed: {e}", 500)
+
+    async def page_balance_state(self, request=None, *args, **kwargs):
+        try:
+            req = request if request is not None else (args[0] if args else None)
+            from .core.api.config_api import handle_balance_state
+            return await handle_balance_state(req)
+        except Exception as e:
+            return _err(f"balance state failed: {e}", 500)
 
 
     async def page_analytics_overview(self, request=None, *args, **kwargs):

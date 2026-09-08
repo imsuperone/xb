@@ -402,6 +402,38 @@ PRESETS = {
 }
 
 
+_BALANCE_SIG_KEYS = (
+    ("签到配置", "金钱下限"), ("签到配置", "金钱上限"), ("签到配置", "连签加成"),
+    ("银行配置", "存款利率"), ("银行配置", "打劫银行成功概率"),
+    ("银行配置", "打劫银行金钱下限"), ("银行配置", "打劫银行金钱上限"),
+    ("概率配置", "造反概率"), ("祈福配置", "祈福奖励下限"), ("祈福配置", "祈福奖励上限"),
+    ("设置", "十连抽花费"), ("设置", "抽武器花费"), ("费用配置", "初始身价"),
+)
+
+
+async def handle_balance_state(request):
+    """平衡档位真实状态：标记档 + 抽检签名键是否与预设一致，防徽标与实际两张皮"""
+    try:
+        cfg = getattr(ST, "_CONFIG", {}) or {}
+        mode = str(cfg.get("_active_balance_mode") or (cfg.get("设置") or {}).get("平衡模式") or "standard").strip() or "standard"
+        if mode not in PRESETS:
+            mode = "standard"
+        preset = PRESETS[mode]
+        mismatches = []
+        for sec, key in _BALANCE_SIG_KEYS:
+            try:
+                cur = ST.cfg(sec, key, "")
+                want = preset.get(sec, {}).get(key, "")
+                if str(cur) != str(want):
+                    mismatches.append({"sec": sec, "key": key, "cur": str(cur), "preset": str(want)})
+            except Exception:
+                continue
+        return json_response({"ok": True, "mode": mode, "checked": len(_BALANCE_SIG_KEYS),
+                              "mismatch": len(mismatches), "mismatches": mismatches[:8]})
+    except Exception as e:
+        return _err(f"balance state failed: {e}", 500)
+
+
 async def handle_config_auto_balance(request):
     """一键应用28大系统智能数值平衡预设与奴隶全员身价联动校准"""
     try:

@@ -1050,6 +1050,44 @@ function isListType(t) {
   return t === "list";
 }
 
+const BALANCE_MODE_META = {
+  standard: { icon: "🟢", label: "标准平衡模式", fg: "var(--ok)", bg: "rgba(52,199,89,0.12)", bd: "var(--ok)" },
+  casual: { icon: "🟡", label: "休闲高福利模式", fg: "#EAB308", bg: "rgba(234,179,8,0.15)", bd: "rgba(234,179,8,0.3)" },
+  hardcore: { icon: "🔴", label: "硬核博弈模式", fg: "var(--bad)", bg: "rgba(255,59,48,0.1)", bd: "var(--bad)" },
+};
+async function refreshBalanceBadges() {
+  // 徽标按真实档位+漂移检测刷新（此前写死休闲，属显示问题）
+  const paint = (mode, drift) => {
+    const meta = BALANCE_MODE_META[mode] || BALANCE_MODE_META.standard;
+    ["activeBalanceBadge1", "activeBalanceBadge2"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (drift > 0) {
+        el.textContent = `⚪ ${meta.label}（已偏离${drift}项）`;
+        el.style.color = "var(--muted)"; el.style.background = "var(--panel2)"; el.style.border = "1px solid var(--line)";
+        el.title = "数值与该档预设不一致，可点开重选覆盖";
+      } else {
+        el.textContent = `${meta.icon} 当前生效：${meta.label}`;
+        el.style.color = meta.fg; el.style.background = meta.bg; el.style.border = `1px solid ${meta.bd}`;
+        el.title = "点击切换数值平衡模式";
+      }
+    });
+  };
+  try {
+    const st = await getBridge().apiGet("config/balance_state").catch(() => null);
+    if (st && st.ok && st.mode) { paint(st.mode, st.mismatch || 0); return; }
+  } catch (e) {}
+  try {
+    const cfg = await getBridge().apiGet("config/get").catch(() => null);
+    const m = (cfg && (cfg._active_balance_mode || (cfg["设置"] && cfg["设置"]["平衡模式"]))) || "standard";
+    paint(["standard", "casual", "hardcore"].includes(m) ? m : "standard", 0);
+  } catch (e) {}
+}
+["activeBalanceBadge1", "activeBalanceBadge2"].forEach((id) => {
+  document.getElementById(id)?.addEventListener("click", () => {
+    try { if (typeof openAutoBalanceModal === "function") openAutoBalanceModal(); } catch (e) {}
+  });
+});
 async function loadConfig() {
   try {
     const [schema, cur] = await Promise.all([
@@ -1100,6 +1138,7 @@ async function loadConfig() {
       }
       form.appendChild(box);
     }
+    try { refreshBalanceBadges(); } catch (e) {}
   } catch (e) {
     err("config: " + e.message);
   }
@@ -1154,11 +1193,19 @@ async function openAutoBalanceModal() {
     const m = (cfg && (cfg._active_balance_mode || (cfg["设置"] && cfg["设置"]["平衡模式"]))) || "standard";
     activeMode = ["standard", "casual", "hardcore"].includes(m) ? m : "standard";
   } catch (e) { activeMode = "standard"; }
+  let _driftInfo = "";
+  try {
+    const st = await getBridge().apiGet("config/balance_state").catch(() => null);
+    if (st && st.ok && st.mismatch > 0) {
+      const _names = (st.mismatches || []).map((x) => x.key).join("、");
+      _driftInfo = `<div style="font-size:12px;color:var(--warn);background:var(--warnSoft);border:1px solid var(--warn);border-radius:8px;padding:8px 10px;margin-bottom:12px">⚠️ 当前数值已偏离${activeMode}档（${st.mismatch}项不符${_names ? "：" + esc(_names) : ""}），可重选一键覆盖，或去指令页逐项手调。</div>`;
+    }
+  } catch (e) {}
 
   content.innerHTML = `
     <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5">
       系统基于<strong>群博弈论与经济学精算模型</strong>，为你自动推算并一键匹配最佳货币奖励、惩罚倍率、抽奖爆率与奴隶身价成长曲线：
-    </div>
+    </div>${_driftInfo}
     <div style="display:flex;flex-direction:column;gap:10px">
       <label style="display:flex;align-items:flex-start;gap:10px;padding:12px;background:var(--panel2);border:${activeMode === "standard" ? "2px solid var(--acc)" : "1px solid var(--line)"};border-radius:12px;cursor:pointer">
         <input type="radio" name="balanceMode" value="standard" ${activeMode === "standard" ? "checked" : ""} style="margin-top:3px">
@@ -1213,6 +1260,7 @@ async function openAutoBalanceModal() {
           const _summary = mode === "casual" ? "签到800-2000+连签100，利率3%，造反20%" : (mode === "hardcore" ? "签到150-400+连签20，利率1%，造反45%" : "签到300-800+连签50，利率2%，造反35%");
           toast(`已成功应用【${mode === "standard" ? "标准平衡" : (mode === "casual" ? "休闲福利" : "硬核博弈")}】数值方案！${_summary}`, "ok");
           modal.className = "";
+          try { await refreshBalanceBadges(); } catch (e) {}
           await loadConfig();
           if (typeof loadCommands === "function") try { await loadCommands(); } catch(e) {}
         } else {
@@ -1559,7 +1607,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.7.21"
+        version: res.version || "0.7.22"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -1843,6 +1891,7 @@ async function loadCommands() {
     if (col) col.addEventListener("click", () => {
       el.querySelectorAll("details.cmd-block").forEach((d) => { d.open = false; });
     });
+    try { refreshBalanceBadges(); } catch (e) {}
   } catch (e) {
     err("commands: " + e.message);
   }
