@@ -108,7 +108,7 @@ def _raw_file_response(data_bytes, filename):
 PLUGIN_ID = "astrbot_plugin_xbbot"
 PLUGIN_DESC = "小白(奴/签/银/娱/私/灵/骑/超管/帮派/冒险+主菜单+WebUI), 现代SQLite存储"
 PLUGIN_AUTHOR = "Light"
-PLUGIN_VERSION = "0.7.2"
+PLUGIN_VERSION = "0.7.3"
 PLUGIN_REPO = "https://github.com/imsuperone/xb"
 
 # 复用 router 的主菜单，保持单源
@@ -127,7 +127,7 @@ except Exception:
         "| 👮 超管系统 | ⚙️ 快捷配置 |\r\n"
         "----------------\r\n"
         "输入【系统名】如【签到系统】即可查看各系统对应指令！\r\n"
-        "当前版本：v0.7.2"
+        "当前版本：v0.7.3"
     )
 
 
@@ -284,6 +284,7 @@ class XbBot(Star):
         context.register_web_api(f"/{PLUGIN_ID}/backups/config/snapshot/restore", self.page_cfg_snapshot_restore, ["POST"], "恢复配置快照")
         context.register_web_api(f"/{PLUGIN_ID}/backups/export", self.page_backups_export, ["GET", "POST"], "导出备份")
         context.register_web_api(f"/{PLUGIN_ID}/backups/doctor", self.page_db_doctor, ["POST", "GET"], "数据库健康体检与碎片整理")
+        context.register_web_api(f"/{PLUGIN_ID}/backups/prune", self.page_backups_prune, ["POST", "GET"], "按保留数量修剪本地与云端旧备份")
         context.register_web_api(f"/{PLUGIN_ID}/backup/webdav/test", self.page_webdav_test, ["GET", "POST"], "测试WebDAV连接")
         context.register_web_api(f"/{PLUGIN_ID}/backup/webdav/upload", self.page_webdav_backup_now, ["POST"], "立即上传WebDAV备份")
         context.register_web_api(f"/{PLUGIN_ID}/backup/webdav/files", self.page_webdav_files, ["GET", "POST"], "获取WebDAV远端备份文件列表")
@@ -308,17 +309,36 @@ class XbBot(Star):
         context.register_web_api(f"/{PLUGIN_ID}/logs/export", self.page_logs_export, ["GET", "POST"], "导出插件运行日志")
 
         # 后台独立守护线程执行自动备份与超期清理，绝不阻塞主消息循环与事件分发
+        # 单例 guard：按线程名去重，插件热重载后旧线程仍在跑则不再起新线程，
+        # 根治重载累积多 worker 同时 tick 导致备份时间错乱与双份文件
         def _bg_auto_backup_worker():
             import time
+            _last_clean = 0.0
             while True:
                 time.sleep(60)
                 try:
                     ST.maybe_auto_backup()
                 except Exception:
                     pass
+                # 每小时顺带执行一次保留数修剪（自动备份未到间隔时也能生效保留配置）
+                try:
+                    _now_c = time.time()
+                    if _now_c - _last_clean >= 3600:
+                        _last_clean = _now_c
+                        ST.clean_old_backups()
+                except Exception:
+                    pass
         import threading
-        t_bg_bck = threading.Thread(target=_bg_auto_backup_worker, daemon=True, name="xb-auto-backup")
-        t_bg_bck.start()
+        try:
+            _has_bck = any(
+                getattr(t, "name", "") == "xb-auto-backup" and t.is_alive()
+                for t in threading.enumerate()
+            )
+        except Exception:
+            _has_bck = False
+        if not _has_bck:
+            t_bg_bck = threading.Thread(target=_bg_auto_backup_worker, daemon=True, name="xb-auto-backup")
+            t_bg_bck.start()
 
     def _extract_bot_uin_sync(self, event):
         if getattr(slave, "BOT_UIN", ""):
@@ -881,6 +901,13 @@ class XbBot(Star):
             return await handle_db_doctor(request, os.path.dirname(os.path.abspath(__file__)))
         except Exception as e:
             return _err(f"db doctor failed: {e}", 500)
+
+    async def page_backups_prune(self, request=None, *args, **kwargs):
+        try:
+            from .core.api.backup import handle_backups_prune
+            return await handle_backups_prune(request, os.path.dirname(os.path.abspath(__file__)))
+        except Exception as e:
+            return _err(f"prune failed: {e}", 500)
 
     async def page_webdav_test(self, request=None, *args, **kwargs):
         req = request if request is not None else (args[0] if args else None)

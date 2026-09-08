@@ -1554,7 +1554,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.7.2"
+        version: res.version || "0.7.3"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -3241,9 +3241,29 @@ function formatShanghaiDate(mtimeStr, fileName) {
 }
 
 // ---------- WebDAV 远端归档浏览、快捷热恢复与云端删除 ----------
-async function loadRemoteWebDAVFiles() {
+let _WD_FILES = [];
+let _WD_PAGE = 1;
+const _WD_PAGE_SIZE = 10;
+async function loadRemoteWebDAVFiles(fromCache) {
   const box = document.getElementById("webdavFilesList");
   if (!box) return;
+  // 分页器一次性事件委托（box 本体不重建，翻页不丢绑定）
+  if (!box.dataset.wdPagerBound) {
+    box.dataset.wdPagerBound = "1";
+    box.addEventListener("click", (e) => {
+      const pg = e.target.closest("[data-wdpage]");
+      if (!pg || pg.disabled) return;
+      const v = pg.dataset.wdpage;
+      const total = Math.max(1, Math.ceil((_WD_FILES || []).length / _WD_PAGE_SIZE));
+      if (v === "prev") _WD_PAGE = Math.max(1, _WD_PAGE - 1);
+      else if (v === "next") _WD_PAGE = Math.min(total, _WD_PAGE + 1);
+      else _WD_PAGE = Math.min(total, Math.max(1, parseInt(v, 10) || 1));
+      loadRemoteWebDAVFiles(true);
+    });
+  }
+  if (fromCache && _WD_FILES && _WD_FILES.length) {
+    // 直接用缓存翻页，不重复请求远端
+  } else {
   box.innerHTML = `<div class="hint" style="padding:14px;text-align:center">⏳ 正在连接 WebDAV 查询远端目录归档...</div>`;
   try {
     const res = await getBridge().apiGet("backup/webdav/files", {});
@@ -3252,13 +3272,30 @@ async function loadRemoteWebDAVFiles() {
       box.innerHTML = `<div class="hint" style="padding:14px;text-align:center;color:var(--bad);background:var(--panel2);border-radius:8px">❌ 读取远端归档失败: ${esc(errMsg)}</div>`;
       return;
     }
-    const files = res.files || [];
+    _WD_FILES = res.files || [];
+    _WD_PAGE = 1;
+    if (!_WD_FILES.length) {
+      box.innerHTML = `<div class="hint" style="padding:14px;text-align:center;background:var(--panel2);border-radius:8px">云端远端目录下暂无归档文件，点击上方「立即上传云端」即可上传备份。</div>`;
+      return;
+    }
+  } catch (e) {
+    box.innerHTML = `<div class="hint" style="padding:14px;text-align:center;color:var(--bad)">❌ 查询异常: ${esc(e.message)}</div>`;
+    return;
+  }
+  }
+  try {
+    const files = _WD_FILES || [];
     if (!files.length) {
       box.innerHTML = `<div class="hint" style="padding:14px;text-align:center;background:var(--panel2);border-radius:8px">云端远端目录下暂无归档文件，点击上方「立即上传云端」即可上传备份。</div>`;
       return;
     }
-    let html = `<div style="display:flex;flex-direction:column;gap:6px">`;
-    files.forEach((f) => {
+    const totalPages = Math.max(1, Math.ceil(files.length / _WD_PAGE_SIZE));
+    if (_WD_PAGE > totalPages) _WD_PAGE = totalPages;
+    if (_WD_PAGE < 1) _WD_PAGE = 1;
+    const pageFiles = files.slice((_WD_PAGE - 1) * _WD_PAGE_SIZE, _WD_PAGE * _WD_PAGE_SIZE);
+    let html = `<div class="hint" style="font-size:11.5px;margin-bottom:6px">共 ${files.length} 份云端归档 · 第 ${_WD_PAGE}/${totalPages} 页（每页 ${_WD_PAGE_SIZE} 份）</div>`;
+    html += `<div style="display:flex;flex-direction:column;gap:6px">`;
+    pageFiles.forEach((f) => {
       const isDb = f.name.endsWith(".db");
       const shDate = formatShanghaiDate(f.mtime, f.name);
       html += `
@@ -3278,6 +3315,16 @@ async function loadRemoteWebDAVFiles() {
       `;
     });
     html += `</div>`;
+    if (totalPages > 1) {
+      let nums = "";
+      for (let p = 1; p <= totalPages; p++) {
+        nums += `<button class="ghost sm" data-wdpage="${p}" ${p === _WD_PAGE ? 'disabled style="opacity:.45"' : ""}>${p}</button>`;
+      }
+      html += `<div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:8px;flex-wrap:wrap">`
+        + `<button class="ghost sm" data-wdpage="prev" ${_WD_PAGE <= 1 ? "disabled" : ""}>‹ 上一页</button>`
+        + nums
+        + `<button class="ghost sm" data-wdpage="next" ${_WD_PAGE >= totalPages ? "disabled" : ""}>下一页 ›</button></div>`;
+    }
     box.innerHTML = html;
 
     // 绑定快捷恢复事件
@@ -3351,7 +3398,7 @@ async function loadRemoteWebDAVFiles() {
     box.innerHTML = `<div class="hint" style="padding:14px;text-align:center;color:var(--bad);background:var(--panel2);border-radius:8px">❌ 网络或服务异常: ${esc(err.message || String(err))}</div>`;
   }
 }
-document.getElementById("btnWebDAVRefreshFiles")?.addEventListener("click", loadRemoteWebDAVFiles);
+document.getElementById("btnWebDAVRefreshFiles")?.addEventListener("click", () => loadRemoteWebDAVFiles());
 document.getElementById("btnBackupExport")?.addEventListener("click", async () => {
   try {
     const data = await getBridge().apiGet("users/export", {});
@@ -3500,6 +3547,14 @@ async function saveBackupCfg() {
       }
     } catch (readErr) {}
     say("备份配置已成功保存并校验生效", true);
+    // 保存保留数量后即时按新值修剪本地+云端旧备份，让“保留 N 份”立即生效
+    try {
+      const pr = await getBridge().apiPost("backups/prune", {});
+      if (pr && pr.ok) {
+        toast(pr.msg || "旧备份已按保留数量修剪", "ok");
+        try { await loadBackups(typeof BACKUP_DIR !== "undefined" ? BACKUP_DIR : ""); } catch (e) {}
+      }
+    } catch (e) {}
     try { loadRemoteWebDAVFiles(); } catch (e) {}
   } catch (e) { say("保存失败: " + e.message, false); }
 }

@@ -174,6 +174,11 @@ def upload_backup(local_path):
                 msg = f"WebDAV 备份成功上传: {fname} ({sz_kb} KB) -> {target_url}"
                 if _logger:
                     _logger.info(msg)
+                # 上传成功后按保留数量后台修剪远端旧归档（云端保留数与本地同配置）
+                try:
+                    async_prune_remote_backups()
+                except Exception:
+                    pass
                 return True, msg
             return False, f"WebDAV 服务器返回非预期状态码: {status}"
     except urllib.error.HTTPError as e:
@@ -521,5 +526,55 @@ def delete_remote_file(remote_name, url=None, user=None, pwd=None, rdir=None, ti
         return False, f"WebDAV 删除 HTTP 错误 {e.code}: {e.reason}"
     except Exception as e:
         return False, f"WebDAV 删除异常: {e}"
+
+
+def prune_remote_backups(keep=None):
+    """
+    按保留数量修剪 WebDAV 远端备份（只处理 xbbot_*.db，留新删旧）。
+    :param keep: 保留份数（None 则读 备份配置/保留备份数量，默认 30）
+    :return: (bool, str) 是否成功及详情
+    """
+    try:
+        keep = int(float(keep)) if keep not in (None, "") else int(float(ST.cfg("备份配置", "保留备份数量", "30")))
+    except Exception:
+        keep = 30
+    if keep <= 0:
+        keep = 30
+    ok, res = list_remote_files()
+    if not ok:
+        return False, str(res or "获取远端列表失败")
+    if not isinstance(res, list):
+        return False, "远端列表格式异常"
+    cands = [f for f in res
+             if isinstance(f, dict)
+             and str(f.get("name", "")).endswith(".db")
+             and os.path.basename(str(f.get("name", ""))).startswith("xbbot_")]
+    if len(cands) <= keep:
+        return True, f"远端共 {len(cands)} 份归档，未超保留数 {keep}，无需清理"
+    # 列表已按文件名降序（新→旧），超出的尾部即最旧
+    excess = cands[keep:]
+    deleted = 0
+    for f in excess:
+        try:
+            okd, _ = delete_remote_file(str(f.get("name", "")))
+            if okd:
+                deleted += 1
+        except Exception:
+            pass
+    return True, f"远端保留最新 {keep} 份，清理 {deleted}/{len(excess)} 份旧归档"
+
+
+def async_prune_remote_backups(keep=None):
+    """后台线程修剪远端，绝不阻塞调用方（上传成功后自动跟进）"""
+    def _worker():
+        try:
+            prune_remote_backups(keep)
+        except Exception:
+            pass
+    try:
+        t = threading.Thread(target=_worker, name="WebDAV-Prune", daemon=True)
+        t.start()
+    except Exception:
+        pass
 
 

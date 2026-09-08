@@ -663,3 +663,50 @@ async def handle_webdav_delete(request, plugin_base=""):
         return _err(f"删除云端备份异常: {e}", 500)
 
 
+async def handle_backups_prune(request, plugin_base=""):
+    """按保留数量一键修剪本地 + WebDAV 远端旧备份（保存保留配置后即时生效）"""
+    import asyncio
+    try:
+        keep = ST.cfgi("备份配置", "保留备份数量", 30)
+    except Exception:
+        keep = 30
+    if keep <= 0:
+        keep = 30
+    local_deleted = 0
+    try:
+        local_deleted = int(ST.clean_old_backups(max_keep=keep) or 0)
+    except Exception:
+        local_deleted = 0
+    remote_deleted = 0
+    remote_msg = "未配置 WebDAV，跳过云端修剪"
+    try:
+        from .. import webdav as _wd
+    except ImportError:
+        try:
+            from core import webdav as _wd
+        except ImportError:
+            _wd = None
+    if _wd is not None:
+        try:
+            if _wd.is_enabled():
+                ok, res = await asyncio.to_thread(_wd.prune_remote_backups, keep)
+                remote_msg = str(res or "")
+                if ok:
+                    import re as _re
+                    m = _re.search(r"清理\s*(\d+)", remote_msg)
+                    if m:
+                        remote_deleted = int(m.group(1))
+            else:
+                remote_msg = "WebDAV 未启用，仅修剪本地"
+        except Exception as e:
+            remote_msg = f"云端修剪异常: {e}"
+    return json_response({
+        "ok": True,
+        "keep": keep,
+        "local_deleted": local_deleted,
+        "remote_deleted": remote_deleted,
+        "remote_msg": remote_msg,
+        "msg": f"保留最新 {keep} 份：本地清理 {local_deleted} 份，云端清理 {remote_deleted} 份",
+    })
+
+

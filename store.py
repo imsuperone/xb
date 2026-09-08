@@ -1199,13 +1199,36 @@ def set_backup_dir(path):
 _LAST_BACKUP_CHECK = 0.0
 _LAST_BACKUP_PATH = ""
 _LAST_BACKUP_TIME = 0.0
+# 备份生成串行锁 + 在途标记：锁只保护“判定与预约”，慢速拷贝不持锁，
+# 并发调用者等待在途备份完成直接复用，根治并发/重叠调用生成双份时间戳文件
+_BACKUP_GEN_LOCK = threading.Lock()
+_BACKUP_IN_PROGRESS = None
 
 def backup_user_data(force=False, auto_upload=True):
-    global _last_backup, BACKUP_INTERVAL, _LAST_BACKUP_CHECK, _LAST_BACKUP_PATH, _LAST_BACKUP_TIME
+    global _last_backup, BACKUP_INTERVAL, _LAST_BACKUP_CHECK, _LAST_BACKUP_PATH, _LAST_BACKUP_TIME, _BACKUP_IN_PROGRESS
     now = time.time()
     # 5秒全局防抖保护：无论是否 force，若 5 秒内刚生成过完好备份，直接复用，杜绝重复创建双份备份
     if (now - _LAST_BACKUP_TIME < 5) and _LAST_BACKUP_PATH and os.path.isfile(_LAST_BACKUP_PATH):
         return _LAST_BACKUP_PATH
+    # 串行化等待：若已有备份正在生成中，等待其完成并复用产物（最多等90秒）
+    _wait_dst = None
+    with _BACKUP_GEN_LOCK:
+        _now2 = time.time()
+        if (_now2 - _LAST_BACKUP_TIME < 5) and _LAST_BACKUP_PATH and os.path.isfile(_LAST_BACKUP_PATH):
+            return _LAST_BACKUP_PATH
+        if _BACKUP_IN_PROGRESS:
+            _wait_dst = _BACKUP_IN_PROGRESS
+    if _wait_dst:
+        _deadline = time.time() + 90
+        while time.time() < _deadline:
+            time.sleep(0.5)
+            with _BACKUP_GEN_LOCK:
+                _still = _BACKUP_IN_PROGRESS
+                _cur = _LAST_BACKUP_PATH
+            if not _still:
+                if _cur and os.path.isfile(_cur):
+                    return _cur
+                break
     if not force and now - _LAST_BACKUP_CHECK < 60:
         return None
     _LAST_BACKUP_CHECK = now
@@ -1269,6 +1292,9 @@ def backup_user_data(force=False, auto_upload=True):
         os.makedirs(day_dir, exist_ok=True)
         fname = f"xbbot_{time.strftime('%Y%m%d_%H%M%S', time.localtime(now))}.db"
         dst = os.path.join(day_dir, fname)
+        # 预约在途标记（并发调用已被上游等待复用逻辑拦截；同名文件直接覆盖写新内容，不产生第二份）
+        with _BACKUP_GEN_LOCK:
+            _BACKUP_IN_PROGRESS = dst
         import sqlite3 as _sql
         bck = _sql.connect(dst, timeout=30.0)
         # 非阻塞冷备：仅短持锁做 checkpoint+commit，备份经独立读连接执行，不阻塞消息分发
@@ -1301,6 +1327,8 @@ def backup_user_data(force=False, auto_upload=True):
             _last_backup = now
             _LAST_BACKUP_TIME = now
             _LAST_BACKUP_PATH = dst
+        with _BACKUP_GEN_LOCK:
+            _BACKUP_IN_PROGRESS = None
         try:
             recall_set("last_backup_ts", str(int(now)))
         except Exception:
@@ -1325,6 +1353,11 @@ def backup_user_data(force=False, auto_upload=True):
                     pass
         return dst
     except Exception:
+        try:
+            with _BACKUP_GEN_LOCK:
+                _BACKUP_IN_PROGRESS = None
+        except Exception:
+            pass
         return None
     return None
 

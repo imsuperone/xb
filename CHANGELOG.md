@@ -1,5 +1,15 @@
 # 更新日志
 
+## v0.7.3
+- 💰 **WebUI 排序统一“货币”文案**：用户表排序下拉与表头 `金币` 改为通用 `货币`，改货币名称后不再文案过期。
+- 🗄️ **根治双份备份与自动备份时间错乱**：
+  - `store.backup_user_data` 新增 `_BACKUP_GEN_LOCK` 串行锁 + 在途标记等待复用，并发/重叠调用只出一份文件（慢速拷贝不持 `_LOCK`，群聊零阻塞）；
+  - `main.py` 后台 `xb-auto-backup` 线程按名单例，插件热重载不再累积多 worker 同时 tick；
+  - worker 每小时顺带执行一次保留数修剪，间隔未到也能生效。
+- 🧹 **保留数量双端生效 + 云端列表分页**：
+  - 新增 `backups/prune` 接口与 `webdav.prune_remote_backups`（仅处理 `xbbot_*.db`，留新删旧），上传成功后后台自动跟进修剪，保存备份配置后前端自动触发一次即时生效；
+  - WebDAV 远端归档列表 10 份/页分页展示，翻页走缓存不重复请求远端。
+
 ## v0.7.2
 - 🧩 **根治多群同人昵称串群**：
   - `engines/slave.py` 新增分群昵称表 `NOTE_NAMES_BY_GROUP[(gid, qq)]` 与 `set/get/clear_note_name` 三件套，`fetch_card/uname/exists_user/@反查` 全系优先本群，本群无记录不再回退别群卡片；
