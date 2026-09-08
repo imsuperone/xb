@@ -310,14 +310,14 @@ def cmd_deposit(gid, qq, amount):
     a = _acct(gid, qq)
     if _check_jail(a):
         return _show_jail(a)
-    cs = ST.cfgi("银行配置", "存取款消耗体力", 10)
+    cs = ST.cfgi("银行配置", "存取款消耗体力", 1)
     if a.int("stamina") < cs:
         return "亲，您的游戏体力不足，无法进行存款！"
     have = ST.coins_get(gid, qq)
     if have < amount:
         return f"亲，您的{ST.coin_name()}不足，请重新选择存款数！"
-    rate = ST.cfgi("银行配置", "存款利率", 2)
-    cap = ST.cfgi("银行配置", "利息上限", 88888)
+    rate = ST.cfgi("银行配置", "存款利率", 3)
+    cap = ST.cfgi("银行配置", "利息上限", 100000)
     days = ST.cfgi("银行配置", "存款期限", 1)
     interest = _settle_interest(a, rate, cap, days)
     old = a.int("deposit")
@@ -357,8 +357,8 @@ def cmd_withdraw(gid, qq, amount):
         return "请输入正确格式：取款 金额（正整数）"
     if dep < amount:
         return f"存款不足！当前存款：{dep}"
-    rate = ST.cfgi("银行配置", "存款利率", 2)
-    cap = ST.cfgi("银行配置", "利息上限", 88888)
+    rate = ST.cfgi("银行配置", "存款利率", 3)
+    cap = ST.cfgi("银行配置", "利息上限", 100000)
     days = ST.cfgi("银行配置", "存款期限", 1)
     interest = _settle_interest(a, rate, cap, days)
     # 利息未到时提示剩余时间与可用强制取款，但仍允许取款（取款成功但无利息，满足测试与需求38的提示）
@@ -418,7 +418,7 @@ def cmd_transfer(gid, qq, target, amount):
         return "亲，您的格式有误，转账格式为：【转账 @QQ 金额】！"
     if str(target) == str(qq):
         return "亲，您不能给自己转账，转账失败！"
-    min_amt = ST.cfgi("银行配置", "转账最小金额", 2000)
+    min_amt = ST.cfgi("银行配置", "转账最小金额", 50)
     if amount < min_amt:
         return f"亲，转账最小金额为{min_amt}{ST.coin_name()}！"
     cs = ST.cfgi("银行配置", "转账消耗体力", 2)
@@ -491,7 +491,7 @@ def cmd_gamble(gid, qq, amount):
         return _show_jail(a)
     if amount < 100:
         return f"亲，赌博最小金额为100{ST.coin_name()}！格式为：【赌博 金额】"
-    maxamt = ST.cfgi("银行配置", "赌博最大金额", 99999999)
+    maxamt = ST.cfgi("银行配置", "赌博最大金额", 100000)
     if amount > maxamt:
         return f"亲，预赌金额不得超过{maxamt}{ST.coin_name()}！"
     cs = ST.cfgi("银行配置", "赌博消耗体力", 10)
@@ -505,7 +505,7 @@ def cmd_gamble(gid, qq, amount):
         return f"亲，您的{ST.coin_name()}不足，无法进行赌博！"
     meli = ST.cfgi("银行配置", "赌博魅力减少", 20)
     jail_mins = ST.cfgi("银行配置", "赌博关押时间", 5)
-    prob = ST.cfgi("银行配置", "赌博成功概率", 15)
+    prob = ST.cfgi("银行配置", "赌博成功概率", 60)
     ST.recall_set("gamble_%s_%s_%s" % (gid, qq, dt.date.today()), str(cnt + 1))
     gain = int(amount * 1.8)
     # 原子化：钱包+体力+魅力 同事务，避免半成功通胀
@@ -942,7 +942,7 @@ def cmd_sell_slave(gid, qq, target):
     ok, mins = _cd(a, "rob_time", ST.cfgi("银行配置", "打劫关押时间", 5), "打劫")
     if not ok:
         return f"{mins}分钟后再来打劫吧！"
-    prob = ST.cfgi("银行配置", "打劫成功概率", 50)
+    prob = ST.cfgi("银行配置", "打劫成功概率", 65)
     lo = ST.cfgi("银行配置", "打劫金钱下限", 1000)
     hi = ST.cfgi("银行配置", "打劫金钱上限", 100000)
     meli = ST.cfgi("银行配置", "打劫魅力减少", 3)

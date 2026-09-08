@@ -94,9 +94,13 @@ def _load_schema(base_dir=""):
 
 
 # 指令索引正则（与 main._collect_commands 保持一致）
-_CMD_RE1 = re.compile(r'\b(?:text|m)\s*\.startswith\(\s*["\']([^"\']+)["\']')
+_CMD_RE1 = re.compile(r'\b(?:text|m)\s*\.startswith\(\s*\(?([^)]*)\)')
+_CMD_RE1_TUPLE = re.compile(r'\b(?:text|m)\s*\.startswith\(\s*\(([^)]*)\)')
 _CMD_RE2 = re.compile(r'\b(?:text|m)\s*==\s*["\']([^"\']+)["\']')
-_CMD_RE3 = re.compile(r'\b(?:text|m)\s*in\s*\(([^)]*)\)')
+_CMD_RE3 = re.compile(r'(?:\btext\s*in\s*\(|(?<![A-Za-z0-9_])m\s+in\s*\()([^)]*)\)')
+_CMD_RE_TBL_NEED = re.compile(r'_need\s*=\s*\(([^)]*)\)')
+_CMD_RE_TBL_ADMIN = re.compile(r'_ADMIN_CMDS\s*=\s*\(([^)]*)\)', re.S)
+_CMD_RE_TBL_EXACT = re.compile(r'_ROUTE_EXACT\s*=\s*\{(.*?)\}', re.S)
 
 
 def _collect_commands(base_dir="", store=None):
@@ -117,16 +121,70 @@ def _collect_commands(base_dir="", store=None):
                 src = open(p, encoding="utf-8").read()
             except Exception:
                 continue
+            # 去掉 # 注释（整行+行尾，字符串内 # 保留），避免注释中文被收录
+            _lines = []
+            for _ln in src.splitlines():
+                if _ln.lstrip().startswith("#"):
+                    continue
+                _q1 = _q2 = False
+                _cut = None
+                _prev = ""
+                for _i, _ch in enumerate(_ln):
+                    if _ch == "'" and not _q2 and _prev != "\\":
+                        _q1 = not _q1
+                    elif _ch == '"' and not _q1 and _prev != "\\":
+                        _q2 = not _q2
+                    elif _ch == "#" and not _q1 and not _q2:
+                        _cut = _i
+                        break
+                    _prev = _ch
+                if _cut is not None:
+                    _ln = _ln[:_cut]
+                _lines.append(_ln)
+            src = "\n".join(_lines)
             cmds = []
-            for c in _CMD_RE1.findall(src) + _CMD_RE2.findall(src):
-                c = c.strip()
-                if c and re.search(r"[\u4e00-\u9fff]", c) and c not in cmds:
-                    cmds.append(c)
+
+            def _add(_c):
+                _c = _c.strip()
+                if _c and re.search(r"[\u4e00-\u9fff]", _c) and _c not in cmds:
+                    cmds.append(_c)
+            # RE1 单串+元组：body 内再抽所有引号串，兼容 text.startswith(("a","b"))
+            try:
+                for _body in _CMD_RE1.findall(src):
+                    for _c in re.findall(r'["\']([^"\']+)["\']', _body):
+                        _add(_c)
+            except Exception:
+                pass
+            try:
+                for _body in _CMD_RE1_TUPLE.findall(src):
+                    for _c in re.findall(r'["\']([^"\']+)["\']', _body):
+                        _add(_c)
+            except Exception:
+                pass
+            for c in _CMD_RE2.findall(src):
+                _add(c)
             for body in _CMD_RE3.findall(src):
                 for c in re.findall(r'["\']([^"\']+)["\']', body):
-                    c = c.strip()
-                    if c and re.search(r"[\u4e00-\u9fff]", c) and c not in cmds:
-                        cmds.append(c)
+                    _add(c)
+            # 表驱动：_need / _ROUTE_EXACT / _ADMIN_CMDS 等元组/字典变量赋值的字符串元素
+            try:
+                for _body in _CMD_RE_TBL_NEED.findall(src):
+                    for _c in re.findall(r'["\']([^"\']+)["\']', _body):
+                        _add(_c)
+            except Exception:
+                pass
+            try:
+                for _body in _CMD_RE_TBL_ADMIN.findall(src):
+                    for _c in re.findall(r'["\']([^"\']+)["\']', _body):
+                        _add(_c)
+            except Exception:
+                pass
+            try:
+                for _body in _CMD_RE_TBL_EXACT.findall(src):
+                    for _c in re.findall(r'["\']([^"\']+)["\']', _body):
+                        _add(_c)
+            except Exception:
+                pass
             out[name] = cmds
         # 唤醒词显式展示
         try:
@@ -140,7 +198,7 @@ def _collect_commands(base_dir="", store=None):
             wc = sch.get("唤醒词配置", {}).get("items", {}) if isinstance(sch.get("唤醒词配置"), dict) else {}
             for sysname, it in wc.items():
                 eng_name = None
-                for _e, _s in (("sign", "签到系统"), ("spirit", "精灵系统"), ("ent", "娱乐系统"), ("bank", "银行系统"), ("slave", "奴隶系统"), ("ride", "坐骑系统"), ("guild", "帮派系统"), ("adventure", "冒险系统"), ("superadmin", "超管系统")):
+                for _e, _s in (("sign", "签到系统"), ("spirit", "精灵系统"), ("ent", "娱乐系统"), ("bank", "银行系统"), ("slave", "奴隶系统"), ("ride", "坐骑系统"), ("guild", "帮派系统"), ("adventure", "冒险系统"), ("superadmin", "超管系统"), ("chat", "聊天系统")):
                     if _s == sysname:
                         eng_name = _e
                         break

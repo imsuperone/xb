@@ -30,6 +30,7 @@ MENU = (
     "⚔️ 精灵冒险 地点　　🔮 使用精灵球 名称\r\n"
     "🎽 出战精灵 名称　🕊️ 回收出战精灵\r\n"
     "💠 携带精灵 名称　🗑️ 丢弃精灵 名称\r\n"
+    "🧬 进化 名称　　⚔️ 精灵对战 @QQ　🏁 挑战 名称\r\n"
     "🏆 精灵排行\r\n"
     "━━━━━━━━━━━━━━\r\n"
     "💡 发送对应指令即可游玩"
@@ -133,9 +134,9 @@ def _desc(it):
 def _exp_need(it):
     # P0: 配置误设为0时 while exp>=0 恒真无限循环卡死，钳位>=1
     try:
-        need = int(it.get("level", 1)) * int(_cfgi("升级经验", 1000))
+        need = int(it.get("level", 1)) * int(_cfgi("升级经验", 300))
     except Exception:
-        need = 1000
+        need = 300
     return need if need >= 1 else 1
 
 
@@ -166,7 +167,7 @@ def _add_exp(gid, qq, sp, it, amount):
     """加经验, 处理升级与进化"""
     it["exp"] = int(it.get("exp", 0)) + int(amount)
     evolved = ""
-    while it["exp"] >= _exp_need(it) and it["level"] < _cfgi("最大等级", 200):
+    while it["exp"] >= _exp_need(it) and it["level"] < _cfgi("最大等级", 100):
         it["exp"] -= _exp_need(it)
         it["level"] = int(it.get("level", 1)) + 1
         base = _SPIRITS().get(it.get("name"), {})
@@ -369,7 +370,7 @@ def cmd_adventure(gid, qq, place):
     # 间隔
     key = f"spadv_{gid}_{qq}"
     last = _recall_get(key)
-    gap = _cfgi("冒险间隔", 3) * 60
+    gap = _cfgi("冒险间隔", 2) * 60
     if last and time.time() - float(last) < gap:
         left = int((gap - (time.time() - float(last))) / 60) + 1
         return f"{left}分钟再来冒险吧！"
@@ -384,13 +385,47 @@ def cmd_adventure(gid, qq, place):
     gold_hi = _cfgi("挑战奖励_金钱上限", 250)
     exp = random.randint(max(1, exp_lo), max(exp_lo, exp_hi))
     gold = random.randint(0, max(0, gold_hi))
-    if act_it.get("level") < _cfgi("最大等级", 200):
+    if act_it.get("level") < _cfgi("最大等级", 100):
         _add_exp(gid, qq, sp, act_it, exp)
     if gold > 0:
         ST.coins_add(gid, qq, gold)
+    # H: 挑战扣除（fallback全0，没配行为不变；有配则扣钱扣体力并在文案明示）
+    d_lo = _cfgi("挑战扣除_金钱下限", 0)
+    d_hi = _cfgi("挑战扣除_金钱上限", 0)
+    d_tili = _cfgi("挑战扣除_消耗体力", 0)
+    d_gold = 0
+    d_stam = 0
+    if d_hi > 0 or d_lo > 0:
+        _dlo, _dhi = (d_lo, d_hi) if d_lo <= d_hi else (d_hi, d_lo)
+        _dlo = max(0, _dlo)
+        _dhi = max(0, _dhi)
+        if _dhi > 0:
+            d_gold = random.randint(_dlo, _dhi)
+            if d_gold > 0:
+                _real = min(d_gold, ST.coins_get(gid, qq))
+                if _real > 0:
+                    ST.coins_add(gid, qq, -_real)
+                d_gold = _real
+    if d_tili > 0:
+        try:
+            _cur_st = ST.acct(gid, qq).int("stamina")
+        except Exception:
+            _cur_st = int(d_tili)
+        d_stam = min(int(d_tili), max(0, _cur_st))
+        if d_stam > 0:
+            ST.acct_add(gid, qq, "stamina", -d_stam)
     _save(gid, qq, sp)
+    _deduct_msg = ""
+    if d_gold or d_stam:
+        _parts = []
+        if d_gold:
+            _parts.append(f"{ST.coin_name()}-{d_gold}")
+        if d_stam:
+            _parts.append(f"体力-{d_stam}")
+        _deduct_msg = "挑战扣除：" + " ".join(_parts) + "\r\n"
     return (f"【精灵冒险】来到{place}，遭遇了野生的 Lv.{wl}「{wild}」！\r\n"
-            f"历练奖励：经验+{exp} 金币+{gold}\r\n"
+            f"历练奖励：经验+{exp} {ST.coin_name()}+{gold}\r\n"
+            f"{_deduct_msg}"
             "如需收服请发【使用精灵球 精灵球名称】")
 
 
@@ -418,7 +453,7 @@ def cmd_catch(gid, qq, ball):
     p = max(5, min(95, eff - (lv - 10) // 2)) if eff < 90 else 100
     sp.pop("wild", None)
     if random.randint(1, 100) <= p:
-        if len(sp.get("list", [])) >= _cfgi("精灵数量", 6):
+        if len(sp.get("list", [])) >= _cfgi("精灵数量", 8):
             _save(gid, qq, sp)
             return "亲，您的精灵数量已达上限，无法收服，可丢弃后再来！"
         sp.setdefault("list", []).append(_mk_spr(wild["name"], lv))
@@ -481,7 +516,7 @@ def cmd_discard(gid, qq, name):
             del _lst[_i]
             break
     sp["list"] = _lst
-    red = _cfgi("魅力减少", 100)
+    red = _cfgi("魅力减少", 10)
     ST.acct_add(gid, qq, "charm", -red)
     _save(gid, qq, sp)
     return f"已丢弃精灵【{name}】，魅力 -{red}"

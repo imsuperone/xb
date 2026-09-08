@@ -18,7 +18,7 @@ except ImportError:
 RIDES = {
     "企鹅": 213250, "伞兵": 500000, "宝驴": 1000000, "保时捷": 1500000,
     "法拉利": 1500000, "玛莎拉蒂": 1500000, "劳斯莱斯": 1500000,
-    "布加迪威龙": 1500000, "私人航空": 5000000,
+    "布加迪威龙": 1500000, "私人航空": 5000000, "女仆": 15000000,
 }
 RIDE_TYPE = "坐骑"
 
@@ -230,18 +230,52 @@ DEFAULT_RIDE_SHOP_EXT = {
     "老八": {"price": 500000, "img": "data/img/坐骑图标/老八.jpg"},
 }
 
+
+def _maid_default_price():
+    """女仆默认价格走配置（不写死）：cfgi 坐骑配置.价格_女仆 fallback 15000000"""
+    try:
+        return int(float(ST.cfg("坐骑配置", "价格_女仆", 15000000)))
+    except Exception:
+        pass
+    try:
+        return int(float(_cfg("价格_女仆", 15000000)))
+    except Exception:
+        return 15000000
+
+
+try:
+    DEFAULT_RIDE_SHOP_EXT["女仆"] = {"price": _maid_default_price(), "img": "data/img/坐骑图标/女仆.jpg"}
+except Exception:
+    DEFAULT_RIDE_SHOP_EXT["女仆"] = {"price": 15000000, "img": "data/img/坐骑图标/女仆.jpg"}
+
 def _ride_shop_raw():
     """返回原始 ride_shop 配置对象(可能含 {price,img} 结构)，供取图用"""
     v = ST.cfg("商城图鉴", "ride_shop", "")
     if isinstance(v, dict) and v:
+        if "女仆" not in v:
+            try:
+                nv = dict(v)
+                nv["女仆"] = {"price": _maid_default_price(), "img": "data/img/坐骑图标/女仆.jpg"}
+                return nv
+            except Exception:
+                pass
         return v
     if v:
         try:
             d = json.loads(v)
             if isinstance(d, dict) and d:
+                if "女仆" not in d:
+                    try:
+                        d["女仆"] = {"price": _maid_default_price(), "img": "data/img/坐骑图标/女仆.jpg"}
+                    except Exception:
+                        pass
                 return d
         except Exception:
             pass
+    try:
+        DEFAULT_RIDE_SHOP_EXT["女仆"] = {"price": _maid_default_price(), "img": "data/img/坐骑图标/女仆.jpg"}
+    except Exception:
+        pass
     return DEFAULT_RIDE_SHOP_EXT
 
 def _ride_shop():
@@ -254,6 +288,11 @@ def _ride_shop():
                 out[str(k)] = int(float(val.get("price", 0) or 0))
             else:
                 out[str(k)] = int(float(val))
+        if "女仆" not in out:
+            try:
+                out["女仆"] = _mount_price("女仆")
+            except Exception:
+                out["女仆"] = _maid_default_price()
         return out
     if v:
         try:
@@ -265,12 +304,22 @@ def _ride_shop():
                         out[str(k)] = int(float(val.get("price", 0) or 0))
                     else:
                         out[str(k)] = int(float(val))
+                if "女仆" not in out:
+                    try:
+                        out["女仆"] = _mount_price("女仆")
+                    except Exception:
+                        out["女仆"] = _maid_default_price()
                 return out
         except Exception:
             pass
     out = {}
     for name in RIDES:
         out[name] = _mount_price(name)
+    if "女仆" not in out:
+        try:
+            out["女仆"] = _maid_default_price()
+        except Exception:
+            pass
     return out
 
 def _ride_img_path(name):

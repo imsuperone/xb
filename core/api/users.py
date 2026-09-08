@@ -17,7 +17,7 @@ except ImportError:
     except ImportError:
         import slave  # type: ignore
 
-PLUGIN_VERSION = "0.7.4"
+PLUGIN_VERSION = "0.7.5"
 
 
 def _extract_param(request, key, default=""):
@@ -48,22 +48,44 @@ def _extract_param(request, key, default=""):
 async def handle_users(request):
     nm = getattr(slave, "NOTE_NAMES", {}) or {}
     gid_filter = _extract_param(request, "gid", "").strip()
+    try:
+        _limit = int(_extract_param(request, "limit", "300") or 300)
+    except Exception:
+        _limit = 300
+    _limit = max(1, min(_limit, 1000))
+    try:
+        _offset = int(_extract_param(request, "offset", "0") or 0)
+    except Exception:
+        _offset = 0
+    _offset = max(0, _offset)
+    if not gid_filter:
+        try:
+            p0 = await get_req_json(request, default={})
+            if isinstance(p0, dict):
+                if p0.get("gid"):
+                    gid_filter = str(p0.get("gid")).strip()
+                if p0.get("limit"):
+                    _limit = max(1, min(int(p0.get("limit")), 1000))
+                if p0.get("offset") is not None:
+                    _offset = max(0, int(p0.get("offset")))
+        except Exception:
+            pass
     if gid_filter and gid_filter.isdigit():
         try:
             rows = ST._DB.execute(
                 "SELECT w.gid, w.qq, w.money, a.data FROM wallet w "
                 "LEFT JOIN accounts a ON a.gid=w.gid AND a.qq=w.qq WHERE w.gid=? "
-                "ORDER BY w.money DESC LIMIT 300", (int(gid_filter),)).fetchall() if ST._DB else []
+                "ORDER BY w.money DESC LIMIT ? OFFSET ?", (int(gid_filter), _limit, _offset)).fetchall() if ST._DB else []
         except Exception:
             rows = ST._DB.execute(
                 "SELECT w.gid, w.qq, w.money, a.data FROM wallet w "
                 "LEFT JOIN accounts a ON a.gid=w.gid AND a.qq=w.qq "
-                "ORDER BY w.money DESC LIMIT 300").fetchall() if ST._DB else []
+                "ORDER BY w.money DESC LIMIT ? OFFSET ?", (_limit, _offset)).fetchall() if ST._DB else []
     else:
         rows = ST._DB.execute(
             "SELECT w.gid, w.qq, w.money, a.data FROM wallet w "
             "LEFT JOIN accounts a ON a.gid=w.gid AND a.qq=w.qq "
-            "ORDER BY w.money DESC LIMIT 300").fetchall() if ST._DB else []
+            "ORDER BY w.money DESC LIMIT ? OFFSET ?", (_limit, _offset)).fetchall() if ST._DB else []
     out = []
     for sqm, qq, money, data in rows:
         kv = {}
@@ -71,9 +93,19 @@ async def handle_users(request):
             kv = json.loads(data) if data else {}
         except Exception:
             kv = {}
+        _nm = ""
+        try:
+            if hasattr(slave, "get_note_name"):
+                _nm = slave.get_note_name(str(sqm), str(qq)) or ""
+            if not _nm:
+                _nm = slave.fetch_card(str(sqm), str(qq)) or ""
+        except Exception:
+            _nm = ""
+        if not _nm:
+            _nm = nm.get(str(qq), "")
         out.append({
             "gid": str(sqm), "qq": str(qq),
-            "name": nm.get(str(qq), ""), "money": int(money or 0),
+            "name": _nm, "money": int(money or 0),
             "stamina": int(float(kv.get("stamina", "0") or 0)),
             "charm": int(float(kv.get("charm", "0") or 0)),
             "lottery_tickets": int(float(kv.get("lottery_tickets", "0") or 0)),

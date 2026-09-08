@@ -67,7 +67,7 @@ def check_users_export():
     exp_seg = app[app.find("async function exportAllUsers"):app.find("async function exportAllUsers")+1500]
     assert 'bridge.download' in exp_seg, "exportAllUsers missing bridge.download"
     assert 'raw' in exp_seg, "exportAllUsers missing raw param"
-    assert 'testExportLinks' in app, "missing testExportLinks"
+    assert 'downloadBase64File' in app or 'downloadJson' in app, "missing download helpers"
     print("[PASS] users export raw + bridge.download + test")
 
 def check_superadmin():

@@ -75,10 +75,14 @@ def cmd_sign(gid, qq):
         hi = ST.cfgi("签到配置", cn_k + "上限", ST.cfgi("签到配置", en_k + "上限", d_hi))
         if lo > hi: lo, hi = hi, lo
         return random.randint(lo, hi)
-    base = _rng("金钱", "money", 500, 1200)
-    tili = _rng("体力", "stamina", 20, 40)
-    meili = _rng("魅力", "charm", 5, 10)
-    juan = _rng("奖券", "lottery_tickets", 1, 3)
+    base_cfg = ST.cfgi("签到配置", "基础奖励", 0)
+    if base_cfg:
+        base = base_cfg
+    else:
+        base = _rng("金钱", "money", 800, 2000)
+    tili = _rng("体力", "stamina", 50, 100)
+    meili = _rng("魅力", "charm", 15, 30)
+    juan = _rng("奖券", "lottery_tickets", 3, 8)
     bonus = ST.cfgi("签到配置", "连签加成", 100)
     chain_bonus = bonus * min(chain, 30)
     total += 1
@@ -205,12 +209,12 @@ def cmd_draw(gid, qq, amount=1):
     out_lines = []
     for i in range(amount):
         must_win = lose_streak >= 5
-        win = must_win or (random.randint(1, 100) <= ST.cfgi("抽奖配置", "中奖率", 60))
+        win = must_win or (random.randint(1, 100) <= ST.cfgi("抽奖配置", "中奖率", 70))
         if win:
             pool = [
-                (ST.coin_name(), "coin", ST.cfgi("抽奖配置", "现金奖", 600)),
-                ("体力", "stamina", ST.cfgi("抽奖配置", "体力奖", 10)),
-                ("魅力", "charm", ST.cfgi("抽奖配置", "魅力奖", 5)),
+                (ST.coin_name(), "coin", ST.cfgi("抽奖配置", "现金奖", 2000)),
+                ("体力", "stamina", ST.cfgi("抽奖配置", "体力奖", 60)),
+                ("魅力", "charm", ST.cfgi("抽奖配置", "魅力奖", 40)),
             ]
             name_cn, kind, val = random.choice(pool)
             if kind == "coin":
@@ -261,7 +265,7 @@ def cmd_gift(gid, qq, kind, amount):
     if amount > 999:
         return f"亲，{kind_cn}单次购买数量上限为999！"
     key = "stamina" if kind == "stamina" else "charm"
-    price = ST.cfgi("签到配置", "体力价格" if kind == "stamina" else "魅力价格", 30 if kind == "stamina" else 50)
+    price = ST.cfgi("签到配置", "体力价格" if kind == "stamina" else "魅力价格", 30 if kind == "stamina" else 3)
     total = price * amount
     have = ST.coins_get(gid, qq)
     dep = ST.acct(gid, qq).int("deposit")
@@ -285,10 +289,10 @@ def cmd_newbie(gid, qq):
     a = _acct(gid, qq)
     if a.get("novice_gift", "") == "1":
         return "亲，您已经领取过新手礼包了，无法再次领取！"
-    money = ST.cfgi("新手配置", "现金", ST.cfgi("新手配置", "新手金币", ST.cfgi("新手配置", "money", 3000)))
-    tili = ST.cfgi("新手配置", "体力", ST.cfgi("新手配置", "新手体力", ST.cfgi("新手配置", "stamina", 100)))
-    meili = ST.cfgi("新手配置", "魅力", ST.cfgi("新手配置", "新手魅力", ST.cfgi("新手配置", "charm", 50)))
-    jq = ST.cfgi("新手配置", "奖券", ST.cfgi("新手配置", "新手奖券", ST.cfgi("新手配置", "lottery_tickets", 5)))
+    money = ST.cfgi("新手配置", "现金", ST.cfgi("新手配置", "新手金币", ST.cfgi("新手配置", "money", 10000)))
+    tili = ST.cfgi("新手配置", "体力", ST.cfgi("新手配置", "新手体力", ST.cfgi("新手配置", "stamina", 300)))
+    meili = ST.cfgi("新手配置", "魅力", ST.cfgi("新手配置", "新手魅力", ST.cfgi("新手配置", "charm", 100)))
+    jq = ST.cfgi("新手配置", "奖券", ST.cfgi("新手配置", "新手奖券", ST.cfgi("新手配置", "lottery_tickets", 15)))
     # 单事务原子领取：钱包+账户同锁一次提交，避免签到并发时 database is locked
     try:
         cur_stam = int(float(a.get("stamina", "0") or 0))
@@ -508,7 +512,8 @@ _MENU = (
     "📅 签到　　　　　🎁 抽奖 数量\r\n"
     "💪 购买体力 数量　购买魅力 数量\r\n"
     "🎁 领取新手礼包　👤 我的信息\r\n"
-    "🏆 个人排行　财富榜　签到榜　体力榜\r\n"
+    "👍 点赞/每日点赞　　📋 打卡\r\n"
+    "🏆 个人排行　财富榜　签到榜　体力榜　魅力榜\r\n"
     "━━━━━━━━━━━━━━━━\r\n"
     "💡 发送对应指令即可游玩"
 )

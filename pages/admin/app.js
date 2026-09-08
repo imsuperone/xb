@@ -421,10 +421,15 @@ function _formatModalText(msg) {
   if (msg.includes("<div") || msg.includes("<strong") || msg.includes("<span") || msg.includes("<br")) {
     return msg;
   }
-  return String(msg)
+  return esc(String(msg))
     .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
     .replace(/^· (.*?)$/gm, "• $1")
     .split("\n").join("<br>");
+}
+
+function _safeImgSrc(u) {
+  const s = String(u || "");
+  return /^(data:image\/|https?:\/\/|\/|\.\/)/.test(s) ? s : "";
 }
 
 function _normalizeModalTitleAndIcon(rawTitle, rawIcon) {
@@ -744,7 +749,7 @@ async function main() {
     }
   } catch (e) {}
   
-  Promise.all([loadStats(), loadOverviewReq(), loadAnalytics()]).catch(() => {});
+  Promise.all([loadOverviewReq(), loadAnalytics()]).catch(() => {});
   TAB_DONE.overview = true;
 }
 
@@ -813,7 +818,7 @@ function renderImages(d) {
     else if (ext==="zip") ficon="🗜️";
     else if (ext==="log") ficon="📜";
     html += `<div class="icard${selCls}" data-imgsrc="${esc(x.img)}" data-imgname="${esc(x.name)}" data-imgpath="${esc(x.path)}" data-selpath="${esc(x.path)}">` +
-      (ficon ? `<div style="height:120px;display:flex;align-items:center;justify-content:center;font-size:42px;background:var(--panel2)">${ficon}</div>` : `<img src="${x.img || ""}" alt="">`) + `<div class="nm">${esc(x.name)}</div></div>`;
+      (ficon ? `<div style="height:120px;display:flex;align-items:center;justify-content:center;font-size:42px;background:var(--panel2)">${ficon}</div>` : `<img src="${esc(_safeImgSrc(x.img))}" alt="">`) + `<div class="nm">${esc(x.name)}</div></div>`;
   });
   html += `</div>`;
   box.innerHTML = html;
@@ -857,7 +862,7 @@ function renderImages(d) {
 function showLightbox(src, name) {
   const lb = document.getElementById("lightbox");
   if (!lb || !src) { if (lb) { lb.innerHTML = ""; } return; }
-  lb.innerHTML = `<img src="${src}"><div class="cap">${esc(name || "")}</div>`;
+  lb.innerHTML = `<img src="${esc(_safeImgSrc(src))}"><div class="cap">${esc(name || "")}</div>`;
   lb.classList.add("show");
 }
 
@@ -967,31 +972,7 @@ function err(m) {
 
 // ---------- 总览 ----------
 async function loadStats() {
-  try {
-    const s = await getBridge().apiGet("stats");
-    const formatNum = (num) => typeof num === "number" ? num.toLocaleString() : (num || 0);
-    const p = (s && s.players) || {};
-    const cards = [
-      { n: formatNum(p.wallet), l: "钱包活跃用户", i: "👛" },
-      { n: formatNum(p.accounts), l: "档案注册用户", i: "📁" },
-      { n: formatNum(p.groups), l: "开通游戏群数", i: "👥" },
-      { n: formatNum(s ? s.total_money : 0), l: "全服流通金币", i: "💰" },
-      { n: formatNum(s ? s.total_sign : 0), l: "累计签到人次", i: "📅" },
-      { n: formatNum(s ? (s.total_deposit || 0) : 0), l: "银行总存款额", i: "🏦" },
-    ];
-    const statsBox = document.getElementById("stats");
-    if (statsBox) {
-      statsBox.innerHTML = cards
-        .map((c) => `<div class="card">
-          <div class="num">${c.n}</div>
-          <div class="lab">${c.l}</div>
-          <div class="ic">${c.i}</div>
-        </div>`)
-        .join("");
-    }
-  } catch (e) {
-    err("stats: " + e.message);
-  }
+  return loadAnalytics();
 }
 
 // 必填/关键配置: [节, 键, 标签, 类型, 提示] — 网络/机器人QQ已移除（完全自动）
@@ -1160,30 +1141,37 @@ async function openAutoBalanceModal() {
   if (title) title.textContent = "游戏奖励 / 惩罚 / 概率 · 智能数值平衡";
   if (inputWrap) inputWrap.style.display = "none";
 
+  let activeMode = "standard";
+  try {
+    const cfg = await getBridge().apiGet("config/get");
+    const m = (cfg && (cfg._active_balance_mode || (cfg["设置"] && cfg["设置"]["平衡模式"]))) || "standard";
+    activeMode = ["standard", "casual", "hardcore"].includes(m) ? m : "standard";
+  } catch (e) { activeMode = "standard"; }
+
   content.innerHTML = `
     <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5">
-      系统基于<strong>群博弈论与经济学精算模型</strong>，为你自动推算并一键匹配最佳金币奖励、惩罚倍率、抽奖爆率与奴隶身价成长曲线：
+      系统基于<strong>群博弈论与经济学精算模型</strong>，为你自动推算并一键匹配最佳货币奖励、惩罚倍率、抽奖爆率与奴隶身价成长曲线：
     </div>
     <div style="display:flex;flex-direction:column;gap:10px">
-      <label style="display:flex;align-items:flex-start;gap:10px;padding:12px;background:var(--panel2);border:2px solid var(--acc);border-radius:12px;cursor:pointer">
-        <input type="radio" name="balanceMode" value="standard" checked style="margin-top:3px">
+      <label style="display:flex;align-items:flex-start;gap:10px;padding:12px;background:var(--panel2);border:${activeMode === "standard" ? "2px solid var(--acc)" : "1px solid var(--line)"};border-radius:12px;cursor:pointer">
+        <input type="radio" name="balanceMode" value="standard" ${activeMode === "standard" ? "checked" : ""} style="margin-top:3px">
         <div>
           <div style="font-weight:600;color:var(--text);font-size:13px">🟢 标准平衡模式（官方推荐 · 经济稳健）</div>
-          <div style="font-size:11.5px;color:var(--muted);margin-top:2px">签到 200 金币，利息 1%，奴隶打工 150/h，造反率 40%，抽奖头奖 2%。平稳通胀，适合绝大多数群聊。</div>
+          <div style="font-size:11.5px;color:var(--muted);margin-top:2px">签到 300-800 + 连签 50，利率 2%，造反率 35%，祈福爆发 5%。平稳通胀，适合绝大多数群聊。</div>
         </div>
       </label>
-      <label style="display:flex;align-items:flex-start;gap:10px;padding:12px;background:var(--panel2);border:1px solid var(--line);border-radius:12px;cursor:pointer">
-        <input type="radio" name="balanceMode" value="casual" style="margin-top:3px">
+      <label style="display:flex;align-items:flex-start;gap:10px;padding:12px;background:var(--panel2);border:${activeMode === "casual" ? "2px solid var(--acc)" : "1px solid var(--line)"};border-radius:12px;cursor:pointer">
+        <input type="radio" name="balanceMode" value="casual" ${activeMode === "casual" ? "checked" : ""} style="margin-top:3px">
         <div>
           <div style="font-weight:600;color:var(--text);font-size:13px">🟡 休闲高福利模式（高爆率 · 活跃社群）</div>
-          <div style="font-size:11.5px;color:var(--muted);margin-top:2px">签到 500 金币，利息 3%，奴隶打工 500/h，祈福暴击 25%，抽奖头奖 5%。低惩罚快节奏，极大激发互动。</div>
+          <div style="font-size:11.5px;color:var(--muted);margin-top:2px">签到 800-2000 + 连签 100，利率 3%，造反率 20%，祈福爆发 15%，赌博成功率 60%。低惩罚快节奏，极大激发互动。</div>
         </div>
       </label>
-      <label style="display:flex;align-items:flex-start;gap:10px;padding:12px;background:var(--panel2);border:1px solid var(--line);border-radius:12px;cursor:pointer">
-        <input type="radio" name="balanceMode" value="hardcore" style="margin-top:3px">
+      <label style="display:flex;align-items:flex-start;gap:10px;padding:12px;background:var(--panel2);border:${activeMode === "hardcore" ? "2px solid var(--acc)" : "1px solid var(--line)"};border-radius:12px;cursor:pointer">
+        <input type="radio" name="balanceMode" value="hardcore" ${activeMode === "hardcore" ? "checked" : ""} style="margin-top:3px">
         <div>
           <div style="font-weight:600;color:var(--text);font-size:13px">🔴 硬核博弈模式（高对抗 · 惩罚严酷）</div>
-          <div style="font-size:11.5px;color:var(--muted);margin-top:2px">签到 100 金币，利息 0.5%，造反率 55%，高额赎身费，抽奖硬核。高风险高回报，适合重度对抗型群友。</div>
+          <div style="font-size:11.5px;color:var(--muted);margin-top:2px">签到 150-400 + 连签 20，利率 1%，造反率 45%，祈福爆发 2%。高风险高回报，适合重度对抗型群友。</div>
         </div>
       </label>
     </div>
@@ -1215,7 +1203,8 @@ async function openAutoBalanceModal() {
       try {
         const r = await getBridge().apiPost("config/auto_balance", { mode });
         if (r && r.ok) {
-          toast(`已成功应用【${mode === "standard" ? "标准平衡" : (mode === "casual" ? "休闲福利" : "硬核博弈")}】数值方案！`, "ok");
+          const _summary = mode === "casual" ? "签到800-2000+连签100，利率3%，造反20%" : (mode === "hardcore" ? "签到150-400+连签20，利率1%，造反45%" : "签到300-800+连签50，利率2%，造反35%");
+          toast(`已成功应用【${mode === "standard" ? "标准平衡" : (mode === "casual" ? "休闲福利" : "硬核博弈")}】数值方案！${_summary}`, "ok");
           modal.className = "";
           await loadConfig();
           if (typeof loadCommands === "function") try { await loadCommands(); } catch(e) {}
@@ -1320,7 +1309,8 @@ let _USER_GIDS = new Set();
 function populateUserGidOptions() {
   const sel = document.getElementById("userGidFilter");
   if (!sel) return;
-  // 收集当前 RAW_USERS 中的 gid
+  // 每次按当前数据重建（不清会残留已无用户的旧群号）
+  _USER_GIDS = new Set();
   (RAW_USERS || []).forEach(u => { if (u.gid) _USER_GIDS.add(String(u.gid)); });
   const cur = sel.value;
   // 重建选项：保留“全部群” + 已知 gid 排序
@@ -1425,7 +1415,7 @@ async function clearUserSingle(qq, gid) {
   const ok = await uiConfirm(
     `确定要彻底清除用户【${qq}】（群: ${gid}）的所有数据吗？\n\n` +
     `将一并清除以下内容：\n` +
-    `1. 钱包金币、银行存款、体力、魅力、奖券与签到记录\n` +
+    `1. 钱包货币、银行存款、体力、魅力、奖券与签到记录\n` +
     `2. 奴隶系统：解除奴隶身份，且其名下持有的奴隶将全部释放自由\n` +
     `3. 精灵系统：拥有的所有精灵、出战骑乘状态与背包道具全部清除\n` +
     `4. 重置新手礼包与精灵领养状态（该用户可重新领取新手礼包）\n\n` +
@@ -1500,7 +1490,7 @@ async function cleanLeftUsers() {
   const ok = await uiConfirm(
     `⚠️ 确认清理【${scopeText}】的退群人员？
 
-系统将自动对比群聊实时成员列表，彻底删除已退群人员的钱包金币、奴隶身价关系、精灵背包与全部档案数据！`,
+系统将自动对比群聊实时成员列表，彻底删除已退群人员的钱包货币、奴隶身价关系、精灵背包与全部档案数据！`,
     "清理退群人员"
   );
   if (!ok) return;
@@ -1554,7 +1544,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.7.4"
+        version: res.version || "0.7.5"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -1712,31 +1702,31 @@ const CMD_NUMS = {
 // 各玩法指令的默认回复示例(供指令页"默认回复"展示; 覆盖配置留空则用该默认)
 // {变量} 为运行时动态数值占位符
 const CMD_DEFAULT_REPLY = {
-  "签到": "🏅 恭喜你签到成功！\r\n　奖励详情：\r\n　　　💵 金币 +{现金}\r\n　　　⚡ 体力 +{体力}\r\n　　　💄 魅力 +{魅力}\r\n　　　🎫 奖券 +{奖券}\r\n　　　🔥 第{天数}天连签 +{连签}\r\n当前金币：{当前}\r\n您是今天第{序号}个签到者！",
+  "签到": "🏅 恭喜你签到成功！\r\n　奖励详情：\r\n　　　💵 货币 +{现金}\r\n　　　⚡ 体力 +{体力}\r\n　　　💄 魅力 +{魅力}\r\n　　　🎫 奖券 +{奖券}\r\n　　　🔥 第{天数}天连签 +{连签}\r\n当前货币：{当前}\r\n您是今天第{序号}个签到者！",
   "领取新手礼包": "恭喜您获得新手礼包一份！\r\n现金+{现金}\r\n体力+{体力}\r\n魅力+{魅力}\r\n奖券+{奖券}",
-  "购买体力": "恭喜您花费{价格}金币，购买了{数量}点体力，您的体力提升到{当前}点！",
-  "购买魅力": "恭喜您花费{价格}金币，购买了{数量}点魅力，您的魅力提升到{当前}点！",
+  "购买体力": "恭喜您花费{价格}货币，购买了{数量}点体力，您的体力提升到{当前}点！",
+  "购买魅力": "恭喜您花费{价格}货币，购买了{数量}点魅力，您的魅力提升到{当前}点！",
   "个人信息": "您的账户信息如下：\r\n个人财富：{财富}\r\n签到次数：{签到}\r\n剩余体力：{体力}\r\n魅力指数：{魅力}\r\n奖券数量：{奖券}\r\n存款金额：{存款}",
   "抽奖": "恭喜，抽奖成功！获得{奖励}+{数值}",
   "存款": "存款成功！共存入：{金额}，上期结息：{利息}，当前总存款：{总额}",
   "取款": "取款成功！获得利息：{利息}，本次取款：{金额}，还剩存款：{剩余}",
   "强制取款": "强制取款成功！因未到取款时间，本次没有利息。本次取款：{金额}",
-  "转账": "转账成功！您已向 {目标} 转入{金额}金币！",
-  "发红包": "发红包啦！发了{金额}金币点，大家快抢吧！红包口令为：{口令}",
-  "抢红包": "恭喜！你抢到了 {金额}金币，魅力+{魅力}！",
-  "赌博": "赌博成功！你获得了{赢得}金币，净赚{净赚}！",
-  "打劫": "打劫成功！你从 {目标} 处劫走{金额}金币！",
-  "打劫银行": "打劫银行成功！获得{金额}金币！",
-  "保释": "保释成功！花费{保释金}金币、{体力}体力，魅力-{魅力}。",
+  "转账": "转账成功！您已向 {目标} 转入{金额}货币！",
+  "发红包": "发红包啦！发了{金额}货币点，大家快抢吧！红包口令为：{口令}",
+  "抢红包": "恭喜！你抢到了 {金额}货币，魅力+{魅力}！",
+  "赌博": "赌博成功！你获得了{赢得}货币，净赚{净赚}！",
+  "打劫": "打劫成功！你从 {目标} 处劫走{金额}货币！",
+  "打劫银行": "打劫银行成功！获得{金额}货币！",
+  "保释": "保释成功！花费{保释金}货币、{体力}体力，魅力-{魅力}。",
   "我要越狱": "越狱成功！扣除{体力}体力，你重获自由~",
   "买下": "成功买下{目标}\r\n本次买入花费：{花费}\r\n奴隶身价上涨：{上涨}\r\n奴隶现在身价：{身价}",
-  "买奴隶位": "恭喜您花费{价格}金币\r\n买下一个奴隶位。\r\n当前可拥有奴隶上限：{上限}",
+  "买奴隶位": "恭喜您花费{价格}货币\r\n买下一个奴隶位。\r\n当前可拥有奴隶上限：{上限}",
   "我要自由": "万恶的主人，大发善心，花费{价格}换取自由！",
-  "保护": "恭喜您花费{费用}金币保护{目标}，剩余保护时间{分钟}分钟！",
-  "打赏": "[{名字}] 打赏给了 [{目标}] {金额}金币，实际获得{实收}",
+  "保护": "恭喜您花费{费用}货币保护{目标}，剩余保护时间{分钟}分钟！",
+  "补偿": "[{名字}] 打赏给了 [{目标}] {金额}货币，实际获得{实收}",
   "折磨": "你对 [{目标}] 实施了折磨...\r\n【奇遇】{剧情}\r\n奴隶货币 +{数值}",
   "讨好": "摇摇尾巴~向你主人卖个萌，主人一开心给了你{金额}",
-  "造反": "经过艰苦卓绝的战斗，你打败了万恶的主人，并恢复自由！抢走主人{金额}金币",
+  "造反": "经过艰苦卓绝的战斗，你打败了万恶的主人，并恢复自由！抢走主人{金额}货币",
   "我要学习": "缴纳学费 {学费} 后开始学习! 武器经验 +{经验}\r\n🍀奇遇: {剧情}",
   "我要祈福": "笑~忍神大人心情不错，看着面前楚楚可怜的{名字}，一高兴赏了{金额}",
   "打架": "打架啦！\r\n我方派出奴隶：{队伍}\r\n对方派出奴隶：{队伍}\r\n本次战斗结果：胜利！获得对方赔款：{金额}",
@@ -2346,14 +2336,7 @@ document.getElementById("userSort")?.addEventListener("change", renderUserTable)
 document.getElementById("userGidFilter")?.addEventListener("change", async () => {
   const sel = document.getElementById("userGidFilter");
   USER_GID_FILTER = (sel?.value || "").trim();
-  // 优先前端过滤（秒级），若后端支持则刷新带 gid 参数
-  if (RAW_USERS.length) {
-    renderUserTable();
-    // 同时触发后端过滤刷新（确保 >300 时精确）
-    try { await loadUsers(); } catch(e) {}
-  } else {
-    await loadUsers();
-  }
+  await loadUsers();
 });
 document.getElementById("userBody")?.addEventListener("click", async (e) => {
   const bSave = e.target.closest("button[data-save]");
@@ -3029,9 +3012,9 @@ async function loadBackups(dir="") {
     renderBackups(d);
   } catch (e) { err("backups: " + e.message); }
 }
-function renderBackups(d) {
+function renderBackups(d, _q) {
   const box = document.getElementById("backupBrowser");
-  const q = (document.getElementById("backupSearch")?.value || "").trim().toLowerCase();
+  const q = (typeof _q === "string" ? _q : (document.getElementById("backupSearch")?.value || "")).trim().toLowerCase();
   if (typeof window.BACKUP_SELECTED === 'undefined') window.BACKUP_SELECTED = "";
   let html = `<div class="bk-list">`;
   (d.dirs || []).forEach((x) => {
@@ -3406,8 +3389,10 @@ document.getElementById("btnBackupExport")?.addEventListener("click", async () =
     downloadBlob(blob, `xbbot_backup_export_${Date.now()}.json`);
   } catch(e){ toast("导出失败: "+e.message, "bad"); }
 });
+let _backupSearchTimer = null;
 document.getElementById("backupSearch")?.addEventListener("input", () => {
-  loadBackups(BACKUP_DIR);
+  if (_backupSearchTimer) clearTimeout(_backupSearchTimer);
+  _backupSearchTimer = setTimeout(() => { loadBackups(BACKUP_DIR); }, 300);
 });
 // 备份顶部操作：对选中项生效
 document.getElementById("btnBackupDelete")?.addEventListener("click", async () => {
@@ -3769,7 +3754,7 @@ async function openAirdropModal() {
 
   content.innerHTML = `
     <div style="font-size:12px;color:var(--muted);margin-bottom:12px">
-      一键向全群或指定群所有玩家批量发放金币、体力或抽奖券福利（自动事务写入）：
+      一键向全群或指定群所有玩家批量发放货币、体力或抽奖券福利（自动事务写入）：
     </div>
     <div style="display:flex;flex-direction:column;gap:10px">
       <div>
@@ -3778,7 +3763,7 @@ async function openAirdropModal() {
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
         <div>
-          <label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:4px">💰 赠送金币：</label>
+          <label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:4px">💰 赠送货币：</label>
           <input type="number" id="dropMoney" value="1000" style="width:100%;padding:7px 10px;border-radius:8px">
         </div>
         <div>
@@ -3868,7 +3853,7 @@ function openVisualItemBuilder() {
             </select>
           </div>
           <div>
-            <label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">商城金币售价：</label>
+            <label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">商城货币售价：</label>
             <input type="number" id="builderPrice" value="8888" style="width:100%;padding:6px 10px;border-radius:8px">
           </div>
         </div>
@@ -3988,6 +3973,12 @@ function initNewModules() {
     btn.addEventListener("click", () => sendSimulatorCommand(btn.dataset.simCmd));
   });
   document.getElementById("btnRefreshAnalytics")?.addEventListener("click", loadAnalytics);
+  document.getElementById("btnCmdAddCustomTop")?.addEventListener("click", () => {
+    const inner = document.getElementById("btnCmdAddCustom");
+    if (inner) { inner.click(); return; }
+    CMD_EDIT = { sys: "自定义", cmd: "", isNew: true, mapCmd: "" };
+    openCmdEditor();
+  });
   document.getElementById("btnDbDoctorOv")?.addEventListener("click", runDbDoctor);
   document.getElementById("btnUsersAirdrop")?.addEventListener("click", openAirdropModal);
   document.getElementById("btnVisualItemBuilder")?.addEventListener("click", openVisualItemBuilder);

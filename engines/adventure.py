@@ -68,24 +68,30 @@ def _revive(gid, qq):
     return _acct(gid, qq).int("revive_coins")
 
 
-MENU = (
-    "⚔️ 冒险系统（共 14 大秘境）\r\n"
-    "━━━━━━━━━━━━━━\r\n"
-    "🗺️【秘境探索】\r\n"
-    "　• 迷失海岛　• 死亡医院　• 灵异舞会　• 恶魔岛\r\n"
-    "　• 里世界　　• 恐怖旅程　• 雪夜之旅　• 幽灵谜境\r\n"
-    "　• 入夜暴走　• 海底神殿　• 赛博迷城　• 幽冥古刹\r\n"
-    "　• 沙海龙窟　• 时间回廊\r\n"
-    "━━━━━━━━━━━━━━\r\n"
-    "📖【冒险指令】\r\n"
-    "　• 开启冒险：冒险 地图名（如：冒险 海底神殿）\r\n"
-    "　• 推进剧情：直接发送数字 1 / 2 / 3 或【选择 1】\r\n"
-    "　• 进度查询：当前冒险\r\n"
-    "　• 提前撤退：结束冒险（需消耗复活币×1）\r\n"
-    "　• 荣誉榜单：复活币排行\r\n"
-    "━━━━━━━━━━━━━━\r\n"
-    "💡 每次探险消耗 10 体力 + 金币，生死抉择，奇遇由你书写！"
-)
+def _menu_text():
+    _cs = _cfgi("冒险消耗体力", 5)
+    _cost = _cfgi("冒险需要金钱", 100)
+    return (
+        "⚔️ 冒险系统（共 14 大秘境）\r\n"
+        "━━━━━━━━━━━━━━\r\n"
+        "🗺️【秘境探索】\r\n"
+        "　• 迷失海岛　• 死亡医院　• 灵异舞会　• 恶魔岛\r\n"
+        "　• 里世界　　• 恐怖旅程　• 雪夜之旅　• 幽灵谜境\r\n"
+        "　• 入夜暴走　• 海底神殿　• 赛博迷城　• 幽冥古刹\r\n"
+        "　• 沙海龙窟　• 时间回廊\r\n"
+        "━━━━━━━━━━━━━━\r\n"
+        "📖【冒险指令】\r\n"
+        "　• 开启冒险：冒险 地图名（如：冒险 海底神殿）\r\n"
+        "　• 推进剧情：直接发送数字 1 / 2 / 3 或【选择 1】\r\n"
+        "　• 进度查询：当前冒险\r\n"
+        "　• 提前撤退：结束冒险（需消耗复活币×1）\r\n"
+        "　• 荣誉榜单：复活币排行\r\n"
+        "━━━━━━━━━━━━━━\r\n"
+        f"💡 每次探险消耗 {_cs} 体力 + {_cost}{ST.coin_name()}，生死抉择，奇遇由你书写！"
+    )
+
+
+MENU = _menu_text()
 
 
 def _build_start_narrative(mapname):
@@ -113,14 +119,14 @@ def cmd_start(gid, qq, mapname):
     if mapname not in MAPS:
         return "亲，不存在该冒险地图，发送【冒险系统】查看地图吧！"
     a = _acct(gid, qq)
-    cs = _cfgi("冒险消耗体力", 10)
+    cs = _cfgi("冒险消耗体力", 5)
     if a.int("stamina") < cs:
         return "亲，您的体力不足，无法进行冒险！"
-    cost = _cfgi("冒险需要金钱", 1000)
+    cost = _cfgi("冒险需要金钱", 100)
     if _coin(gid, qq) < cost:
         return f"亲，需要{cost}{ST.coin_name()}才能冒险！"
     last = int(ST.recall_get("advt_%s_%s" % (gid, qq), "0") or 0)
-    gap = _cfgi("冒险间隔", 60) * 60
+    gap = _cfgi("冒险间隔", 3) * 60
     if last and _now() - last < gap:
         return "休息一下，过会儿再冒险吧！"
     ST.recall_set("advt_%s_%s" % (gid, qq), str(_now()))
@@ -160,10 +166,10 @@ def cmd_choose(gid, qq, n):
         return "请输入数字 1 / 2 / 3 继续冒险！"
     if choice not in (1, 2, 3):
         return "请输入数字 1 / 2 / 3 继续冒险！"
-    max_round = max(5, _cfgi("最大轮数", 10))
+    max_round = max(5, _cfgi("最大轮数", 6))
     adv["round"] = int(adv.get("round", 1)) + 1
     adv["last_choice"] = choice
-    lo = _cfgi("事件金钱下限", 500); hi = _cfgi("事件金钱上限", 800)
+    lo = _cfgi("事件金钱下限", 500); hi = _cfgi("事件金钱上限", 1500)
     money = random.randint(lo, hi)
     event_text, kind = _pick_event(m, choice)
 
@@ -206,7 +212,15 @@ def cmd_choose(gid, qq, n):
     _save(gid, qq, adv)
     if adv["round"] >= max_round:
         rv = _revive(gid, qq)
-        reward = int(max(lo, hi) * 1.8)
+        _end_lo = _cfgi("结局金钱下限", 0)
+        _end_hi = _cfgi("结局金钱上限", 0)
+        if _end_hi > 0:
+            _elo, _ehi = (_end_lo, _end_hi) if _end_lo <= _end_hi else (_end_hi, _end_lo)
+            _elo = max(0, _elo)
+            _ehi = max(0, _ehi)
+            reward = random.randint(_elo, _ehi) if _ehi > 0 else int(max(lo, hi) * 1.8)
+        else:
+            reward = int(max(lo, hi) * 1.8)
         ST.coins_add(gid, qq, reward)
         _save(gid, qq, {})
         return (
@@ -288,7 +302,7 @@ def handle(gid, qq, raw):
     if not text:
         return None
     if text in ST.wake("冒险系统", "冒险系统"):
-        return MENU
+        return _menu_text()
     if text == "当前冒险":
         return cmd_current(gid, qq)
     if text in ("结束冒险", "结束冒险(消耗复活币)", "结束冒险（消耗复活币）"):

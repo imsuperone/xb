@@ -101,7 +101,7 @@ def _guild_info(gid, gname):
     owner_g = _my(gid, owner) if owner else {}
     lv = int(owner_g.get("lv", 0) or 0)
     if lv < 1:
-        lv = 1 + (gong // max(1, _cfgi("升级需要帮贡", 200000)))
+        lv = 1 + (gong // max(1, _cfgi("升级需要帮贡", 20000)))
     return {"name": gname, "owner": owner, "count": len(mem), "gong": gong,
             "build": build, "fight": fight, "level": lv,
             "intro": _my(gid, owner).get("intro", "") if owner else ""}
@@ -129,9 +129,10 @@ MENU = (
     "🛠️ 创建帮派 名称　🤝 加入帮派 名称\r\n"
     "📨 帮派邀请 对方QQ　👥 成员列表\r\n"
     "💸 帮派贡献 金额　📈 我的贡献　🧱 我的修筑\r\n"
-    "🎁 领取帮派福利　⚔️ 武器请走奴隶系统\r\n"
+    "🎁 领取帮派福利　🚪 退出帮派\r\n"
+    "⚔️ 购买武器 数量（走奴隶武器）　🧱 修筑城墙 数量\r\n"
     "⚔️ 发起帮战 帮派名\r\n"
-    "🔧 管理帮派(帮主/护法)\r\n"
+    "🔧 管理帮派(帮主/护法)：修改宣言/添加护法/取消护法/移出帮派/出让帮派/帮派升级/解散帮派\r\n"
     "━━━━━━━━━━━━━━\r\n"
     "💡 发送对应指令即可游玩"
 )
@@ -200,7 +201,7 @@ def cmd_create(gid, qq, name):
         return f"亲，您已经加入了帮派「{g['name']}」，如需创建帮派，请先退出此帮派！"
     if _guild_info(gid, name):
         return "亲，该帮派名称已被使用，请使用其他名称进行创建！"
-    cost = _cfgi("创建消耗金钱", 100000)
+    cost = _cfgi("创建消耗金钱", 20000)
     ctili = _cfgi("创建消耗体力", 50)
     need_meili = _cfgi("创建需要魅力", 100)
     if ST.coins_get(gid, qq) < cost:
@@ -228,6 +229,14 @@ def cmd_join(gid, qq, name):
     limit = _cfgi("人数上限", 30)
     if info["count"] >= limit:
         return "亲，该帮派人数已满，无法加入！"
+    join_tili = _cfgi("加入消耗体力", 0)
+    join_meili = _cfgi("加入需要魅力", 0)
+    if _acct(gid, qq).int("stamina") < join_tili:
+        return f"亲，加入帮派需要消耗{join_tili}点体力，您的体力不足！"
+    if _acct(gid, qq).int("charm") < join_meili:
+        return f"亲，加入帮派需要具备{join_meili}点魅力，您的魅力值不足！"
+    if join_tili:
+        ST.acct_add(gid, qq, "stamina", -join_tili)
     _save_member(gid, qq, {"name": name, "pos": "成员", "gong": 0, "build": 0})
     return f"欢迎加入「{name}」！"
 
@@ -294,6 +303,16 @@ def cmd_exit(gid, qq):
         return "亲，您还没有加入任何帮派！"
     if g.get("pos") == "帮主":
         return "亲，您是该帮派帮主，请先【解散帮派】或【出让帮派】再退出！"
+    exit_tili = _cfgi("退出消耗体力", 0)
+    exit_meili = _cfgi("退出扣除魅力", 0)
+    if _acct(gid, qq).int("stamina") < exit_tili:
+        return f"亲，退出帮派需要消耗{exit_tili}点体力，您的体力不足！"
+    if _acct(gid, qq).int("charm") < exit_meili:
+        return f"亲，退出帮派需要扣除{exit_meili}点魅力，您的魅力不足！"
+    if exit_tili:
+        ST.acct_add(gid, qq, "stamina", -exit_tili)
+    if exit_meili:
+        ST.acct_add(gid, qq, "charm", -exit_meili)
     name = g["name"]
     _save_member(gid, qq, {})
     return f"您已退出帮派「{name}」！"
@@ -392,7 +411,7 @@ def cmd_welfare(gid, qq):
     key = f"guild_welfare_{gid}_{qq}_{time.strftime('%Y%m%d')}"
     if ST.recall_get(key, ""):
         return "亲，您今天已经领取过帮派福利了，明天再来吧！"
-    base = _cfgi("福利基数", 10000)
+    base = _cfgi("福利基数", 4000)
     got = base + int(g.get("gong", 0)) * 10
     ST.coins_add(gid, qq, got)
     ST.recall_set(key, "1")
@@ -426,6 +445,21 @@ def cmd_battle(gid, qq, gname):
     else:
         win = random_bool(mp / (mp + fp)) if (mp + fp) else False
     if win:
+        import random as _rr
+        lo = _cfgi("帮战获贡下限", 0)
+        hi = _cfgi("帮战获贡上限", 0)
+        gain = 0
+        if hi > 0 or lo > 0:
+            _lo, _hi = (lo, hi) if lo <= hi else (hi, lo)
+            _lo = max(0, _lo)
+            _hi = max(0, _hi)
+            if _hi > 0:
+                gain = _rr.randint(_lo, _hi)
+        if gain > 0:
+            my["gong"] = int(my.get("gong", 0) or 0) + gain
+            _save_member(gid, qq, my)
+            return (f"恭喜，您的帮派在此次帮战中大获全胜，收缴敌方帮贡！+{gain}帮贡\r\n"
+                    f"{my['name']}(战力{mp}) 击败 {gname}(战力{fp})")
         return (f"恭喜，您的帮派在此次帮战中大获全胜，收缴敌方帮贡！\r\n"
                 f"{my['name']}(战力{mp}) 击败 {gname}(战力{fp})")
     return (f"很抱歉，您的帮派在此次帮战中惨败，损失帮贡！\r\n"
@@ -477,7 +511,7 @@ def cmd_manage(gid, qq, arg):
             return f"已将帮主出让给 <{_gname(gid, m.group(1))}>！"
         return "仅帮主可出让给同帮成员！"
     if arg.startswith("帮派升级"):
-        cost = _cfgi("升级需要帮贡", 200000)
+        cost = _cfgi("升级需要帮贡", 20000)
         info = _guild_info(gid, name)
         if not info:
             return "帮派数据异常！"
@@ -489,6 +523,16 @@ def cmd_manage(gid, qq, arg):
         _save_member(gid, info["owner"], owner_g)
         return f"帮派升至 Lv.{owner_g['lv']}！（消耗{cost}帮贡）"
     if arg.startswith("解散帮派"):
+        dis_tili = _cfgi("解散消耗体力", 0)
+        dis_meili = _cfgi("解散扣除魅力", 0)
+        if _acct(gid, qq).int("stamina") < dis_tili:
+            return f"亲，解散帮派需要消耗{dis_tili}点体力，您的体力不足！"
+        if _acct(gid, qq).int("charm") < dis_meili:
+            return f"亲，解散帮派需要扣除{dis_meili}点魅力，您的魅力不足！"
+        if dis_tili:
+            ST.acct_add(gid, qq, "stamina", -dis_tili)
+        if dis_meili:
+            ST.acct_add(gid, qq, "charm", -dis_meili)
         mem = _members(gid, name)
         for q, _ in mem:
             _save_member(gid, q, {})

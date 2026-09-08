@@ -33,7 +33,16 @@ async def handle_slave_users(request):
 
         if gid and gid.isdigit():
             st = slave.state(gid)
-            for qq in st.sections():
+            _all_secs = [s for s in st.sections() if s.isdigit()]
+            _owner_cnt = {}
+            for _s in _all_secs:
+                try:
+                    _o = st[_s].get("owner", "") or ""
+                except Exception:
+                    _o = ""
+                if _o:
+                    _owner_cnt[_o] = _owner_cnt.get(_o, 0) + 1
+            for qq in _all_secs:
                 if not qq.isdigit(): continue
                 u = slave.U(st, qq)
                 p = int(u.get("price", "0") or 0)
@@ -50,7 +59,7 @@ async def handle_slave_users(request):
                     "owner": u.get("owner", "") or "",
                     "owner_name": slave.NOTE_NAMES.get(u.get("owner", ""), u.get("owner", "")) if u.get("owner") else "",
                     "protect": u.get("protect_until", ""),
-                    "slaves": len([s for s in st.sections() if s.isdigit() and st[s].get("owner") == str(qq)]),
+                    "slaves": _owner_cnt.get(str(qq), 0),
                     "weapons": u.get("weapon", ""),
                     "treasures": u.get("treasure", ""),
                 })
@@ -83,7 +92,16 @@ async def handle_slave_users(request):
             for g in gids:
                 try:
                     st = slave.state(g)
-                    for qq in st.sections():
+                    _all_secs = [s for s in st.sections() if s.isdigit()]
+                    _owner_cnt = {}
+                    for _s in _all_secs:
+                        try:
+                            _o = st[_s].get("owner", "") or ""
+                        except Exception:
+                            _o = ""
+                        if _o:
+                            _owner_cnt[_o] = _owner_cnt.get(_o, 0) + 1
+                    for qq in _all_secs:
                         if not qq.isdigit(): continue
                         u = slave.U(st, qq)
                         p = int(u.get("price", "0") or 0)
@@ -100,7 +118,7 @@ async def handle_slave_users(request):
                             "owner": u.get("owner", "") or "",
                             "owner_name": slave.NOTE_NAMES.get(u.get("owner", ""), u.get("owner", "")) if u.get("owner") else "",
                             "protect": u.get("protect_until", ""),
-                            "slaves": len([s for s in st.sections() if s.isdigit() and st[s].get("owner") == str(qq)]),
+                            "slaves": _owner_cnt.get(str(qq), 0),
                             "weapons": u.get("weapon", ""),
                             "treasures": u.get("treasure", ""),
                         })
@@ -166,7 +184,7 @@ async def handle_slave_calibrate(request):
             "ok": True,
             "fixed_count": fixed_count,
             "initial_price": init_price,
-            "msg": f"已成功校准 {fixed_count} 名用户的奴隶身价为 {init_price} 金币！"
+            "msg": f"已成功校准 {fixed_count} 名用户的奴隶身价为 {init_price} {ST.coin_name() if hasattr(ST, 'coin_name') else '金币'}！"
         })
     except Exception as e:
         return _err(f"slave calibrate failed: {e}", 500)

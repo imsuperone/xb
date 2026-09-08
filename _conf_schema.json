@@ -40,12 +40,12 @@
       "保护时长小时": {
         "type": "string",
         "description": "保护时长(小时)",
-        "default": ""
+        "default": "12"
       },
       "保护费用": {
         "type": "string",
         "description": "保护费用",
-        "default": ""
+        "default": "1000"
       },
       "十连抽花费": {
         "type": "int",
@@ -236,6 +236,16 @@
         "type": "int",
         "description": "三阶升阶概率%",
         "default": 20
+      },
+      "抽武器花费": {
+        "type": "int",
+        "description": "单次抽武器花费",
+        "default": 1988
+      },
+      "平衡模式": {
+        "type": "string",
+        "description": "当前数值平衡档位(standard/casual/hardcore，由一键平衡维护)",
+        "default": "standard"
       }
     }
   },
@@ -321,6 +331,16 @@
         "type": "int",
         "description": "",
         "default": 1
+      },
+      "赎身间隔": {
+        "type": "int",
+        "description": "赎身冷却(分钟)",
+        "default": 30
+      },
+      "自由间隔": {
+        "type": "int",
+        "description": "我要自由冷却(分钟)",
+        "default": 30
       }
     }
   },
@@ -366,18 +386,7 @@
   },
   "起名配置": {
     "type": "object",
-    "items": {
-      "起名开关": {
-        "type": "string",
-        "description": "",
-        "default": "真"
-      },
-      "起名费用": {
-        "type": "int",
-        "description": "",
-        "default": 200
-      }
-    }
+    "items": {}
   },
   "签到配置": {
     "type": "object",
@@ -1011,11 +1020,6 @@
         "description": "精灵系统开关(真/假)",
         "default": "真"
       },
-      "初始精灵": {
-        "type": "string",
-        "description": "领养赠送的初始精灵(默认第一只)",
-        "default": "叶子"
-      },
       "升级经验": {
         "type": "int",
         "description": "每级所需基础经验(=等级*该值)",
@@ -1170,6 +1174,11 @@
         "type": "int",
         "description": "坐骑-私人航空价格",
         "default": 4000000
+      },
+      "价格_女仆": {
+        "type": "int",
+        "description": "女仆坐骑价格",
+        "default": 15000000
       }
     }
   },
@@ -1225,16 +1234,6 @@
         "type": "int",
         "description": "帮派福利基础金额",
         "default": 4000
-      },
-      "武器价格": {
-        "type": "int",
-        "description": "帮派购买武器单价",
-        "default": 5000
-      },
-      "购买上限": {
-        "type": "int",
-        "description": "帮派武器购买上限",
-        "default": 30
       },
       "修筑价格": {
         "type": "int",
@@ -1391,7 +1390,1188 @@
   "指令启用配置": {
     "type": "object",
     "description": "每条指令的启用开关(指令名: 真/假; 假=该指令不再响应)。由指令页维护，无需手填",
-    "items": {}
+    "items": {
+      "30连抽": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "50连抽": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "webdav测试": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "xb备份": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "xb版本": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "三十连抽": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "丢弃坐骑": {
+        "type": "string",
+        "default": "真",
+        "description": "【坐骑】指令启用开关(真/假；假=不再响应)"
+      },
+      "丢弃精灵": {
+        "type": "string",
+        "default": "真",
+        "description": "【精灵】指令启用开关(真/假；假=不再响应)"
+      },
+      "个人排行": {
+        "type": "string",
+        "default": "真",
+        "description": "【签到】指令启用开关(真/假；假=不再响应)"
+      },
+      "个人财富榜": {
+        "type": "string",
+        "default": "真",
+        "description": "【签到】指令启用开关(真/假；假=不再响应)"
+      },
+      "买下": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "买奴隶位": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "二四点": {
+        "type": "string",
+        "default": "真",
+        "description": "【娱乐】指令启用开关(真/假；假=不再响应)"
+      },
+      "五十连抽": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "体力排行榜": {
+        "type": "string",
+        "default": "真",
+        "description": "【签到】指令启用开关(真/假；假=不再响应)"
+      },
+      "体力榜": {
+        "type": "string",
+        "default": "真",
+        "description": "【签到】指令启用开关(真/假；假=不再响应)"
+      },
+      "使用精灵球": {
+        "type": "string",
+        "default": "真",
+        "description": "【精灵】指令启用开关(真/假；假=不再响应)"
+      },
+      "保护": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "保释": {
+        "type": "string",
+        "default": "真",
+        "description": "【银行】指令启用开关(真/假；假=不再响应)"
+      },
+      "修改宣言": {
+        "type": "string",
+        "default": "真",
+        "description": "【帮派】指令启用开关(真/假；假=不再响应)"
+      },
+      "修筑城墙": {
+        "type": "string",
+        "default": "真",
+        "description": "【帮派】指令启用开关(真/假；假=不再响应)"
+      },
+      "充钱": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "关闭维护": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "关闭维护模式": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "冒险": {
+        "type": "string",
+        "default": "真",
+        "description": "【冒险】指令启用开关(真/假；假=不再响应)"
+      },
+      "冒险系统": {
+        "type": "string",
+        "default": "真",
+        "description": "【冒险】指令启用开关(真/假；假=不再响应)"
+      },
+      "出战状态": {
+        "type": "string",
+        "default": "真",
+        "description": "【精灵】指令启用开关(真/假；假=不再响应)"
+      },
+      "出战精灵": {
+        "type": "string",
+        "default": "真",
+        "description": "【精灵】指令启用开关(真/假；假=不再响应)"
+      },
+      "出狱": {
+        "type": "string",
+        "default": "真",
+        "description": "【银行】指令启用开关(真/假；假=不再响应)"
+      },
+      "出让帮派": {
+        "type": "string",
+        "default": "真",
+        "description": "【帮派】指令启用开关(真/假；假=不再响应)"
+      },
+      "切换坐骑": {
+        "type": "string",
+        "default": "真",
+        "description": "【坐骑】指令启用开关(真/假；假=不再响应)"
+      },
+      "创建帮派": {
+        "type": "string",
+        "default": "真",
+        "description": "【帮派】指令启用开关(真/假；假=不再响应)"
+      },
+      "加入二四点": {
+        "type": "string",
+        "default": "真",
+        "description": "【娱乐】指令启用开关(真/假；假=不再响应)"
+      },
+      "加入字谜": {
+        "type": "string",
+        "default": "真",
+        "description": "【娱乐】指令启用开关(真/假；假=不再响应)"
+      },
+      "加入帮派": {
+        "type": "string",
+        "default": "真",
+        "description": "【帮派】指令启用开关(真/假；假=不再响应)"
+      },
+      "加入急转弯": {
+        "type": "string",
+        "default": "真",
+        "description": "【娱乐】指令启用开关(真/假；假=不再响应)"
+      },
+      "加入接龙": {
+        "type": "string",
+        "default": "真",
+        "description": "【娱乐】指令启用开关(真/假；假=不再响应)"
+      },
+      "加入猜数": {
+        "type": "string",
+        "default": "真",
+        "description": "【娱乐】指令启用开关(真/假；假=不再响应)"
+      },
+      "加入答题": {
+        "type": "string",
+        "default": "真",
+        "description": "【娱乐】指令启用开关(真/假；假=不再响应)"
+      },
+      "劫狱": {
+        "type": "string",
+        "default": "真",
+        "description": "【银行】指令启用开关(真/假；假=不再响应)"
+      },
+      "十连抽": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "升星": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "升阶": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "发红包": {
+        "type": "string",
+        "default": "真",
+        "description": "【银行】指令启用开关(真/假；假=不再响应)"
+      },
+      "发起帮战": {
+        "type": "string",
+        "default": "真",
+        "description": "【帮派】指令启用开关(真/假；假=不再响应)"
+      },
+      "取款": {
+        "type": "string",
+        "default": "真",
+        "description": "【银行】指令启用开关(真/假；假=不再响应)"
+      },
+      "取消护法": {
+        "type": "string",
+        "default": "真",
+        "description": "【帮派】指令启用开关(真/假；假=不再响应)"
+      },
+      "同意加入帮派": {
+        "type": "string",
+        "default": "真",
+        "description": "【帮派】指令启用开关(真/假；假=不再响应)"
+      },
+      "同意邀请": {
+        "type": "string",
+        "default": "真",
+        "description": "【帮派】指令启用开关(真/假；假=不再响应)"
+      },
+      "回收出战精灵": {
+        "type": "string",
+        "default": "真",
+        "description": "【精灵】指令启用开关(真/假；假=不再响应)"
+      },
+      "回收欢迎坐骑": {
+        "type": "string",
+        "default": "真",
+        "description": "【坐骑】指令启用开关(真/假；假=不再响应)"
+      },
+      "坐骑商城": {
+        "type": "string",
+        "default": "真",
+        "description": "【坐骑】指令启用开关(真/假；假=不再响应)"
+      },
+      "坐骑系统": {
+        "type": "string",
+        "default": "真",
+        "description": "【坐骑】指令启用开关(真/假；假=不再响应)"
+      },
+      "备份": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "备份xb": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "备份数据": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "复活币排行": {
+        "type": "string",
+        "default": "真",
+        "description": "【冒险】指令启用开关(真/假；假=不再响应)"
+      },
+      "奴隶打工": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "奴隶收工": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "奴隶系统": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "娱乐系统": {
+        "type": "string",
+        "default": "真",
+        "description": "【娱乐】指令启用开关(真/假；假=不再响应)"
+      },
+      "存款": {
+        "type": "string",
+        "default": "真",
+        "description": "【银行】指令启用开关(真/假；假=不再响应)"
+      },
+      "学习": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "宝物升阶": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "宝物菜单": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "小白升级": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "小白更新": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "小白版本": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "帮派列表": {
+        "type": "string",
+        "default": "真",
+        "description": "【帮派】指令启用开关(真/假；假=不再响应)"
+      },
+      "帮派升级": {
+        "type": "string",
+        "default": "真",
+        "description": "【帮派】指令启用开关(真/假；假=不再响应)"
+      },
+      "帮派排行": {
+        "type": "string",
+        "default": "真",
+        "description": "【帮派】指令启用开关(真/假；假=不再响应)"
+      },
+      "帮派管理": {
+        "type": "string",
+        "default": "真",
+        "description": "【帮派】指令启用开关(真/假；假=不再响应)"
+      },
+      "帮派系统": {
+        "type": "string",
+        "default": "真",
+        "description": "【帮派】指令启用开关(真/假；假=不再响应)"
+      },
+      "帮派贡献": {
+        "type": "string",
+        "default": "真",
+        "description": "【帮派】指令启用开关(真/假；假=不再响应)"
+      },
+      "帮派邀请": {
+        "type": "string",
+        "default": "真",
+        "description": "【帮派】指令启用开关(真/假；假=不再响应)"
+      },
+      "应用统计": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "开启维护": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "开始二四点": {
+        "type": "string",
+        "default": "真",
+        "description": "【娱乐】指令启用开关(真/假；假=不再响应)"
+      },
+      "开始急转弯": {
+        "type": "string",
+        "default": "真",
+        "description": "【娱乐】指令启用开关(真/假；假=不再响应)"
+      },
+      "开始接龙": {
+        "type": "string",
+        "default": "真",
+        "description": "【娱乐】指令启用开关(真/假；假=不再响应)"
+      },
+      "开始猜字谜": {
+        "type": "string",
+        "default": "真",
+        "description": "【娱乐】指令启用开关(真/假；假=不再响应)"
+      },
+      "开始猜数": {
+        "type": "string",
+        "default": "真",
+        "description": "【娱乐】指令启用开关(真/假；假=不再响应)"
+      },
+      "开始答题": {
+        "type": "string",
+        "default": "真",
+        "description": "【娱乐】指令启用开关(真/假；假=不再响应)"
+      },
+      "强制取款": {
+        "type": "string",
+        "default": "真",
+        "description": "【银行】指令启用开关(真/假；假=不再响应)"
+      },
+      "当前冒险": {
+        "type": "string",
+        "default": "真",
+        "description": "【冒险】指令启用开关(真/假；假=不再响应)"
+      },
+      "当前接龙": {
+        "type": "string",
+        "default": "真",
+        "description": "【娱乐】指令启用开关(真/假；假=不再响应)"
+      },
+      "成员列表": {
+        "type": "string",
+        "default": "真",
+        "description": "【帮派】指令启用开关(真/假；假=不再响应)"
+      },
+      "我加入接龙": {
+        "type": "string",
+        "default": "真",
+        "description": "【娱乐】指令启用开关(真/假；假=不再响应)"
+      },
+      "我的信息": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "我的修筑": {
+        "type": "string",
+        "default": "真",
+        "description": "【帮派】指令启用开关(真/假；假=不再响应)"
+      },
+      "我的坐骑": {
+        "type": "string",
+        "default": "真",
+        "description": "【坐骑】指令启用开关(真/假；假=不再响应)"
+      },
+      "我的帮派": {
+        "type": "string",
+        "default": "真",
+        "description": "【帮派】指令启用开关(真/假；假=不再响应)"
+      },
+      "我的排行": {
+        "type": "string",
+        "default": "真",
+        "description": "【签到】指令启用开关(真/假；假=不再响应)"
+      },
+      "我的精灵": {
+        "type": "string",
+        "default": "真",
+        "description": "【精灵】指令启用开关(真/假；假=不再响应)"
+      },
+      "我的背包": {
+        "type": "string",
+        "default": "真",
+        "description": "【精灵】指令启用开关(真/假；假=不再响应)"
+      },
+      "我的贡献": {
+        "type": "string",
+        "default": "真",
+        "description": "【帮派】指令启用开关(真/假；假=不再响应)"
+      },
+      "我要": {
+        "type": "string",
+        "default": "真",
+        "description": "【银行】指令启用开关(真/假；假=不再响应)"
+      },
+      "我要出狱": {
+        "type": "string",
+        "default": "真",
+        "description": "【银行】指令启用开关(真/假；假=不再响应)"
+      },
+      "我要学习": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "我要打工": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "我要祈福": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "我要自由": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "我要越狱": {
+        "type": "string",
+        "default": "真",
+        "description": "【银行】指令启用开关(真/假；假=不再响应)"
+      },
+      "我要进监狱": {
+        "type": "string",
+        "default": "真",
+        "description": "【银行】指令启用开关(真/假；假=不再响应)"
+      },
+      "我要造反": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "打劫": {
+        "type": "string",
+        "default": "真",
+        "description": "【银行】指令启用开关(真/假；假=不再响应)"
+      },
+      "打劫银行": {
+        "type": "string",
+        "default": "真",
+        "description": "【银行】指令启用开关(真/假；假=不再响应)"
+      },
+      "打卡": {
+        "type": "string",
+        "default": "真",
+        "description": "【签到】指令启用开关(真/假；假=不再响应)"
+      },
+      "打开维护": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "打架": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "扔炸弹": {
+        "type": "string",
+        "default": "真",
+        "description": "【娱乐】指令启用开关(真/假；假=不再响应)"
+      },
+      "扣钱": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "折磨": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "抢红包": {
+        "type": "string",
+        "default": "真",
+        "description": "【银行】指令启用开关(真/假；假=不再响应)"
+      },
+      "抽奖": {
+        "type": "string",
+        "default": "真",
+        "description": "【签到】指令启用开关(真/假；假=不再响应)"
+      },
+      "抽武器": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "抽签": {
+        "type": "string",
+        "default": "真",
+        "description": "【娱乐】指令启用开关(真/假；假=不再响应)"
+      },
+      "挑战": {
+        "type": "string",
+        "default": "真",
+        "description": "【精灵】指令启用开关(真/假；假=不再响应)"
+      },
+      "排行榜": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "接受邀请": {
+        "type": "string",
+        "default": "真",
+        "description": "【帮派】指令启用开关(真/假；假=不再响应)"
+      },
+      "接龙词": {
+        "type": "string",
+        "default": "真",
+        "description": "【娱乐】指令启用开关(真/假；假=不再响应)"
+      },
+      "接龙进度": {
+        "type": "string",
+        "default": "真",
+        "description": "【娱乐】指令启用开关(真/假；假=不再响应)"
+      },
+      "插件版本": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "携带精灵": {
+        "type": "string",
+        "default": "真",
+        "description": "【精灵】指令启用开关(真/假；假=不再响应)"
+      },
+      "更新": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "查接龙": {
+        "type": "string",
+        "default": "真",
+        "description": "【娱乐】指令启用开关(真/假；假=不再响应)"
+      },
+      "查看出战精灵": {
+        "type": "string",
+        "default": "真",
+        "description": "【精灵】指令启用开关(真/假；假=不再响应)"
+      },
+      "查看地图": {
+        "type": "string",
+        "default": "真",
+        "description": "【精灵】指令启用开关(真/假；假=不再响应)"
+      },
+      "查看坐骑": {
+        "type": "string",
+        "default": "真",
+        "description": "【坐骑】指令启用开关(真/假；假=不再响应)"
+      },
+      "查看更新": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "查看欢迎坐骑": {
+        "type": "string",
+        "default": "真",
+        "description": "【坐骑】指令启用开关(真/假；假=不再响应)"
+      },
+      "查看精灵": {
+        "type": "string",
+        "default": "真",
+        "description": "【精灵】指令启用开关(真/假；假=不再响应)"
+      },
+      "查看维护": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "查询": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "查询 冒险": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "查询 坐骑": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "查询 帮派": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "查询 版本": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "查询 精灵": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "查询 维护": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "查询 菜单": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "查询冒险": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "查询地图": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "查询坐骑": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "查询帮派": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "查询更新": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "查询版本": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "查询精灵": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "查询维护": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "检查更新": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "检查版本": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "武器升星": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "武器菜单": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "每日点赞": {
+        "type": "string",
+        "default": "真",
+        "description": "【签到】指令启用开关(真/假；假=不再响应)"
+      },
+      "测试testxb": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "测试testxb1": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "测试testxb2": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "测试testxb3": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "测试testxb4": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "测试testxb5": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "测试testxb6": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "测试testxb7": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "测试testxb8": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "测试webdav": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "添加护法": {
+        "type": "string",
+        "default": "真",
+        "description": "【帮派】指令启用开关(真/假；假=不再响应)"
+      },
+      "清空": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "点赞": {
+        "type": "string",
+        "default": "真",
+        "description": "【签到】指令启用开关(真/假；假=不再响应)"
+      },
+      "版本": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "猜拳": {
+        "type": "string",
+        "default": "真",
+        "description": "【娱乐】指令启用开关(真/假；假=不再响应)"
+      },
+      "祈福": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "禁言": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "移出帮派": {
+        "type": "string",
+        "default": "真",
+        "description": "【帮派】指令启用开关(真/假；假=不再响应)"
+      },
+      "签到": {
+        "type": "string",
+        "default": "真",
+        "description": "【签到】指令启用开关(真/假；假=不再响应)"
+      },
+      "签到排行": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "签到排行榜": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "签到榜": {
+        "type": "string",
+        "default": "真",
+        "description": "【签到】指令启用开关(真/假；假=不再响应)"
+      },
+      "签到系统": {
+        "type": "string",
+        "default": "真",
+        "description": "【签到】指令启用开关(真/假；假=不再响应)"
+      },
+      "管理帮派": {
+        "type": "string",
+        "default": "真",
+        "description": "【帮派】指令启用开关(真/假；假=不再响应)"
+      },
+      "精灵冒险": {
+        "type": "string",
+        "default": "真",
+        "description": "【精灵】指令启用开关(真/假；假=不再响应)"
+      },
+      "精灵列表": {
+        "type": "string",
+        "default": "真",
+        "description": "【精灵】指令启用开关(真/假；假=不再响应)"
+      },
+      "精灵商城": {
+        "type": "string",
+        "default": "真",
+        "description": "【精灵】指令启用开关(真/假；假=不再响应)"
+      },
+      "精灵地图": {
+        "type": "string",
+        "default": "真",
+        "description": "【精灵】指令启用开关(真/假；假=不再响应)"
+      },
+      "精灵对战": {
+        "type": "string",
+        "default": "真",
+        "description": "【精灵】指令启用开关(真/假；假=不再响应)"
+      },
+      "精灵排行": {
+        "type": "string",
+        "default": "真",
+        "description": "【精灵】指令启用开关(真/假；假=不再响应)"
+      },
+      "精灵系统": {
+        "type": "string",
+        "default": "真",
+        "description": "【精灵】指令启用开关(真/假；假=不再响应)"
+      },
+      "结束冒险": {
+        "type": "string",
+        "default": "真",
+        "description": "【冒险】指令启用开关(真/假；假=不再响应)"
+      },
+      "结束接龙": {
+        "type": "string",
+        "default": "真",
+        "description": "【娱乐】指令启用开关(真/假；假=不再响应)"
+      },
+      "维护信息": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "羁绊": {
+        "type": "string",
+        "default": "真",
+        "description": "【精灵】指令启用开关(真/假；假=不再响应)"
+      },
+      "群列表": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "自我": {
+        "type": "string",
+        "default": "真",
+        "description": "【银行】指令启用开关(真/假；假=不再响应)"
+      },
+      "自我保释": {
+        "type": "string",
+        "default": "真",
+        "description": "【银行】指令启用开关(真/假；假=不再响应)"
+      },
+      "补偿": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "解散帮派": {
+        "type": "string",
+        "default": "真",
+        "description": "【帮派】指令启用开关(真/假；假=不再响应)"
+      },
+      "讨好": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "讨好主人": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "设置欢迎坐骑": {
+        "type": "string",
+        "default": "真",
+        "description": "【坐骑】指令启用开关(真/假；假=不再响应)"
+      },
+      "财富榜": {
+        "type": "string",
+        "default": "真",
+        "description": "【签到】指令启用开关(真/假；假=不再响应)"
+      },
+      "购买": {
+        "type": "string",
+        "default": "真",
+        "description": "【精灵】指令启用开关(真/假；假=不再响应)"
+      },
+      "购买体力": {
+        "type": "string",
+        "default": "真",
+        "description": "【签到】指令启用开关(真/假；假=不再响应)"
+      },
+      "购买坐骑": {
+        "type": "string",
+        "default": "真",
+        "description": "【精灵】指令启用开关(真/假；假=不再响应)"
+      },
+      "购买奴隶位": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "购买武器": {
+        "type": "string",
+        "default": "真",
+        "description": "【精灵】指令启用开关(真/假；假=不再响应)"
+      },
+      "购买魅力": {
+        "type": "string",
+        "default": "真",
+        "description": "【签到】指令启用开关(真/假；假=不再响应)"
+      },
+      "赌博": {
+        "type": "string",
+        "default": "真",
+        "description": "【银行】指令启用开关(真/假；假=不再响应)"
+      },
+      "赎身": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "起名": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "超管列表": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "超管系统": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "越狱": {
+        "type": "string",
+        "default": "真",
+        "description": "【银行】指令启用开关(真/假；假=不再响应)"
+      },
+      "踢人": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "身价排行": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "身价排行榜": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "转账": {
+        "type": "string",
+        "default": "真",
+        "description": "【银行】指令启用开关(真/假；假=不再响应)"
+      },
+      "进化": {
+        "type": "string",
+        "default": "真",
+        "description": "【精灵】指令启用开关(真/假；假=不再响应)"
+      },
+      "进监狱": {
+        "type": "string",
+        "default": "真",
+        "description": "【银行】指令启用开关(真/假；假=不再响应)"
+      },
+      "退出二四点": {
+        "type": "string",
+        "default": "真",
+        "description": "【娱乐】指令启用开关(真/假；假=不再响应)"
+      },
+      "退出字谜": {
+        "type": "string",
+        "default": "真",
+        "description": "【娱乐】指令启用开关(真/假；假=不再响应)"
+      },
+      "退出帮派": {
+        "type": "string",
+        "default": "真",
+        "description": "【帮派】指令启用开关(真/假；假=不再响应)"
+      },
+      "退出急转弯": {
+        "type": "string",
+        "default": "真",
+        "description": "【娱乐】指令启用开关(真/假；假=不再响应)"
+      },
+      "退出接龙": {
+        "type": "string",
+        "default": "真",
+        "description": "【娱乐】指令启用开关(真/假；假=不再响应)"
+      },
+      "退出猜数": {
+        "type": "string",
+        "default": "真",
+        "description": "【娱乐】指令启用开关(真/假；假=不再响应)"
+      },
+      "退出答题": {
+        "type": "string",
+        "default": "真",
+        "description": "【娱乐】指令启用开关(真/假；假=不再响应)"
+      },
+      "选择": {
+        "type": "string",
+        "default": "真",
+        "description": "【冒险】指令启用开关(真/假；假=不再响应)"
+      },
+      "造反": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "释放": {
+        "type": "string",
+        "default": "真",
+        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
+      },
+      "重置": {
+        "type": "string",
+        "default": "真",
+        "description": "【超管】指令启用开关(真/假；假=不再响应)"
+      },
+      "重置接龙": {
+        "type": "string",
+        "default": "真",
+        "description": "【娱乐】指令启用开关(真/假；假=不再响应)"
+      },
+      "银行系统": {
+        "type": "string",
+        "default": "真",
+        "description": "【银行】指令启用开关(真/假；假=不再响应)"
+      },
+      "领养精灵": {
+        "type": "string",
+        "default": "真",
+        "description": "【精灵】指令启用开关(真/假；假=不再响应)"
+      },
+      "领取帮派福利": {
+        "type": "string",
+        "default": "真",
+        "description": "【帮派】指令启用开关(真/假；假=不再响应)"
+      },
+      "领取新人礼包": {
+        "type": "string",
+        "default": "真",
+        "description": "【签到】指令启用开关(真/假；假=不再响应)"
+      },
+      "领取新手礼包": {
+        "type": "string",
+        "default": "真",
+        "description": "【签到】指令启用开关(真/假；假=不再响应)"
+      },
+      "领取精灵礼包": {
+        "type": "string",
+        "default": "真",
+        "description": "【精灵】指令启用开关(真/假；假=不再响应)"
+      },
+      "魅力排行榜": {
+        "type": "string",
+        "default": "真",
+        "description": "【签到】指令启用开关(真/假；假=不再响应)"
+      },
+      "魅力榜": {
+        "type": "string",
+        "default": "真",
+        "description": "【签到】指令启用开关(真/假；假=不再响应)"
+      }
+    }
   },
   "指令回复配置": {
     "type": "object",
@@ -1487,11 +2667,6 @@
         "description": "丢弃精灵回复模板(数值走 精灵配置.魅力减少)",
         "default": ""
       },
-      "打赏": {
-        "type": "text",
-        "description": "打赏回复模板(数值走 费用配置.打赏上限/间隔配置.打赏间隔)",
-        "default": ""
-      },
       "保护": {
         "type": "text",
         "description": "保护回复模板(数值走 设置.保护费用/间隔配置.保护间隔)",
@@ -1511,6 +2686,1076 @@
         "type": "text",
         "description": "造反回复模板(数值走 概率配置.造反概率/间隔配置.造反间隔)",
         "default": ""
+      },
+      "补偿": {
+        "type": "text",
+        "description": "补偿回复模板(数值走 费用配置.补偿上限/间隔配置.补偿间隔)",
+        "default": ""
+      },
+      "30连抽": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】30连抽回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "50连抽": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】50连抽回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "webdav测试": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】webdav测试回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "xb备份": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】xb备份回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "xb版本": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】xb版本回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "三十连抽": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】三十连抽回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "丢弃坐骑": {
+        "type": "text",
+        "default": "",
+        "description": "【坐骑】丢弃坐骑回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "个人排行": {
+        "type": "text",
+        "default": "",
+        "description": "【签到】个人排行回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "个人财富榜": {
+        "type": "text",
+        "default": "",
+        "description": "【签到】个人财富榜回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "买下": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】买下回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "买奴隶位": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】买奴隶位回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "二四点": {
+        "type": "text",
+        "default": "",
+        "description": "【娱乐】二四点回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "五十连抽": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】五十连抽回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "体力排行榜": {
+        "type": "text",
+        "default": "",
+        "description": "【签到】体力排行榜回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "体力榜": {
+        "type": "text",
+        "default": "",
+        "description": "【签到】体力榜回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "使用精灵球": {
+        "type": "text",
+        "default": "",
+        "description": "【精灵】使用精灵球回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "修改宣言": {
+        "type": "text",
+        "default": "",
+        "description": "【帮派】修改宣言回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "修筑城墙": {
+        "type": "text",
+        "default": "",
+        "description": "【帮派】修筑城墙回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "充钱": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】充钱回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "关闭维护": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】关闭维护回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "关闭维护模式": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】关闭维护模式回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "冒险": {
+        "type": "text",
+        "default": "",
+        "description": "【冒险】冒险回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "冒险系统": {
+        "type": "text",
+        "default": "",
+        "description": "【冒险】冒险系统回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "出战状态": {
+        "type": "text",
+        "default": "",
+        "description": "【精灵】出战状态回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "出战精灵": {
+        "type": "text",
+        "default": "",
+        "description": "【精灵】出战精灵回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "出狱": {
+        "type": "text",
+        "default": "",
+        "description": "【银行】出狱回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "出让帮派": {
+        "type": "text",
+        "default": "",
+        "description": "【帮派】出让帮派回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "切换坐骑": {
+        "type": "text",
+        "default": "",
+        "description": "【坐骑】切换坐骑回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "创建帮派": {
+        "type": "text",
+        "default": "",
+        "description": "【帮派】创建帮派回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "加入二四点": {
+        "type": "text",
+        "default": "",
+        "description": "【娱乐】加入二四点回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "加入字谜": {
+        "type": "text",
+        "default": "",
+        "description": "【娱乐】加入字谜回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "加入帮派": {
+        "type": "text",
+        "default": "",
+        "description": "【帮派】加入帮派回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "加入急转弯": {
+        "type": "text",
+        "default": "",
+        "description": "【娱乐】加入急转弯回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "加入接龙": {
+        "type": "text",
+        "default": "",
+        "description": "【娱乐】加入接龙回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "加入猜数": {
+        "type": "text",
+        "default": "",
+        "description": "【娱乐】加入猜数回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "加入答题": {
+        "type": "text",
+        "default": "",
+        "description": "【娱乐】加入答题回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "劫狱": {
+        "type": "text",
+        "default": "",
+        "description": "【银行】劫狱回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "十连抽": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】十连抽回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "升星": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】升星回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "升阶": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】升阶回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "发起帮战": {
+        "type": "text",
+        "default": "",
+        "description": "【帮派】发起帮战回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "取消护法": {
+        "type": "text",
+        "default": "",
+        "description": "【帮派】取消护法回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "同意加入帮派": {
+        "type": "text",
+        "default": "",
+        "description": "【帮派】同意加入帮派回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "同意邀请": {
+        "type": "text",
+        "default": "",
+        "description": "【帮派】同意邀请回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "回收出战精灵": {
+        "type": "text",
+        "default": "",
+        "description": "【精灵】回收出战精灵回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "回收欢迎坐骑": {
+        "type": "text",
+        "default": "",
+        "description": "【坐骑】回收欢迎坐骑回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "坐骑商城": {
+        "type": "text",
+        "default": "",
+        "description": "【坐骑】坐骑商城回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "坐骑系统": {
+        "type": "text",
+        "default": "",
+        "description": "【坐骑】坐骑系统回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "备份": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】备份回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "备份xb": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】备份xb回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "备份数据": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】备份数据回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "复活币排行": {
+        "type": "text",
+        "default": "",
+        "description": "【冒险】复活币排行回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "奴隶打工": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】奴隶打工回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "奴隶收工": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】奴隶收工回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "奴隶系统": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】奴隶系统回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "娱乐系统": {
+        "type": "text",
+        "default": "",
+        "description": "【娱乐】娱乐系统回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "学习": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】学习回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "宝物升阶": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】宝物升阶回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "宝物菜单": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】宝物菜单回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "小白升级": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】小白升级回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "小白更新": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】小白更新回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "小白版本": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】小白版本回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "帮派列表": {
+        "type": "text",
+        "default": "",
+        "description": "【帮派】帮派列表回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "帮派升级": {
+        "type": "text",
+        "default": "",
+        "description": "【帮派】帮派升级回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "帮派排行": {
+        "type": "text",
+        "default": "",
+        "description": "【帮派】帮派排行回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "帮派管理": {
+        "type": "text",
+        "default": "",
+        "description": "【帮派】帮派管理回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "帮派系统": {
+        "type": "text",
+        "default": "",
+        "description": "【帮派】帮派系统回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "帮派贡献": {
+        "type": "text",
+        "default": "",
+        "description": "【帮派】帮派贡献回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "帮派邀请": {
+        "type": "text",
+        "default": "",
+        "description": "【帮派】帮派邀请回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "应用统计": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】应用统计回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "开启维护": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】开启维护回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "开始二四点": {
+        "type": "text",
+        "default": "",
+        "description": "【娱乐】开始二四点回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "开始急转弯": {
+        "type": "text",
+        "default": "",
+        "description": "【娱乐】开始急转弯回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "开始接龙": {
+        "type": "text",
+        "default": "",
+        "description": "【娱乐】开始接龙回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "开始猜字谜": {
+        "type": "text",
+        "default": "",
+        "description": "【娱乐】开始猜字谜回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "开始猜数": {
+        "type": "text",
+        "default": "",
+        "description": "【娱乐】开始猜数回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "开始答题": {
+        "type": "text",
+        "default": "",
+        "description": "【娱乐】开始答题回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "当前冒险": {
+        "type": "text",
+        "default": "",
+        "description": "【冒险】当前冒险回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "当前接龙": {
+        "type": "text",
+        "default": "",
+        "description": "【娱乐】当前接龙回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "成员列表": {
+        "type": "text",
+        "default": "",
+        "description": "【帮派】成员列表回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "我加入接龙": {
+        "type": "text",
+        "default": "",
+        "description": "【娱乐】我加入接龙回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "我的信息": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】我的信息回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "我的修筑": {
+        "type": "text",
+        "default": "",
+        "description": "【帮派】我的修筑回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "我的坐骑": {
+        "type": "text",
+        "default": "",
+        "description": "【坐骑】我的坐骑回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "我的帮派": {
+        "type": "text",
+        "default": "",
+        "description": "【帮派】我的帮派回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "我的排行": {
+        "type": "text",
+        "default": "",
+        "description": "【签到】我的排行回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "我的精灵": {
+        "type": "text",
+        "default": "",
+        "description": "【精灵】我的精灵回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "我的背包": {
+        "type": "text",
+        "default": "",
+        "description": "【精灵】我的背包回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "我的贡献": {
+        "type": "text",
+        "default": "",
+        "description": "【帮派】我的贡献回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "我要": {
+        "type": "text",
+        "default": "",
+        "description": "【银行】我要回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "我要出狱": {
+        "type": "text",
+        "default": "",
+        "description": "【银行】我要出狱回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "我要打工": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】我要打工回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "我要祈福": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】我要祈福回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "我要自由": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】我要自由回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "我要进监狱": {
+        "type": "text",
+        "default": "",
+        "description": "【银行】我要进监狱回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "我要造反": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】我要造反回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "打卡": {
+        "type": "text",
+        "default": "",
+        "description": "【签到】打卡回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "打开维护": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】打开维护回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "打架": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】打架回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "扔炸弹": {
+        "type": "text",
+        "default": "",
+        "description": "【娱乐】扔炸弹回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "扣钱": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】扣钱回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "折磨": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】折磨回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "抽武器": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】抽武器回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "抽签": {
+        "type": "text",
+        "default": "",
+        "description": "【娱乐】抽签回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "挑战": {
+        "type": "text",
+        "default": "",
+        "description": "【精灵】挑战回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "排行榜": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】排行榜回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "接受邀请": {
+        "type": "text",
+        "default": "",
+        "description": "【帮派】接受邀请回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "接龙词": {
+        "type": "text",
+        "default": "",
+        "description": "【娱乐】接龙词回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "接龙进度": {
+        "type": "text",
+        "default": "",
+        "description": "【娱乐】接龙进度回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "插件版本": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】插件版本回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "携带精灵": {
+        "type": "text",
+        "default": "",
+        "description": "【精灵】携带精灵回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "更新": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】更新回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "查接龙": {
+        "type": "text",
+        "default": "",
+        "description": "【娱乐】查接龙回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "查看出战精灵": {
+        "type": "text",
+        "default": "",
+        "description": "【精灵】查看出战精灵回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "查看地图": {
+        "type": "text",
+        "default": "",
+        "description": "【精灵】查看地图回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "查看坐骑": {
+        "type": "text",
+        "default": "",
+        "description": "【坐骑】查看坐骑回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "查看更新": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】查看更新回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "查看欢迎坐骑": {
+        "type": "text",
+        "default": "",
+        "description": "【坐骑】查看欢迎坐骑回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "查看精灵": {
+        "type": "text",
+        "default": "",
+        "description": "【精灵】查看精灵回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "查看维护": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】查看维护回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "查询": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】查询回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "查询 冒险": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】查询 冒险回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "查询 坐骑": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】查询 坐骑回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "查询 帮派": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】查询 帮派回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "查询 版本": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】查询 版本回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "查询 精灵": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】查询 精灵回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "查询 维护": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】查询 维护回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "查询 菜单": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】查询 菜单回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "查询冒险": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】查询冒险回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "查询地图": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】查询地图回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "查询坐骑": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】查询坐骑回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "查询帮派": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】查询帮派回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "查询更新": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】查询更新回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "查询版本": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】查询版本回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "查询精灵": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】查询精灵回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "查询维护": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】查询维护回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "检查更新": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】检查更新回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "检查版本": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】检查版本回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "武器升星": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】武器升星回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "武器菜单": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】武器菜单回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "每日点赞": {
+        "type": "text",
+        "default": "",
+        "description": "【签到】每日点赞回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "测试testxb": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】测试testxb回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "测试testxb1": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】测试testxb1回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "测试testxb2": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】测试testxb2回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "测试testxb3": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】测试testxb3回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "测试testxb4": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】测试testxb4回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "测试testxb5": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】测试testxb5回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "测试testxb6": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】测试testxb6回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "测试testxb7": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】测试testxb7回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "测试testxb8": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】测试testxb8回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "测试webdav": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】测试webdav回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "添加护法": {
+        "type": "text",
+        "default": "",
+        "description": "【帮派】添加护法回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "清空": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】清空回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "点赞": {
+        "type": "text",
+        "default": "",
+        "description": "【签到】点赞回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "版本": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】版本回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "猜拳": {
+        "type": "text",
+        "default": "",
+        "description": "【娱乐】猜拳回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "祈福": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】祈福回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "禁言": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】禁言回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "移出帮派": {
+        "type": "text",
+        "default": "",
+        "description": "【帮派】移出帮派回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "签到排行": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】签到排行回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "签到排行榜": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】签到排行榜回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "签到榜": {
+        "type": "text",
+        "default": "",
+        "description": "【签到】签到榜回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "签到系统": {
+        "type": "text",
+        "default": "",
+        "description": "【签到】签到系统回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "管理帮派": {
+        "type": "text",
+        "default": "",
+        "description": "【帮派】管理帮派回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "精灵列表": {
+        "type": "text",
+        "default": "",
+        "description": "【精灵】精灵列表回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "精灵商城": {
+        "type": "text",
+        "default": "",
+        "description": "【精灵】精灵商城回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "精灵地图": {
+        "type": "text",
+        "default": "",
+        "description": "【精灵】精灵地图回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "精灵对战": {
+        "type": "text",
+        "default": "",
+        "description": "【精灵】精灵对战回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "精灵排行": {
+        "type": "text",
+        "default": "",
+        "description": "【精灵】精灵排行回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "精灵系统": {
+        "type": "text",
+        "default": "",
+        "description": "【精灵】精灵系统回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "结束冒险": {
+        "type": "text",
+        "default": "",
+        "description": "【冒险】结束冒险回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "结束接龙": {
+        "type": "text",
+        "default": "",
+        "description": "【娱乐】结束接龙回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "维护信息": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】维护信息回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "羁绊": {
+        "type": "text",
+        "default": "",
+        "description": "【精灵】羁绊回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "群列表": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】群列表回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "自我": {
+        "type": "text",
+        "default": "",
+        "description": "【银行】自我回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "自我保释": {
+        "type": "text",
+        "default": "",
+        "description": "【银行】自我保释回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "解散帮派": {
+        "type": "text",
+        "default": "",
+        "description": "【帮派】解散帮派回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "讨好主人": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】讨好主人回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "设置欢迎坐骑": {
+        "type": "text",
+        "default": "",
+        "description": "【坐骑】设置欢迎坐骑回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "财富榜": {
+        "type": "text",
+        "default": "",
+        "description": "【签到】财富榜回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "购买": {
+        "type": "text",
+        "default": "",
+        "description": "【精灵】购买回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "购买坐骑": {
+        "type": "text",
+        "default": "",
+        "description": "【精灵】购买坐骑回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "购买奴隶位": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】购买奴隶位回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "购买武器": {
+        "type": "text",
+        "default": "",
+        "description": "【精灵】购买武器回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "赎身": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】赎身回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "起名": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】起名回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "超管列表": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】超管列表回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "超管系统": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】超管系统回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "越狱": {
+        "type": "text",
+        "default": "",
+        "description": "【银行】越狱回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "踢人": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】踢人回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "身价排行": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】身价排行回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "身价排行榜": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】身价排行榜回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "进化": {
+        "type": "text",
+        "default": "",
+        "description": "【精灵】进化回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "进监狱": {
+        "type": "text",
+        "default": "",
+        "description": "【银行】进监狱回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "退出二四点": {
+        "type": "text",
+        "default": "",
+        "description": "【娱乐】退出二四点回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "退出字谜": {
+        "type": "text",
+        "default": "",
+        "description": "【娱乐】退出字谜回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "退出帮派": {
+        "type": "text",
+        "default": "",
+        "description": "【帮派】退出帮派回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "退出急转弯": {
+        "type": "text",
+        "default": "",
+        "description": "【娱乐】退出急转弯回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "退出接龙": {
+        "type": "text",
+        "default": "",
+        "description": "【娱乐】退出接龙回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "退出猜数": {
+        "type": "text",
+        "default": "",
+        "description": "【娱乐】退出猜数回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "退出答题": {
+        "type": "text",
+        "default": "",
+        "description": "【娱乐】退出答题回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "选择": {
+        "type": "text",
+        "default": "",
+        "description": "【冒险】选择回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "释放": {
+        "type": "text",
+        "default": "",
+        "description": "【奴隶】释放回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "重置": {
+        "type": "text",
+        "default": "",
+        "description": "【超管】重置回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "重置接龙": {
+        "type": "text",
+        "default": "",
+        "description": "【娱乐】重置接龙回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "银行系统": {
+        "type": "text",
+        "default": "",
+        "description": "【银行】银行系统回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "领养精灵": {
+        "type": "text",
+        "default": "",
+        "description": "【精灵】领养精灵回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "领取帮派福利": {
+        "type": "text",
+        "default": "",
+        "description": "【帮派】领取帮派福利回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "领取新人礼包": {
+        "type": "text",
+        "default": "",
+        "description": "【签到】领取新人礼包回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "领取精灵礼包": {
+        "type": "text",
+        "default": "",
+        "description": "【精灵】领取精灵礼包回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "魅力排行榜": {
+        "type": "text",
+        "default": "",
+        "description": "【签到】魅力排行榜回复模板(留空=默认；多个用 | 分隔随机取一)"
+      },
+      "魅力榜": {
+        "type": "text",
+        "default": "",
+        "description": "【签到】魅力榜回复模板(留空=默认；多个用 | 分隔随机取一)"
       }
     }
   },

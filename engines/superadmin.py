@@ -22,8 +22,9 @@ MENU = (
     "💸 扣钱 @QQ 金额　💳 充钱 @QQ 金额\r\n"
     "🧹 清空财富/体力/魅力/账户/精灵/用户 @QQ\r\n"
     "🔨 禁言 @QQ 分钟　🚪 踢人 @QQ\r\n"
-    "💾 备份xb　（立即备份全量数据）\r\n"
-    "🛠️ 开启维护　关闭维护　维护信息 内容\r\n"
+    "💾 备份xb　（立即备份全量数据，别名：备份/备份数据/xb备份）\r\n"
+    "🛠️ 开启维护/打开维护　关闭维护　维护信息 内容　查看维护\r\n"
+    "🔖 版本/检查更新（所有人可查）\r\n"
     "━━━━━━━━━━━━━━\r\n"
     "⚠️ 全部指令仅限 AstrBot 机器人管理员\r\n"
     "💡 发送对应指令即可操作"
@@ -138,9 +139,13 @@ def cmd_stats():
         td = int(td or 0)
     except Exception:
         td = 0
+    try:
+        _cn = ST.coin_name() if hasattr(ST, "coin_name") else "金币"
+    except Exception:
+        _cn = "金币"
     return (f"📊 应用统计\r\n"
             f"钱包用户：{nw}　档案用户：{na}\r\n"
-            f"群数：{ng}　总金币：{tm}　总存款：{td}")
+            f"群数：{ng}　总{_cn}：{tm}　总存款：{td}")
 
 
 # ---- 账户管理 ----
@@ -443,13 +448,14 @@ def _version():
                 except Exception:
                     pass
         if not ver:
-            ver = "0.7.4"
+            ver = "0.7.5"
         return f"小白版本：{ver}"
     except Exception:
-        return "小白版本：0.7.4"
+        return "小白版本：0.7.5"
 
 # ---- 统一入口（测试指令仅超管，WebUI可配但不显示于MENU，已删 个人信息） ----
-_ADMIN_CMDS = ("群列表", "应用统计", "扣钱", "充钱", "清空", "重置", "禁言", "踢人", "备份xb", "备份", "测试webdav", "webdav测试", "开启维护", "关闭维护", "维护信息", "测试testxb", "测试testxb1", "测试testxb2", "测试testxb3", "测试testxb4", "测试testxb5", "测试testxb6", "测试testxb7", "测试testxb8", "超管列表")
+# 注意：凡 handle() 响应的别名必须同步进本表，否则非超管命中时走静默 None 而非无权限提醒
+_ADMIN_CMDS = ("群列表", "应用统计", "扣钱", "充钱", "清空", "重置", "禁言", "踢人", "备份xb", "备份", "备份数据", "xb备份", "测试webdav", "webdav测试", "开启维护", "打开维护", "关闭维护", "关闭维护模式", "维护信息", "查看维护", "小白版本", "版本", "xb版本", "插件版本", "检查更新", "小白更新", "检查版本", "查询更新", "更新", "查看更新", "小白升级", "测试testxb", "测试testxb1", "测试testxb2", "测试testxb3", "测试testxb4", "测试testxb5", "测试testxb6", "测试testxb7", "测试testxb8", "超管列表")
 
 
 def handle(gid, qq, raw, is_admin=False):

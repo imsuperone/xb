@@ -1537,18 +1537,24 @@ def rank_batch(gid, field="money", topn=500):
         if _DB is None:
             return []
         try:
+            # 持锁只做两次 fetchall 快照，json 解析与排序放锁外
             w_rows = _DB.execute("SELECT qq, money FROM wallet WHERE gid=?", (int(gid),)).fetchall()
-            wallet_map = {str(qq): int(m or 0) for qq, m in w_rows}
+            w_rows = list(w_rows)
             a_rows = _DB.execute("SELECT qq, data FROM accounts WHERE gid=?", (int(gid),)).fetchall()
-            acct_map = {}
-            for qq, data in a_rows:
-                try:
-                    kv = json.loads(data) if data else {}
-                except Exception:
-                    kv = {}
-                acct_map[str(qq)] = kv
+            a_rows = [(r[0], r[1]) for r in a_rows]
         except Exception:
             return []
+    try:
+        wallet_map = {str(qq): int(m or 0) for qq, m in w_rows}
+        acct_map = {}
+        for qq, data in a_rows:
+            try:
+                kv = json.loads(data) if data else {}
+            except Exception:
+                kv = {}
+            acct_map[str(qq)] = kv
+    except Exception:
+        return []
     try:
         qqs = set(wallet_map.keys()) | set(acct_map.keys())
         out = []

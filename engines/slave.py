@@ -133,9 +133,9 @@ def save_all():
 
 def U(st, qq):
     qq = str(qq)
-    init_price = cfgi("费用配置", "初始身价", 500)
+    init_price = cfgi("费用配置", "初始身价", 1000)
     if init_price <= 0:
-        init_price = 500
+        init_price = 1000
     if not st.has_section(qq):
         st.add_section(qq)
         u = st[qq]
@@ -144,7 +144,7 @@ def U(st, qq):
         u["weapon"] = ""
         u["treasure"] = ""
         u["weapon_exp"] = "0"
-        u["slave_slots"] = str(cfgi("设置", "奴隶个数", 2))
+        u["slave_slots"] = str(cfgi("设置", "奴隶个数", 5))
         u["protect_until"] = ""
         u["sign_date"] = ""
         u["consecutive_days"] = "0"
@@ -216,6 +216,17 @@ def set_note_name(gid, qq, name):
             _nc = _clean_nm(n)
             if _nc:
                 NOTE_NAMES_REV[(g, _nc)] = q
+            # 双表同生命周期上限防内存无限增长（淘汰最旧 10%）
+            if len(NOTE_NAMES_BY_GROUP) > 50000:
+                try:
+                    for _k in list(NOTE_NAMES_BY_GROUP.keys())[:5000]:
+                        _old2 = NOTE_NAMES_BY_GROUP.pop(_k, None)
+                        if _old2:
+                            _oc2 = _clean_nm(_old2)
+                            if _oc2 and NOTE_NAMES_REV.get((_k[0], _oc2)) == _k[1]:
+                                NOTE_NAMES_REV.pop((_k[0], _oc2), None)
+                except Exception:
+                    pass
         # 保留全局最新，供无 gid 的旧展示路径兜底
         NOTE_NAMES[q] = n
     except Exception:
@@ -283,7 +294,17 @@ def mark_known(gid, qq):
     try:
         gid = str(gid); qq = str(qq)
         if qq.isdigit():
-            _KNOWN.setdefault(gid, set()).add(qq)
+            _s = _KNOWN.get(gid)
+            if _s is None:
+                # 群数上限防内存无限增长
+                if len(_KNOWN) >= 5000:
+                    try:
+                        _KNOWN.pop(next(iter(_KNOWN)))
+                    except Exception:
+                        pass
+                _s = _KNOWN.setdefault(gid, set())
+            if len(_s) < 20000:
+                _s.add(qq)
     except Exception:
         pass
 
@@ -482,7 +503,7 @@ def cn_fmt(ts):
 
 def cd_check(u, key, minutes_key):
     # Fix B7: check only, no write; caller commits on success
-    minutes = cfgi("间隔配置", minutes_key, 30)
+    minutes = cfgi("间隔配置", minutes_key, 1)
     last = cn_parse(uget(u, key))
     if last is None:
         return True, 0
@@ -497,7 +518,7 @@ def cd_commit(u, key):
 
 def _event_delta():
     """奇遇变化量: 在[下限,上限]取有符号随机值后取绝对值, 保证为正且保留随机性"""
-    lo = cfgi("费用配置", "变化下限", -1000)
+    lo = cfgi("费用配置", "变化下限", -200)
     hi = cfgi("费用配置", "变化上限", 1000)
     if lo > hi:
         lo, hi = hi, lo
@@ -535,7 +556,7 @@ def cmd_myinfo(gid, qq, st):
         sign_total, sign_streak = _sign_info(gid, qq, st)
         wexp = _safe_int(uget(u, "weapon_exp"), 0)
         slaves = slaves_of(st, qq)
-        cap = _safe_int(uget(u, "slave_slots"), cfgi("设置", "奴隶个数", 2))
+        cap = _safe_int(uget(u, "slave_slots"), cfgi("设置", "奴隶个数", 5))
         if cap <= 0:
             cap = 2
         sl_txt = ", ".join(uname(st, s) for s in slaves) or T.NO_SLAVE
@@ -647,6 +668,9 @@ def cmd_compensate(gid, qq, target, amount, st):
         return "自己给自己补偿好玩吗！？"
     if amount <= 0:
         return T.COMP_WHO
+    ok, mins = cd_check(U(st, qq), "compensate_time", "打赏间隔")
+    if not ok:
+        return _fmt(mins, "打赏")
     limit = cfgi("费用配置", "打赏上限", 10000)
     if amount > limit:
         return f"单次补偿最多 {limit}{coin_name()} 哦~"
@@ -654,6 +678,7 @@ def cmd_compensate(gid, qq, target, amount, st):
         return T.POOR.format(coin=coin_name())
     coins_add(gid, qq, -amount)
     coins_add(gid, target, amount)
+    cd_commit(U(st, qq), "compensate_time")
     return f"[{uname(st,qq)}] 补偿了 [{uname(st,target)}] {amount}{coin_name()}"
 
 
@@ -681,9 +706,9 @@ def cmd_buy_slave(gid, qq, target, st):
         if prot_qq and st.has_section(prot_qq):
             return T.BUY_PROTECTED.format(who=uname(st, prot_qq), min=left)
         return T.PROTECTED_CANNOT_BUY.format(min=left)
-    slots = _safe_int(uget(buyer, "slave_slots", str(cfgi("设置", "奴隶个数", 2))), cfgi("设置", "奴隶个数", 2))
+    slots = _safe_int(uget(buyer, "slave_slots", str(cfgi("设置", "奴隶个数", 5))), cfgi("设置", "奴隶个数", 5))
     if slots <= 0:
-        slots = max(1, cfgi("设置", "奴隶个数", 2))
+        slots = max(1, cfgi("设置", "奴隶个数", 5))
     mine = slaves_of(st, qq)
     if len(mine) >= slots:
         return T.BUY_SLOT_FULL.format(cap=slots)
@@ -708,7 +733,7 @@ def cmd_buy_slave(gid, qq, target, st):
     uset(tgt, "purchase_price", str(price))
     uset(tgt, "purchase_time", _dt.datetime.now().strftime("%Y年%m月%d日%H时%M分%S秒"))
     uset(tgt, "_work_wage", "")
-    newp = min(1000000, int(price * 1.25))
+    newp = min(1000000, int(price * cfgf("费用配置", "买入身价上涨", 1.25)))
     uset(tgt, "price", str(newp))
     tn = uname(st, tid)
     head = T.BUY_OK_HEAD.format(who=tn)
@@ -753,7 +778,7 @@ def cmd_torture(gid, qq, target, st):
         return T.TORTURE_ALL_DONE
     sc = coins_get(gid, tid)
     cd_commit(U(st, qq), "torture_time")
-    if _random.randint(1, 100) <= 20:
+    if _random.randint(1, 100) > cfgi("概率配置", "折磨成功率", 75):
         return T.TORTURE_MERCY
     evs = [e for e in EVENTS if e.get("type", "").startswith("折磨")]
     if not evs:
@@ -837,9 +862,13 @@ def cmd_release(gid, qq, target, st):
     s = U(st, tid)
     if uget(s, "owner") != qq:
         return "不是你的奴隶，你无法释放Ta！"
+    ok, mins = cd_check(U(st, qq), "release_time", "释放间隔")
+    if not ok:
+        return _fmt(mins, "释放")
     uset(s, "owner", "")
     uset(s, "protect_until", "")
     uset(s, "protector", "")
+    cd_commit(U(st, qq), "release_time")
     return T.RELEASE_OK.format(who=uname(st, tid))
 
 
@@ -859,7 +888,7 @@ def cmd_ransom(gid, qq, target, st):
     if last_r and _time.time() - last_r < iv_r * 60:
         left = int((iv_r * 60 - (_time.time() - last_r)) / 60) + 1
         return T.RANSOM_CD.format(min=left)
-    price = int(int(uget(s, "price") or 0) * 1.5)
+    price = int(int(uget(s, "price") or 0) * cfgf("费用配置", "赎身花费倍率", 1.5))
     if coins_get(gid, qq) < price:
         return T.POOR.format(coin=coin_name()) + f"(需{price})"
     coins_add(gid, qq, -price)
@@ -879,11 +908,11 @@ def cmd_freedom(gid, qq, st):
     if last_f and _time.time() - last_f < iv_f * 60:
         left = int((iv_f * 60 - (_time.time() - last_f)) / 60) + 1
         return T.FREE_CD.format(min=left)
-    price = int(int(uget(u, "price") or 0) * 1.5)
+    price = int(int(uget(u, "price") or 0) * cfgf("费用配置", "赎身花费倍率", 1.5))
     have = coins_get(gid, qq)
     if have < price:
         return (T.FREE_BY_TORTURE.format(cost=price) + "\r\n" + T.FREE_FAIL_PAY
-                + f"\r\n(还差 {price - have} 金币)")
+                + f"\r\n(还差 {price - have} {coin_name()})")
     coins_add(gid, qq, -price)
     coins_add(gid, owner, price)
     uset(u, "owner", "")
@@ -897,12 +926,12 @@ def cmd_rename(gid, qq, target, newname, st):
 
 def cmd_buyslot(gid, qq, st):
     u = U(st, qq)
-    cur = _safe_int(uget(u, "slave_slots", str(cfgi("设置", "奴隶个数", 2))), cfgi("设置", "奴隶个数", 2))
-    cap = cfgi("设置", "奴隶个数上限", 8)
+    cur = _safe_int(uget(u, "slave_slots", str(cfgi("设置", "奴隶个数", 5))), cfgi("设置", "奴隶个数", 5))
+    cap = cfgi("设置", "奴隶个数上限", 15)
     if cur >= cap:
         return T.SLOT_SYS_MAX
-    base_price = cfgi("设置", "奴隶位价格", 59999)
-    base_cap = cfgi("设置", "奴隶个数", 2)
+    base_price = cfgi("设置", "奴隶位价格", 5000)
+    base_cap = cfgi("设置", "奴隶个数", 5)
     price = int(base_price * (2 ** max(0, cur - base_cap)))
     if coins_get(gid, qq) < price:
         return (T.SLOT_NEED.format(price=price) + "\r\n" +
@@ -956,7 +985,7 @@ def cmd_flatter(gid, qq, st):
     mc = coins_get(gid, owner)
     if mc <= 0:
         return T.FLATTER_POOR_M
-    if _random.randint(1, 100) <= cfgi("概率配置", "讨好概率", 60):
+    if _random.randint(1, 100) <= cfgi("概率配置", "讨好概率", 80):
         got = _random.randint(50, max(50, min(mc, 500)))
         got = min(got, mc)
         coins_add(gid, owner, -got)
@@ -1041,11 +1070,15 @@ def cmd_pray(gid, qq, st):
         return T.PRAY_TIME_NOTYET
     if uget(u, "pray_date") == today:
         return "今天已经祭拜过忍神了, 明天中午12点再来~"
+    ok, mins = cd_check(u, "pray_time", "祈福间隔")
+    if not ok:
+        return _fmt(mins, "祈福")
     uset(u, "pray_date", today)
+    cd_commit(u, "pray_time")
     name = uname(st, qq)
     cn = coin_name()
-    if _random.randint(1, 100) <= cfgi("祈福配置", "人品爆发概率", 5):
-        amt = cfgi("祈福配置", "人品爆发奖励", 99999)
+    if _random.randint(1, 100) <= cfgi("祈福配置", "人品爆发概率", 15):
+        amt = cfgi("祈福配置", "人品爆发奖励", 30000)
         coins_add(gid, qq, amt)
         return T.PRAY_BIG.format(amt=f"{amt}{cn}") + f"\r\n[{name}] 获得 {amt} {cn}!!"
     if _random.randint(1, 100) <= 25:
@@ -1053,8 +1086,8 @@ def cmd_pray(gid, qq, st):
         coins_add(gid, qq, -lose)
         return (T.PRAY_PITY_HEAD.format(who=f"[{name}]")
                 + f"\r\n被顺走了 {lose} {cn}...")
-    lo = cfgi("祈福配置", "祈福奖励下限", 666)
-    hi = cfgi("祈福配置", "祈福奖励上限", 19999)
+    lo = cfgi("祈福配置", "祈福奖励下限", 1000)
+    hi = cfgi("祈福配置", "祈福奖励上限", 6000)
     if _random.randint(1, 100) <= 30:
         amt = _random.randint(lo, hi)
         coins_add(gid, qq, amt)
@@ -1074,12 +1107,12 @@ def cmd_work_dispatch(gid, qq, st):
         return T.WORK_NO_SLAVE
     if uget(u, "work_status") == "真":
         started = cn_parse(uget(u, "work_time")) or 0
-        duration = cfgi("间隔配置", "打工间隔", 30) * 60
+        duration = cfgi("间隔配置", "打工间隔", 1) * 60
         left = started + duration - _time.time()
         if left > 0:
             return T.WORK_WORKING.format(min=int(left / 60) + 1)
         uset(u, "work_status", "")   # 超时自动收工
-    duration = cfgi("间隔配置", "打工间隔", 30)
+    duration = cfgi("间隔配置", "打工间隔", 1)
     target = 0
     for s in my:
         su = U(st, s)
@@ -1100,7 +1133,7 @@ def cmd_work_collect(gid, qq, st):
     if uget(u, "work_status") != "真":
         return T.WORK_NOT_STARTED
     started = cn_parse(uget(u, "work_time")) or 0
-    duration = cfgi("间隔配置", "打工间隔", 30) * 60
+    duration = cfgi("间隔配置", "打工间隔", 1) * 60
     left = started + duration - _time.time()
     if left > 0:
         return T.WORK_WAIT.format(min=int(left / 60) + 1)
@@ -1174,7 +1207,7 @@ def cmd_revolt(gid, qq, st):
         coins_add(gid, qq, -pay)
         coins_add(gid, owner, pay)
         return T.RV_GOURD_LOSE + f"({pay}{coin_name()})\r\n" + T.REVOLT_FAIL_STAY
-    if _random.randint(1, 100) <= cfgi("概率配置", "造反概率", 40):
+    if _random.randint(1, 100) <= cfgi("概率配置", "造反概率", 20):
         uset(u, "owner", "")
         uset(u, "protect_until", "")
         uset(u, "protector", "")
@@ -1233,7 +1266,7 @@ def cmd_fight(gid, qq, target, st):
     if not d_slaves:
         return T.FIGHT_ENEMY_NO_S
     rest = cn_parse(uget(U(st, tid), "战斗恢复时间"))
-    iv_rest = cfgi("间隔配置", "打架间隔", 20)
+    iv_rest = cfgi("间隔配置", "打架间隔", 1)
     if rest and _time.time() - rest < iv_rest * 60:
         left = int((iv_rest * 60 - (_time.time() - rest)) / 60) + 1
         return T.FIGHT_RESTING.format(min=left)
@@ -1281,7 +1314,7 @@ def cmd_fight(gid, qq, target, st):
     if win:
         lines.append(T.FIGHT_WIN)
         free_slot = len(slaves_of(st, qq)) < _safe_int(uget(U(st, qq), "slave_slots",
-                                                  str(cfgi("设置", "奴隶个数", 2))), cfgi("设置", "奴隶个数", 2))
+                                                  str(cfgi("设置", "奴隶个数", 5))), cfgi("设置", "奴隶个数", 5))
         stealable = [s for s in d_slaves]
         if stealable and free_slot:
             if _shield(tid):
@@ -1294,7 +1327,7 @@ def cmd_fight(gid, qq, target, st):
                 uset(U(st, victim), "purchase_price", str(int(uget(U(st, victim), "price") or 0)))
                 uset(U(st, victim), "purchase_time", cn_fmt(_time.time()))
                 uset(U(st, victim), "_work_wage", "")
-                newp = min(1000000, int(int(uget(U(st, victim), "price") or 0) * 1.25))
+                newp = min(1000000, int(int(uget(U(st, victim), "price") or 0) * cfgf("费用配置", "买入身价上涨", 1.25)))
                 uset(U(st, victim), "price", str(newp))
                 lines.append(T.FIGHT_GET_SLAVE.format(slave="[" + uname(st, victim) + "]"))
         elif stealable:
@@ -1315,14 +1348,14 @@ def cmd_fight(gid, qq, target, st):
         stealable = [s for s in a_slaves]
         if stealable and not shield:
             free_t = len(slaves_of(st, tid)) < _safe_int(uget(U(st, tid), "slave_slots",
-                                                   str(cfgi("设置", "奴隶个数", 2))), cfgi("设置", "奴隶个数", 2))
+                                                   str(cfgi("设置", "奴隶个数", 5))), cfgi("设置", "奴隶个数", 5))
             if free_t:
                 victim = _random.choice(stealable)
                 uset(U(st, victim), "owner", tid)
                 uset(U(st, victim), "purchase_price", str(int(uget(U(st, victim), "price") or 0)))
                 uset(U(st, victim), "purchase_time", cn_fmt(_time.time()))
                 uset(U(st, victim), "_work_wage", "")
-                newp = min(1000000, int(int(uget(U(st, victim), "price") or 0) * 1.25))
+                newp = min(1000000, int(int(uget(U(st, victim), "price") or 0) * cfgf("费用配置", "买入身价上涨", 1.25)))
                 uset(U(st, victim), "price", str(newp))
                 lines.append(T.FIGHT_LOSE_SLAVE.format(slave="[" + uname(st, victim) + "]"))
             else:
@@ -1512,34 +1545,6 @@ def cmd_treasure_up(gid, qq, tname, st):
     eff = T.GOURD_EFFECT if "酒神" in tname else T.CHARM_EFFECT
     return (f"✨ [{tname}] 升至{stage+1}阶!\r\n{T.T_STAGE.format(n=stage+1)} "
             + eff)
-
-
-def cmd_sign(gid, qq, st):
-    """签到开关=假时静默(交给 drea 主插件处理)"""
-    if cfg("签到配置", "签到开关", "假") != "真":
-        return None
-    u = U(st, qq)
-    today = _dt.date.today().isoformat()
-    if uget(u, "last_sign") == today:
-        return T.SIGN_REPEAT
-    base = cfgi("签到配置", "签到奖励", 10)
-    chain_bonus = cfgi("签到配置", "连签奖励", 5)
-    chain = int(uget(u, "consecutive_days", "0")) + 1
-    total = int(uget(u, "total_sign_days", "0")) + 1
-    gain = base + chain_bonus * chain
-    uset(u, "last_sign", today)
-    uset(u, "consecutive_days", str(chain))
-    uset(u, "total_sign_days", str(total))
-    coins_add(gid, qq, gain)
-    return (
-        f"&@恭喜你签到成功！\r\n"
-        f"奖励详情：\r\n"
-        f"基础奖励 +{base}\r\n"
-        f"连签{chain}天奖励 +{chain_bonus * chain}\r\n"
-        f"奖励合计：{gain}\r\n"
-        f"当前{coin_name()}：{coins_get(gid, qq)}\r\n"
-        f"签到者 [{uname(st, qq)}] 总签{total}天 连签{chain}天"
-    )
 
 
 def _weapon_shop():
@@ -1944,9 +1949,6 @@ def _route_locked(gid, qq, raw):
         return cmd_study(gid, qq, st)
     if text == "我要祈福" or text.startswith("祈福"):
         return cmd_pray(gid, qq, st)
-    # Fix: removed 我要签到 to avoid conflict with normal sign-in
-    # if text == "我要签到":
-    #     return cmd_sign(gid, qq, st)
     if text == "武器菜单":
         return cmd_weapon_menu(gid, qq, st)
     if text == "宝物菜单":

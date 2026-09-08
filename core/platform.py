@@ -123,27 +123,22 @@ def _append_at_segments(raw, event, gid="", slave_mod=None):
                     nm = str(nm).strip()
                     if nm and q:
                         if sm is not None:
-                            old = sm.NOTE_NAMES.get(q, "")
-                            sm.NOTE_NAMES[q] = nm
-                            if old != nm:
-                                def _bg_save_card(g, target_q, target_nm):
-                                    try:
-                                        if sm is not None and g:
-                                            st = sm.state(g)
-                                            if st.has_section(target_q):
-                                                u = st[target_q]
-                                                if u.get("name", "") != target_nm:
-                                                    u["name"] = target_nm
-                                                    sm.save(g)
-                                    except Exception:
-                                        pass
-                                    try:
-                                        import store as _st_reg
-                                        _st_reg.register_name(target_q, target_nm)
-                                    except Exception:
-                                        pass
-                                import threading
-                                threading.Thread(target=_bg_save_card, args=(gid, q, nm), daemon=True).start()
+                            try:
+                                if hasattr(sm, "set_note_name"):
+                                    sm.set_note_name(gid, q, nm)
+                                else:
+                                    old = sm.NOTE_NAMES.get(q, "")
+                                    sm.NOTE_NAMES[q] = nm
+                            except Exception:
+                                pass
+                            try:
+                                _cards = getattr(_append_at_segments, "_pending_cards", None)
+                                if _cards is None:
+                                    _cards = {}
+                                    _append_at_segments._pending_cards = _cards
+                                _cards[(str(gid), str(q))] = nm
+                            except Exception:
+                                pass
                 except Exception:
                     pass
         if ats:
@@ -151,6 +146,44 @@ def _append_at_segments(raw, event, gid="", slave_mod=None):
             if raw and not raw.endswith(" "):
                 raw += " "
             raw += " ".join("@" + q for q in ats)
+        # @卡片落盘合并为单后台任务（@轰炸不再每 @ 起一个线程），复用分群写入
+        try:
+            _cards = getattr(_append_at_segments, "_pending_cards", None)
+            if _cards:
+                _jobs = list(_cards.items())
+                _cards.clear()
+                def _bg_save_cards(_jobs, _sm=sm):
+                    try:
+                        for (_g, _tq), _tn in _jobs:
+                            try:
+                                if _sm is not None and _g:
+                                    st = _sm.state(_g)
+                                    if st.has_section(_tq):
+                                        u = st[_tq]
+                                        if u.get("name", "") != _tn:
+                                            u["name"] = _tn
+                                            _sm.save(_g)
+                            except Exception:
+                                pass
+                            try:
+                                import store as _st_reg
+                                _st_reg.register_name(_tq, _tn)
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+                try:
+                    import concurrent.futures as _cf
+                    _pool = getattr(_append_at_segments, "_pool", None)
+                    if _pool is None:
+                        _pool = _cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="xb-atcard")
+                        _append_at_segments._pool = _pool
+                    _pool.submit(_bg_save_cards, _jobs)
+                except Exception:
+                    import threading
+                    threading.Thread(target=_bg_save_cards, args=(_jobs,), daemon=True).start()
+        except Exception:
+            pass
     except Exception:
         pass
     return raw
@@ -244,18 +277,26 @@ async def _do_platform(marker, event, slave_mod=None):
     bot = getattr(event, "bot", None)
     if bot is None:
         return "平台动作需要适配器 Bot 实例支持（当前未连接）。"
+    # 所有 OneBot 动作 8 秒超时熔断，防事件循环被挂起的适配器拖死
+    import asyncio as _aio
+
+    async def _call(action, **kw):
+        try:
+            return await _aio.wait_for(bot.call_action(action, **kw), timeout=8)
+        except Exception:
+            raise
     try:
         bot_uin = getattr(sm, "BOT_UIN", "") if sm else ""
         if not bot_uin:
             try:
-                info0 = await bot.call_action("get_login_info")
+                info0 = await _call("get_login_info")
                 d0 = (info0.get("data") if isinstance(info0, dict) else None) or info0 or {}
                 bot_uin = str(d0.get("user_id") or d0.get("uin") or d0.get("self_id") or "")
             except Exception:
                 bot_uin = ""
         if bot_uin:
             try:
-                info_bot = await bot.call_action("get_group_member_info", group_id=int(gid), user_id=int(bot_uin))
+                info_bot = await _call("get_group_member_info", group_id=int(gid), user_id=int(bot_uin))
                 d_bot = (info_bot.get("data") if isinstance(info_bot, dict) else None) or info_bot or {}
                 role_bot = str(d_bot.get("role", "")).lower()
                 if role_bot not in ("owner", "admin", "administrator"):
@@ -263,7 +304,7 @@ async def _do_platform(marker, event, slave_mod=None):
             except Exception:
                 pass
         try:
-            info_t = await bot.call_action("get_group_member_info", group_id=int(gid), user_id=int(target))
+            info_t = await _call("get_group_member_info", group_id=int(gid), user_id=int(target))
             d_t = (info_t.get("data") if isinstance(info_t, dict) else None) or info_t or {}
             role_t = str(d_t.get("role", "")).lower()
             if role_t in ("owner", "admin", "administrator"):
@@ -275,16 +316,16 @@ async def _do_platform(marker, event, slave_mod=None):
     try:
         if act == "mute":
             try:
-                await bot.call_action("set_group_ban", group_id=int(gid), user_id=int(target), duration=dur)
+                await _call("set_group_ban", group_id=int(gid), user_id=int(target), duration=dur)
             except Exception as e1:
                 if "不支持" in str(e1) or "not" in str(e1).lower():
-                    await bot.call_action("set_group_mute", group_id=int(gid), user_id=int(target), duration=dur)
+                    await _call("set_group_mute", group_id=int(gid), user_id=int(target), duration=dur)
                 else:
                     raise
             base = f"已将成员 <{target}> 禁言 {dur // 60} 分钟。"
             return (extra_text + "\r\n" + base) if extra_text else base
         if act == "kick":
-            await bot.call_action("set_group_kick", group_id=int(gid), user_id=int(target))
+            await _call("set_group_kick", group_id=int(gid), user_id=int(target))
             base = f"已将成员 <{target}> 移出本群。"
             return (extra_text + "\r\n" + base) if extra_text else base
     except Exception as e:

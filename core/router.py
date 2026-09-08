@@ -97,10 +97,9 @@ def _sys_off(gid, engine, store):
         try:
             _GUARD_CACHE[key] = (_t_guard.time(), val)
             if len(_GUARD_CACHE) > _GUARD_CACHE_MAX:
-                # 淘汰最旧一半，防千群常驻内存无限涨
+                # FIFO 踢最旧 1/10（dict 有序，O(n) 远小于全排序；TTL 兜底过期）
                 try:
-                    _old = sorted(_GUARD_CACHE.items(), key=lambda x: x[1][0])[:_GUARD_CACHE_MAX // 2]
-                    for _k, _v in _old:
+                    for _k in list(_GUARD_CACHE.keys())[:_GUARD_CACHE_MAX // 10]:
                         _GUARD_CACHE.pop(_k, None)
                 except Exception:
                     pass
@@ -178,18 +177,75 @@ def _batch_guard_map(gid, is_admin, store):
     return res
 
 _ENGINE_CMDS = {}
+_ENGINE_CMDS_VER = None
+
+_ENGINE_MT_CACHE = {"t": 0.0, "mt": 0.0}
+_ENGINE_MT_TTL = 10.0  # mtime 探测节流：10 秒内复用，避免每消息 10 次 stat
+
+
+def _engine_cache_ver(store=None):
+    try:
+        ver = getattr(store, "_CONFIG_VER", 0) if store is not None else 0
+    except Exception:
+        ver = 0
+    try:
+        _now = _t_guard.time()
+        if _now - _ENGINE_MT_CACHE.get("t", 0.0) < _ENGINE_MT_TTL:
+            return (_ENGINE_MT_CACHE.get("mt", 0.0), ver)
+        import os
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        eng_dir = os.path.join(base, "engines")
+        if not os.path.isdir(eng_dir):
+            try:
+                eng_dir = os.path.join(os.path.dirname(base), "engines")
+            except Exception:
+                pass
+        max_mt = 0.0
+        for _n in ("slave", "sign", "bank", "ent", "chat", "spirit", "ride", "superadmin", "guild", "adventure"):
+            try:
+                _mt = os.path.getmtime(os.path.join(eng_dir, _n + ".py"))
+                if _mt > max_mt:
+                    max_mt = _mt
+            except Exception:
+                pass
+        _ENGINE_MT_CACHE["t"] = _now
+        _ENGINE_MT_CACHE["mt"] = max_mt
+    except Exception:
+        max_mt = _ENGINE_MT_CACHE.get("mt", 0.0)
+    return (max_mt, ver)
 
 def _get_engine_cmds(engine, store=None):
-    if engine not in _ENGINE_CMDS:
-        try:
-            from .config import _collect_commands
-            import os
-            base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            all_cmds = _collect_commands(base, store)
-            if all_cmds:
-                _ENGINE_CMDS.update(all_cmds)
-        except Exception:
-            pass
+    global _ENGINE_CMDS_VER
+    try:
+        cur_ver = _engine_cache_ver(store)
+    except Exception:
+        cur_ver = None
+    try:
+        if _ENGINE_CMDS_VER != cur_ver or engine not in _ENGINE_CMDS:
+            try:
+                from .config import _collect_commands
+                import os
+                base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                all_cmds = _collect_commands(base, store)
+                if all_cmds:
+                    _ENGINE_CMDS.clear()
+                    _ENGINE_CMDS.update(all_cmds)
+                    _ENGINE_CMDS_VER = cur_ver
+            except Exception:
+                pass
+            if engine not in _ENGINE_CMDS and not _ENGINE_CMDS:
+                try:
+                    from .config import _collect_commands as _cc2
+                    import os as _os2
+                    base2 = _os2.path.dirname(_os2.path.dirname(_os2.path.abspath(__file__)))
+                    all_cmds2 = _cc2(base2, store)
+                    if all_cmds2:
+                        _ENGINE_CMDS.update(all_cmds2)
+                        _ENGINE_CMDS_VER = cur_ver
+                except Exception:
+                    pass
+    except Exception:
+        pass
     return _ENGINE_CMDS.get(engine, [])
 
 def _matches_engine(raw, engine, store=None):
@@ -257,7 +313,27 @@ def _render_vars(tpl, gid, qq, store):
         return tpl
 
 
-_CUSTOM_IDX = {"ver": -1, "cmds": (), "dis": (), "ovr": ()}
+_CUSTOM_IDX = {"ver": -1, "cmds": (), "dis": (), "ovr": (), "_fp": None}
+
+def _custom_fp(store):
+    try:
+        import json as _js
+        def _fp_sec(_s):
+            if not isinstance(_s, dict):
+                return ""
+            try:
+                return _js.dumps({str(k): (str(v) if not isinstance(v, dict) else _js.dumps(v, sort_keys=True, ensure_ascii=False)) for k, v in sorted(_s.items(), key=lambda x: str(x[0]))}, ensure_ascii=False, sort_keys=True)
+            except Exception:
+                try:
+                    return str(sorted(str(k) for k in _s.keys()))
+                except Exception:
+                    return ""
+        _c1 = store._CONFIG.get(_CUSTOM_SEC) if hasattr(store, "_CONFIG") else None
+        _c2 = store._CONFIG.get(_DISABLE_SEC) if hasattr(store, "_CONFIG") else None
+        _c3 = store._CONFIG.get(_REPLY_OVERRIDE_SEC) if hasattr(store, "_CONFIG") else None
+        return (_fp_sec(_c1), _fp_sec(_c2), _fp_sec(_c3))
+    except Exception:
+        return None
 
 def _custom_idx(store):
     """自定义/禁用/回复覆盖三表统一索引：按触发词长度降序预排，配置版本变更时重建。
@@ -267,7 +343,19 @@ def _custom_idx(store):
     except Exception:
         ver = -1
     try:
+        # 主路径：版本命中直接返回，零序列化（指纹只在版本变化时算一次）
         if _CUSTOM_IDX.get("ver") == ver and ver != -1:
+            return _CUSTOM_IDX
+    except Exception:
+        pass
+    try:
+        fp = _custom_fp(store)
+    except Exception:
+        fp = None
+    try:
+        if _CUSTOM_IDX.get("ver") == ver and ver != -1 and _CUSTOM_IDX.get("_fp") == fp:
+            return _CUSTOM_IDX
+        if ver == -1 and fp is not None and _CUSTOM_IDX.get("_fp") == fp and _CUSTOM_IDX.get("_fp") is not None:
             return _CUSTOM_IDX
     except Exception:
         pass
@@ -292,6 +380,10 @@ def _custom_idx(store):
         pass
     try:
         _CUSTOM_IDX["ver"], _CUSTOM_IDX["cmds"], _CUSTOM_IDX["dis"], _CUSTOM_IDX["ovr"] = ver, cmds, dis, ovr
+        try:
+            _CUSTOM_IDX["_fp"] = fp
+        except Exception:
+            pass
     except Exception:
         pass
     return _CUSTOM_IDX
@@ -373,6 +465,13 @@ def _cmd_disabled(raw, store):
 
 
 def handle(gid, qq, raw, is_private=False, is_admin=False, store=None, engines=None, chat_mod=None, superadmin_mod=None):
+    # 自定义索引版本兜底：handle_cfg_save 直改 _CONFIG 不走 set_config 时 ver 未 bump，
+    # 每次使用 _CUSTOM_IDX 前以 ver+内容指纹重建，避免 stale（群聊仍不走 chat，只补映射不断路）
+    try:
+        if store is not None:
+            _custom_idx(store)
+    except Exception:
+        pass
     # 总开关：完全静默，包括超管，最高优先级
     try:
         if store and store.cfg("总开关配置", "总开关", "真") != "真":

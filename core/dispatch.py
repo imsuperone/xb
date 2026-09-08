@@ -37,10 +37,11 @@ async def handle_admin_list(raw, gid, qq, is_admin, event):
             pass
         admins = []
         try:
-            rows = ST._DB.execute("SELECT k, v FROM kv WHERE k LIKE 'admin_%'").fetchall() if ST._DB else []
-            for k, v in rows:
+            with ST._LOCK:
+                rows = ST._DB.execute("SELECT k FROM kv WHERE k LIKE 'admin_%'").fetchall() if ST._DB else []
+            for r in rows:
                 try:
-                    q = k.split("_", 1)[1]
+                    q = str(r[0]).split("_", 1)[1]
                     if q.isdigit():
                         admins.append(q)
                 except Exception:
@@ -53,7 +54,12 @@ async def handle_admin_list(raw, gid, qq, is_admin, event):
         lines = ["🔧 超管列表（AstrBot 管理员）"]
         for q in admins:
             try:
-                nm = slave.NOTE_NAMES.get(q, "") or ""
+                try:
+                    nm = slave.get_note_name(gid, q) if hasattr(slave, "get_note_name") else ""
+                except Exception:
+                    nm = ""
+                if not nm:
+                    nm = slave.NOTE_NAMES.get(q, "") or ""
                 if not nm:
                     try:
                         nm = slave.fetch_card(gid, q) or ""

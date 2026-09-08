@@ -25,7 +25,8 @@ async def handle_stats(request=None):
             "SELECT COALESCE(SUM(CAST(COALESCE(json_extract(data,'$.deposit'), json_extract(data,'$.cunkuan'), json_extract(data,'$.\"存款总数\"'), '0') AS INTEGER)),0) FROM accounts").fetchone()[0] if ST._DB else 0
     except Exception:
         total_dep = 0
-    if not total_dep:
+    if not total_dep and (n_acct or 0) < 100000:
+        # 兜底全表仅小库执行，大库跳过防秒级阻塞
         try:
             s = 0
             for (d,) in ST._DB.execute("SELECT data FROM accounts").fetchall():

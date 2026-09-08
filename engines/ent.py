@@ -55,6 +55,8 @@ _MENU = (
     "🔤 开始猜字谜　　🎲 开始猜数\r\n"
     "❓ 开始答题　　　🃏 二四点\r\n"
     "✊ 猜拳 石头/剪刀/布\r\n"
+    "📥 加入XX/退出XX（接龙/猜数/答题/字谜/急转弯/二四点）\r\n"
+    "🔚 结束接龙/重置接龙　📊 接龙进度\r\n"
     "━━━━━━━━━━━━━━\r\n"
     "💡 发送对应指令即可游玩"
 )
@@ -769,7 +771,7 @@ def handle(gid, qq, raw):
         return _join_game(gid, qq, "guessnum", "猜数")
     if text == "加入答题":
         return _join_game(gid, qq, "quiz", "答题")
-    if text == "加入字谜":
+    if text == "加入字谜" or text == "加入猜字谜":
         return _join_game(gid, qq, "miri", "字谜")
     if text == "加入急转弯":
         return _join_game(gid, qq, "trick", "急转弯")
@@ -787,7 +789,7 @@ def handle(gid, qq, raw):
         if not ST.recall_get(f"quiz_owner_{gid}"):
             _clear_active_game(gid)
         return res
-    if text == "退出字谜":
+    if text == "退出字谜" or text == "退出猜字谜":
         res = _quit_game(gid, qq, "miri", "字谜")
         if not ST.recall_get(f"miri_owner_{gid}"):
             _clear_active_game(gid)
