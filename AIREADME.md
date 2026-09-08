@@ -1,8 +1,8 @@
 # 小白机器人 (astrbot_plugin_xbbot) — AI 开发者架构与交接手册 (AIREADME)
 
-> **版本**：`v0.7.0`  
-> **适用对象**：接手本项目的 AI 编程助手（Claude, GPT, Gemini 等）与核心维护者  
-> **定位**：AstrBot 平台大型统一群互动插件（奴隶/签到/银行/娱乐/私聊/精灵/坐骑/超管/帮派/冒险 等 28 大子系统 + 现代 WebUI 管理控制台）
+> **当前版本**：`v0.7.1`  
+> **适用对象**：接手本项目的 AI 编程助手（Claude, GPT, Gemini, DeepSeek 等）与核心维护者  
+> **定位**：AstrBot 平台大型统一群互动旗舰插件（奴隶/签到/银行/娱乐/私聊/精灵/坐骑/超管/帮派/冒险 等 28 大子系统 + 现代 WebUI 管理控制台）
 
 ---
 
@@ -14,7 +14,7 @@
 astrbot_plugin_xbbot/
 ├── metadata.yaml             # AstrBot 插件元数据（版本号 9 处强校验点之一）
 ├── _conf_schema.json         # 28 个系统、298 项配置定义模式，WebUI 与 AstrBot 原生配置渲染驱动
-├── main.py                   # 插件 Star 主入口，事件监听分发、50 个 Web API 注册、后台定时备份守护线程
+├── main.py                   # 插件 Star 主入口，事件监听分发、50+ Web API 注册、后台定时备份守护线程
 ├── store.py                  # 现代 SQLite (WAL 模式) 存储引擎，原子事务、内存 LRU/全局缓存、只读副本、自动备份与保留修剪
 ├── verify_plugin.py          # 语法解析、版本 9 处一致性、配置模式合法性全量自动化校验脚本
 ├── scripts/stress_24h.py     # 24h 等效压测：群聊风暴+WebAPI 风暴+自愈/守恒断言
@@ -22,12 +22,12 @@ astrbot_plugin_xbbot/
 │   ├── config.py             # 配置规范化、双向转换、默认值兜底
 │   ├── platform.py           # 跨平台适配、消息链装配、原生成分解析、@提及与名片提取
 │   ├── router.py             # 统一指令路由调度机、主菜单生成、子系统分发、自定义指令索引、守卫缓存
-│   ├── webdav.py             # 纯标准库零依赖 WebDAV 客户端（支持坚果云/Alist/NAS等）
+│   ├── webdav.py             # 纯标准库零依赖 WebDAV 客户端（支持坚果云/Alist/NAS等，RFC 4918、上海时区转换、DELETE删除）
 │   ├── logger.py             # 统一日志收口输出
 │   ├── en_map.py             # 中英文字段双向映射表
-│   └── api/                  # WebUI 后端 API 端点（12 大 Tab × 50 路由，薄路由）
-│       ├── backup.py         # 备份列表、恢复、导出、清理、数据库整理体检、WebDAV 测试与云备份、配置快照/一键恢复
-│       ├── updater.py        # GitHub Releases / main 分支双通道版本检测与在线更新
+│   └── api/                  # WebUI 后端 API 端点（12 大 Tab × 50+ 路由，薄路由）
+│       ├── backup.py         # 备份列表、恢复、导出、清理、数据库整理体检、WebDAV 测试与云备份、云端文件列表与删除
+│       ├── updater.py        # GitHub Releases / main 分支双通道纪元版本检测与在线更新
 │       ├── users.py          # 用户资产、封禁、编辑、清空、一键空投
 │       ├── groups.py         # 群聊开关管理与状态切换
 │       ├── images.py         # 根目录与抽卡图鉴资源文件管理器
@@ -44,14 +44,13 @@ astrbot_plugin_xbbot/
 │   ├── adventure.py          # 冒险系统
 │   └── chat.py               # 词库私聊与唤醒词过滤
 └── pages/admin/              # 现代化 WebUI 管理控制台
-    ├── index.html            # 单页面控制台骨架（12 大 Tab 视图、深浅色模式）
-    ├── app.js                # 前端控制台主逻辑（Bridge 封装、API 通信、图表、搜索联动、零静默更新检测）
-    └── (tabs/ 已于 v0.68.24 整包移除：12 文件全库零引用，Tab 全由 app.js 内联 TAB_LOADERS 承载)
+    ├── index.html            # 单页面控制台骨架（13 大 Tab 视图、深浅色模式、自愈 Toast 容器）
+    └── app.js                # 前端控制台主逻辑（Bridge 封装、API 通信、Emoji 智能去重、WebDAV 列表/删除/恢复、零静默更新检测）
 ```
 
 ---
 
-## 2. 必须严守的“五大黄金法则”（严防退化 Bug）
+## 2. 必须严守的“六大黄金法则”（严防退化 Bug）
 
 在后续迭代或修复时，**切勿违反以下原则**，这是多次线上高并发调优与故障复盘得出的血泪教训：
 
@@ -75,8 +74,10 @@ astrbot_plugin_xbbot/
 - 接龙支持 `【重置接龙】` 与 `【结束接龙】` 指令，任何群员均可发送一键释放对局；
 - 30 秒无人作答后，下一条互动指令或 `开始接龙` 自动静默清理并秒级重开，杜绝死锁。
 
-### 规则五：9 处版本号强一致性对齐
-- 每次版本迭代必须同步更新以下 9 个位置的版本号：
+### 规则五：版本纪元演进与 9 处强一致性对齐
+- **版本号迭代规范（0.7.xx 序列）**：当前遵循 `0.7.0` ~ `0.7.99` 补丁位递增规则。只有当补丁位达到 99 或用户明确指示时，前段大版本才更新为 `0.8.xx`、`1.0.xx`。
+- **纪元比较算法**：在 `core/api/updater.py` 中使用 `(epoch, major, minor, patch)` 算法，将旧版本 `0.10.x`~`0.68.x` 划入 `epoch=0`，新版本划入 `epoch=1`，严防旧版本倒流。
+- **9 处版本号强一致**：每次发版必须同步以下 9 处：
   1. `metadata.yaml`: `version: "x.y.z"`
   2. `main.py`: `PLUGIN_VERSION = "x.y.z"`
   3. `core/api/updater.py`: `return "x.y.z"`
@@ -87,6 +88,12 @@ astrbot_plugin_xbbot/
   8. `CHANGELOG.md`: `## vx.y.z`
   9. `README.md`: `vX.Y.Z`
 
+### 规则六：WebDAV 规范与云端操作安全防线
+- **探测防频控**：使用 RFC 4918 轻量 `OPTIONS` 嗅探，禁止无节制发送重型 `PROPFIND`，根除 HTTP 429。
+- **时间上海时区规范**：远端归档时间必须转换为 UTC+8 上海时区中文日期（`YYYY年MM月DD日 HH:MM:SS`），禁止向用户抛出原生英文 GMT 串。
+- **破坏性操作二次确认**：云端文件删除（`DELETE`）等危险操作必须由前端 `uiConfirm` 二次确认拦截，并在操作期间提供明确的忙态提示与实时无感列表刷新。
+- **防重复备份防抖**：立即上传云端必须具备至少 5 秒的防抖与路径复用，严禁连续并发触发生成多份重复冷备。
+
 ---
 
 ## 3. 存储与并发控制模型 (`store.py`)
@@ -94,9 +101,9 @@ astrbot_plugin_xbbot/
 - **模式**：SQLite WAL 模式（`PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;`），千群并发读完全并行，写串行化；
 - **锁机制**：使用全局互斥可重入锁 `_LOCK = threading.RLock()` 保护所有写事务；高频读（`coins_get`/`recall_get`）走 `query_only` 只读副本 + 独立细锁，不排队等写锁；
 - **内存预热与加速**：
-  - `kv` 表使用 `_KV_CACHE` 内存字典预热缓存；
+  - `kv` 表使用 `_KV_CACHE` 内存字典预热缓存，包含 28 大系统配置与用户资产；
   - 群组与用户配置通过 `_GROUP_CACHE` 维护，采用 `_dirty` 脏标记和 `_dirty_qqs` 增量提交；`group()` 全量解析在锁外执行 + 双检回填；
-- **配置三级防丢**：WebUI 保存即写 kv 镜像（含清空语义）→ 启动时文件→DB 逐级回填；全量配置自动快照（去重，最多 5 份），备份管理一键恢复；
+- **配置三级防丢**：WebUI 保存即写 kv 镜像（含清空语义）→ 启动时文件→DB 逐级回填；全量配置自动快照，备份管理一键恢复；
 - **自动备份与清理策略**：
   - 备份目录：`data/backups/YYYY-MM-DD/xbbot_YYYYMMDD_HHMMSS.db`；
   - 自动清理：`clean_old_backups(max_keep=None)`，默认保留最新 30 份（可在配置项 `保留备份数量` 调节），超出自动清除最旧文件并回收空目录；
@@ -104,36 +111,58 @@ astrbot_plugin_xbbot/
 
 ---
 
-## 4. WebDAV 自动云备份 (`core/webdav.py`)
+## 4. WebDAV 自动云备份与归档管理 (`core/webdav.py`)
 
 - **实现特性**：零外部依赖（纯标准库 `urllib.request` + `ssl` + `base64`），兼容任意标准 WebDAV 服务端（坚果云、Alist、群晖、Nextcloud 等）；
-- **接口与按钮**：
-  - Web 控制台「备份管理」Tab 专属卡片：开关/地址/账号/目录/间隔/保留数，保存后即读回校验；另有【☁️ 测试 WebDAV】与【☁️ 立即上传云端】按钮（备份配置已移出配置页，不再两处打架）；
-  - 对应后端路由：`/backup/webdav/test` 和 `/backup/webdav/upload`；
-  - 聊天指令：超管在群聊/私聊中发送【测试webdav】或【webdav测试】；
-- **更新检测零静默**：`updater.check_latest_version` 双通道失败回 `detect_error`；前端 20s 超时熔断 + 按钮忙态 + 黄灯可重试，任何点击必有提示。
+- **时间处理引擎 (`format_shanghai_time`)**：
+  - 支持 RFC 1123 HTTP-date（`email.utils.parsedate_to_datetime`）与 ISO 8601；
+  - 转换为 `timezone(timedelta(hours=8))` 上海时区；
+  - 文件名兜底正则推导（`xbbot_YYYYMMDD_HHMMSS`）。
+- **云端归档管理**：
+  - `list_remote_files()`：PROPFIND Depth 1 XML 解析远端目录，输出结构化文件列表；
+  - `restore_remote_file(remote_name)`：下载远端归档文件并执行热恢复；
+  - `delete_remote_file(remote_name)`：向 WebDAV 发送标准 RFC 4918 `DELETE` 请求，拦截 404/429 并提供友好中文反馈。
+- **接口与 WebUI 交互**：
+  - Web 控制台「备份管理」Tab 专属卡片：包含开关/地址/账号/目录/间隔/保留数配置；
+  - 交互按钮：【☁️ 测试 WebDAV】、【☁️ 立即上传云端】（带 5 秒防抖）、远端归档列表中每个文件的【📥 恢复】与【🗑️ 删除】按钮。
 
 ---
 
-## 5. 校验与打包发布标准工作流
+## 5. 前端 WebUI 架构与交互设计 (`pages/admin/app.js`)
+
+- **Bridge 通信与降级**：
+  - 优先调用 AstrBot 原生 `window.astrabot.callApi`，降级时自动匹配原生 Fetch；
+  - 严谨处理 API 基础路径，彻底杜绝带问号或双斜杠的端点异常。
+- **Emoji 全局智能去重**：
+  - 全局封装 `_normalizeModalTitleAndIcon(title, icon)`：
+    ```javascript
+    const emojiRegex = /^([\p{Extended_Pictographic}\uFE0E\uFE0F\u200D\u20E3\u2600-\u27BF]|\s)+/u;
+    ```
+  - 自动剥离 `title` 开头的前导 Emoji，根绝所有模态弹窗图标重复堆叠现象。
+- **视觉反馈与防抖锁**：
+  - 按钮操作点击即刻置为 `disabled` 并呈现 `⏳ 正在执行...` 状态，彻底避免多次重复点击；
+  - DOM 补全 `#toast` 容器，支持非侵入式轻量自愈通知。
+
+---
+
+## 6. 校验与打包发布标准工作流
 
 在提交任何更改前，请在终端执行以下标准流程：
 
 ```powershell
-# 1. 语法与强一致性自检（确保 ALL OK）
+# 1. 语法与强一致性自检（确保 41 模块与 9 处版本全部 ALL OK）
 python -X utf8 verify_plugin.py
 
-# 2. 24h 等效压测（确保 ALL OK）
+# 2. 24h 等效高并发压测（4800 ops，确保 0 泄漏 0 错误 ALL OK）
 python -X utf8 scripts/stress_24h.py
 
 # 3. 前端语法抽查
 node --check pages/admin/app.js
 
-# 4. 构建纯净发布压缩包（排除 .git/.github/__pycache__/*.pyc/*.db*/data/backups），
+# 4. 构建纯净发布压缩包（排除 .git/.github/__pycache__/*.pyc/*.db*/data/backups）
 #    同步归档三端：仓库根 / astrbot_plugins / backup 目录
 
-# 5. Git 提交并打 Release 标签（远端 origin = https://github.com/imsuperone/xb，
-#    推送 tag 自动触发 Action 发版）
+# 5. Git 提交并打 Release 标签推送
 git add -A
 git commit -m "feat/fix: commit description (vx.y.z)"
 git push origin main
@@ -143,22 +172,24 @@ git push origin vx.y.z -f
 
 ---
 
-## 6. 版本履历速查（v0.68.22 → v0.68.36）
+## 7. 完整版本演进史（v0.68.22 → v0.7.1）
 
-| 版本 | 主题 |
+| 版本 | 主题与核心突破 |
 | :--- | :--- |
-| v0.68.22 | 根治 `database is locked`/接龙卡死：全引擎持锁串行化、备份非阻塞化 |
-| v0.68.23 | 全库体检：P0×4/P1×8 修复、热路径提速、`scripts/stress_24h.py` 落地 |
-| v0.68.24 | 读副本分离、自定义指令索引、VACUUM 出锁、`tabs/` 死亡代码移除 |
-| v0.68.25 | 复检回合：前后端对齐/索引一致性/投诉场景冒烟（零逻辑变更） |
-| v0.68.26 | 清空 kv 幽灵残留、旧库导入脱敏硬编码群号 |
-| v0.68.27 | 三对齐：补 2 裸奔配置键（296→298 项） |
-| v0.68.28 | 仓库迁 `imsuperone/xb`、接龙锁定 20+0、WebDAV 保存防丢（文件兜底） |
-| v0.68.29 | WebDAV 空值回填、更新检测失败明确提示 |
-| v0.68.30 | WebDAV DB 镜像三级防丢、检查更新零静默（20s 熔断） |
-| v0.68.31 | WebDAV 迁备份管理专属卡片、全量配置快照一键恢复 |
-| v0.68.32 | 交接文档同步现状（零逻辑变更） |
-| v0.68.33 | WebUI 版本双端卡片弹窗提示；WebDAV MKCOL 递归创建尾部斜杠修复与协议前缀自动规范化 |
+| **v0.7.1** | **WebDAV 远端归档上海时区中文时间格式化；远端文件直接物理删除（HTTP DELETE + 二次危险确认 + 热刷新）** |
+| **v0.7.0** | **版本纪元比较引擎；全局模态弹窗 Emoji 去重；WebDAV 远端归档查看与热恢复；彻底杜绝双份备份；更新规范确立 (0.7.xx)** |
+| v0.68.36 | WebDAV RFC 4918 OPTIONS 探测根治 429 频控；SQLite kv 表自包含 100% 配置与用户资产；WebUI 体验现代化重构 |
+| v0.68.35 | 彻底根除 AstrBot 原生 bridge endpoint 带问号异常；全面适配 Quart 请求体异步解析与全局上下文代理 |
 | v0.68.34 | 检测更新按钮直接承载状态与结果展示；接入 jsDelivr CDN 1.5s 极速检测；WebDAV 保存后端直接回显 |
-| v0.68.35 | 彻底根除 AstrBot 原生 bridge endpoint 带问号异常；全面适配 Quart 请求体异步解析与全局请求上下文代理 |
-| v0.68.36 | WebDAV RFC 4918 OPTIONS 探测根治 429 频控；SQLite kv 表自包含 100% 配置与用户资产；WebUI 体验现代化重构与弹窗交互优化 |
+| v0.68.33 | WebUI 版本双端卡片弹窗提示；WebDAV MKCOL 递归创建尾部斜杠修复与协议前缀自动规范化 |
+| v0.68.32 | 交接文档同步现状（零逻辑变更） |
+| v0.68.31 | WebDAV 迁备份管理专属卡片、全量配置快照一键恢复 |
+| v0.68.30 | WebDAV DB 镜像三级防丢、检查更新零静默（20s 熔断） |
+| v0.68.29 | WebDAV 空值回填、更新检测失败明确提示 |
+| v0.68.28 | 仓库迁 `imsuperone/xb`、接龙锁定 20+0、WebDAV 保存防丢（文件兜底） |
+| v0.68.27 | 三对齐：补 2 裸奔配置键（296→298 项） |
+| v0.68.26 | 清空 kv 幽灵残留、旧库导入脱敏硬编码群号 |
+| v0.68.25 | 复检回合：前后端对齐/索引一致性/投诉场景冒烟（零逻辑变更） |
+| v0.68.24 | 读副本分离、自定义指令索引、VACUUM 出锁、`tabs/` 死亡代码移除 |
+| v0.68.23 | 全库体检：P0×4/P1×8 修复、热路径提速、`scripts/stress_24h.py` 落地 |
+| v0.68.22 | 根治 `database is locked`/接龙卡死：全引擎持锁串行化、备份非阻塞化 |
