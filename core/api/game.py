@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
-"""游戏画像 API — 奴隶 / 精灵 用户画像 + 精灵图鉴 + 身价校准"""
+"""游戏画像 API — 奴隶 / 精灵 用户画像 + 精灵图鉴 + 身价校准 + 抽奖武器池文件管理"""
+import base64
 import json
+import os as _os
 import re
+import shutil as _shutil
 from astrbot.api.web import json_response
 
 from .helpers import _err, get_req_query, get_req_json
@@ -409,8 +412,7 @@ async def handle_spirits_save(request):
 
 
 async def handle_gacha_weapons(request):
-    """抽奖武器池（gacha_img SSR/SR/R 文件名去扩展名，供武器商城对照同步；附精确图片路径供自动匹配预览）"""
-    import os as _os
+    """抽奖武器池（gacha_img SSR/SR/R 文件名去扩展名；附精确图片路径供自动匹配预览）"""
     try:
         try:
             from ...engines import slave as _sl
@@ -442,3 +444,283 @@ async def handle_gacha_weapons(request):
         return json_response({"ok": True, "pool": out, "img": img})
     except Exception as e:
         return _err(f"gacha weapons failed: {e}", 500)
+
+
+_POOL_RARS = ("SSR", "SR", "R")
+_POOL_IMG_EXTS = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp")
+_POOL_THUMB_MAX = 200 * 1024
+
+
+def _pool_slave():
+    try:
+        from ...engines import slave as _sl
+        return _sl
+    except ImportError:
+        import slave as _sl  # type: ignore
+        return _sl
+
+
+def _pool_base():
+    try:
+        return _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+    except Exception:
+        return ""
+
+
+def _pool_dir(rar):
+    """生效稀有度目录（与引擎 _gacha_pool 同口径：持久化优先）"""
+    _sl = _pool_slave()
+    try:
+        files = _sl._gacha_pool(rar) or []
+        if files:
+            return _os.path.dirname(_os.path.abspath(files[0]))
+    except Exception:
+        pass
+    base = _pool_base()
+    try:
+        pers = ST.get_persistent_data_dir(base) if hasattr(ST, "get_persistent_data_dir") else ""
+    except Exception:
+        pers = ""
+    d = _os.path.join(pers or _os.path.join(base, "data"), "gacha_img", rar)
+    try:
+        _os.makedirs(d, exist_ok=True)
+    except Exception:
+        pass
+    return d
+
+
+def _pool_bust(rar=""):
+    try:
+        _sl = _pool_slave()
+        if hasattr(_sl, "_GACHA_CACHE"):
+            if rar:
+                _sl._GACHA_CACHE.pop(rar, None)
+                try:
+                    _sl._GACHA_CACHE_TS.pop(rar, None)
+                except Exception:
+                    pass
+            else:
+                _sl._GACHA_CACHE.clear()
+                try:
+                    _sl._GACHA_CACHE_TS.clear()
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+
+def _pool_clean_stem(s):
+    s = str(s or "").strip()
+    if not s or len(s) > 64 or s in (".", ".."):
+        return ""
+    if re.search(r'[\/\\:*?"<>|\x00-\x1f]', s):
+        return ""
+    return s
+
+
+def _pool_find(stem):
+    """按武器名找生效文件，返回 (rar, abspath) 或 (None, None)"""
+    _sl = _pool_slave()
+    want = str(stem or "")
+    for rar in _POOL_RARS:
+        try:
+            for p in (_sl._gacha_pool(rar) or []):
+                try:
+                    if _os.path.splitext(_os.path.basename(p))[0] == want and _os.path.isfile(p):
+                        return rar, _os.path.abspath(p)
+                except Exception:
+                    continue
+        except Exception:
+            continue
+    return None, None
+
+
+def _pool_item(rar, p, base):
+    try:
+        fn = _os.path.basename(p)
+        nm = _os.path.splitext(fn)[0]
+        try:
+            sz = _os.path.getsize(p)
+        except Exception:
+            sz = 0
+        try:
+            rp = _os.path.relpath(p, base).replace(_os.sep, "/") if base else ""
+            if rp.startswith(".."):
+                rp = ""
+        except Exception:
+            rp = ""
+        thumb = ""
+        try:
+            if 0 < sz <= _POOL_THUMB_MAX:
+                with open(p, "rb") as f:
+                    raw = f.read()
+                ext = _os.path.splitext(fn)[1].lower().lstrip(".") or "png"
+                if ext == "jpg":
+                    ext = "jpeg"
+                thumb = "data:image/%s;base64,%s" % (ext, base64.b64encode(raw).decode("ascii"))
+        except Exception:
+            thumb = ""
+        return {"name": nm, "file": fn, "rar": rar, "img": rp, "thumb": thumb, "size": sz}
+    except Exception:
+        return None
+
+
+async def handle_pool_list(request):
+    """抽奖武器池列表（生效目录，附预览）"""
+    try:
+        _sl = _pool_slave()
+        base = _pool_base()
+        out = {}
+        for rar in _POOL_RARS:
+            items = []
+            try:
+                for p in (_sl._gacha_pool(rar) or []):
+                    it = _pool_item(rar, p, base)
+                    if it:
+                        items.append(it)
+            except Exception:
+                pass
+            items.sort(key=lambda x: x["name"])
+            out[rar] = items
+        return json_response({"ok": True, "pool": out})
+    except Exception as e:
+        return _err(f"pool list failed: {e}", 500)
+
+
+async def handle_pool_rename(request):
+    """抽奖武器改名（仅改文件名主干，扩展名保留）"""
+    try:
+        data = await get_req_json(request, default={})
+        if not isinstance(data, dict):
+            return _err("bad payload", 400)
+        old = str(data.get("old", "") or data.get("name", "") or "").strip()
+        new = _pool_clean_stem(data.get("new", ""))
+        if not old or not new:
+            return _err("old/new required", 400)
+        rar, src = _pool_find(old)
+        if not src:
+            return _err("not found", 404)
+        if new == old:
+            return json_response({"ok": True, "name": new})
+        dst = _os.path.join(_os.path.dirname(src), new + _os.path.splitext(src)[1])
+        if _os.path.exists(dst):
+            return _err("同名文件已存在", 400)
+        _os.rename(src, dst)
+        _pool_bust(rar)
+        return json_response({"ok": True, "name": new})
+    except Exception as e:
+        return _err(f"pool rename failed: {e}", 500)
+
+
+async def handle_pool_move(request):
+    """抽奖武器改稀有度（跨目录移动文件）"""
+    try:
+        data = await get_req_json(request, default={})
+        if not isinstance(data, dict):
+            return _err("bad payload", 400)
+        name = str(data.get("name", "") or "").strip()
+        to = str(data.get("to", "") or data.get("rar", "") or "").strip().upper()
+        if not name or to not in _POOL_RARS:
+            return _err("name/to required", 400)
+        rar, src = _pool_find(name)
+        if not src:
+            return _err("not found", 404)
+        if rar == to:
+            return json_response({"ok": True, "rar": to})
+        d = _pool_dir(to)
+        dst = _os.path.join(d, _os.path.basename(src))
+        if _os.path.exists(dst):
+            return _err("目标稀有度已存在同名文件", 400)
+        _shutil.move(src, dst)
+        _pool_bust(rar)
+        _pool_bust(to)
+        return json_response({"ok": True, "rar": to})
+    except Exception as e:
+        return _err(f"pool move failed: {e}", 500)
+
+
+async def handle_pool_delete(request):
+    """抽奖武器删除（删文件，需前端二次确认）"""
+    try:
+        data = await get_req_json(request, default={})
+        if not isinstance(data, dict):
+            return _err("bad payload", 400)
+        name = str(data.get("name", "") or "").strip()
+        if not name:
+            return _err("name required", 400)
+        rar, src = _pool_find(name)
+        if not src:
+            return _err("not found", 404)
+        _os.remove(src)
+        _pool_bust(rar)
+        return json_response({"ok": True})
+    except Exception as e:
+        return _err(f"pool delete failed: {e}", 500)
+
+
+async def handle_pool_upload(request):
+    """抽奖武器上传（multipart file + ?rar=SSR，存生效目录）"""
+    try:
+        rar = (get_req_query(request, "rar", "") or "").strip().upper()
+        if rar not in _POOL_RARS:
+            try:
+                p = await get_req_json(request, default={})
+                if isinstance(p, dict):
+                    rar = str(p.get("rar", "") or "").strip().upper()
+            except Exception:
+                pass
+        if rar not in _POOL_RARS:
+            return _err("rar required (SSR/SR/R)", 400)
+        try:
+            form = await request.files()
+        except Exception:
+            form = {}
+        f = None
+        if isinstance(form, dict):
+            f = form.get("file")
+            if not f:
+                for _k in ("files", "fileUpload", "upload", "data"):
+                    if _k in form:
+                        f = form.get(_k)
+                        if f:
+                            break
+        elif hasattr(form, "filename") or hasattr(form, "read"):
+            f = form
+        if not f:
+            return _err("no file", 400)
+        filename = str(getattr(f, "filename", None) or getattr(f, "name", None) or "").strip()
+        filename = _os.path.basename(filename)
+        stem, ext = _os.path.splitext(filename)
+        stem = _pool_clean_stem(stem)
+        ext = ext.lower()
+        if not stem or ext not in _POOL_IMG_EXTS:
+            return _err("仅支持图片文件", 400)
+        data = b""
+        try:
+            val = f.read() if hasattr(f, "read") else None
+            if val is not None:
+                import inspect
+                data = await val if inspect.isawaitable(val) else val
+            if not data and hasattr(f, "file"):
+                try:
+                    ff = getattr(f, "file")
+                    if hasattr(ff, "read"):
+                        data = ff.read()
+                except Exception:
+                    pass
+        except Exception:
+            data = b""
+        if isinstance(data, str):
+            data = data.encode("utf-8", errors="ignore")
+        if not data:
+            return _err("empty file", 400)
+        d = _pool_dir(rar)
+        dst = _os.path.join(d, stem + ext)
+        if _os.path.exists(dst):
+            return _err("同名文件已存在", 400)
+        with open(dst, "wb") as w:
+            w.write(data)
+        _pool_bust(rar)
+        return json_response({"ok": True, "name": stem, "rar": rar})
+    except Exception as e:
+        return _err(f"pool upload failed: {e}", 500)

@@ -1458,8 +1458,6 @@ def cmd_gacha(gid, qq, st, count=1):
         e_gain = exp_map.get(rar, 9)
 
         if rar == "SSR":
-            # 同步至商城图鉴
-            _sync_weapon_shop(name)
             if name in owned:
                 exp_total += e_gain
                 cur = int(uget(u, name, "0") or 0) + 1
@@ -1701,7 +1699,7 @@ def cmd_weapon_menu(gid, qq, st):
         lines.append(f"◆ {n}　攻击+{STAR_ATK[min(5, star)]}　{own}{price_txt}{img_missing}")
     lines.append("━━━━━━━━━━━━━━")
     lines.append("成长: ★0+100 → ★3+600 → ★5+1600")
-    lines.append("🎁 获取: 【抽武器】【十连抽】【三十连抽】【五十连抽】/商城购买")
+    lines.append("🎁 获取: 【抽武器】【十连抽】【三十连抽】【五十连抽】")
     lines.append("💡 R/SR抽到即转经验, SSR才能装备出战")
     lines.append("⭐ 升星: 【升星+武器名】如【升星雷鸣剑】")
     lines.append("🔍 详情: 直接发【武器名】如【鬼泪村正】")

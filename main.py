@@ -277,6 +277,11 @@ class XbBot(Star):
         context.register_web_api(f"/{PLUGIN_ID}/spirits", self.page_spirits_get, ["GET"], "精灵图鉴读取")
         context.register_web_api(f"/{PLUGIN_ID}/spirits/save", self.page_spirits_save, ["POST"], "精灵图鉴保存")
         context.register_web_api(f"/{PLUGIN_ID}/gacha/weapons", self.page_gacha_weapons, ["GET"], "抽奖武器池")
+        context.register_web_api(f"/{PLUGIN_ID}/weapons/pool", self.page_pool_list, ["GET"], "抽奖武器池文件列表")
+        context.register_web_api(f"/{PLUGIN_ID}/weapons/pool/rename", self.page_pool_rename, ["POST"], "抽奖武器改名")
+        context.register_web_api(f"/{PLUGIN_ID}/weapons/pool/move", self.page_pool_move, ["POST"], "抽奖武器改稀有度")
+        context.register_web_api(f"/{PLUGIN_ID}/weapons/pool/delete", self.page_pool_delete, ["POST"], "抽奖武器删除")
+        context.register_web_api(f"/{PLUGIN_ID}/weapons/pool/upload", self.page_pool_upload, ["POST"], "抽奖武器上传")
         context.register_web_api(f"/{PLUGIN_ID}/backups/list", self.page_backups_list, ["GET"], "备份列表")
         context.register_web_api(f"/{PLUGIN_ID}/backups/restore", self.page_backups_restore, ["POST"], "恢复备份")
         context.register_web_api(f"/{PLUGIN_ID}/backups/delete", self.page_backups_delete, ["POST"], "删除备份")
@@ -845,6 +850,46 @@ class XbBot(Star):
             return await handle_gacha_weapons(request)
         except Exception as e:
             return _err(f"gacha weapons failed: {e}", 500)
+
+    async def page_pool_list(self, request=None, *args, **kwargs):
+        try:
+            req = request if request is not None else (args[0] if args else None)
+            from .core.api.game import handle_pool_list
+            return await handle_pool_list(req)
+        except Exception as e:
+            return _err(f"pool list failed: {e}", 500)
+
+    async def page_pool_rename(self, request=None, *args, **kwargs):
+        try:
+            req = request if request is not None else (args[0] if args else None)
+            from .core.api.game import handle_pool_rename
+            return await handle_pool_rename(req)
+        except Exception as e:
+            return _err(f"pool rename failed: {e}", 500)
+
+    async def page_pool_move(self, request=None, *args, **kwargs):
+        try:
+            req = request if request is not None else (args[0] if args else None)
+            from .core.api.game import handle_pool_move
+            return await handle_pool_move(req)
+        except Exception as e:
+            return _err(f"pool move failed: {e}", 500)
+
+    async def page_pool_delete(self, request=None, *args, **kwargs):
+        try:
+            req = request if request is not None else (args[0] if args else None)
+            from .core.api.game import handle_pool_delete
+            return await handle_pool_delete(req)
+        except Exception as e:
+            return _err(f"pool delete failed: {e}", 500)
+
+    async def page_pool_upload(self, request=None, *args, **kwargs):
+        try:
+            req = request if request is not None else (args[0] if args else None)
+            from .core.api.game import handle_pool_upload
+            return await handle_pool_upload(req)
+        except Exception as e:
+            return _err(f"pool upload failed: {e}", 500)
 
     async def page_slave_users(self, request=None, *args, **kwargs):
         try:

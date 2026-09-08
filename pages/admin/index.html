@@ -1884,12 +1884,12 @@
           </div>
           <span class="msg" id="shopMsg"></span>
         </div>
-        <div class="hint">坐骑 / 武器 / 精灵道具三类商城（可改价/增删/绑图）。武器商城已接入抽奖武器池；图鉴总览在「📖 图鉴」页。持久化至 商城图鉴/精灵图鉴 配置。</div>
+        <div class="hint">坐骑商城（改价/增删/绑图，需点保存）与抽奖武器池（改名/改稀有度/删/传，即时生效）；图鉴总览在「📖 图鉴」页。</div>
         <div class="responsive-shop-grid">
           <div>
             <h3 style="margin:0 0 8px;font-size:13px">🛒 商城</h3>
             <div id="shopRideBox"></div>
-            <div id="shopWeaponBox" style="margin-top:10px"></div>
+            <div id="poolWeaponBox" style="margin-top:10px"></div>
             <div id="shopSpiritBox" style="margin-top:10px"></div>
           </div>
         </div>
@@ -1907,12 +1907,15 @@
             <button id="btnSpiritImport" class="ghost">📤 导入</button>
             <button id="btnSpiritSave">💾 保存图鉴</button>
             <button id="btnSpiritReset" class="ghost">↩️ 恢复默认</button>
+            <button id="btnSpiritMapsToggle" class="ghost">🗺 地图编辑</button>
           </div>
           <span class="msg" id="spiritMsg"></span>
         </div>
-        <div class="hint">快捷编辑「精灵地图(出没精灵/推荐等级)」与「精灵属性/进化路线」。展开地图卡片可浏览对应精灵，点击「保存图鉴」持久化。</div>
-        <div class="search"><span>🔍</span><input id="spiritSearch" placeholder="搜索 地图名 / 精灵名称…" /></div>
-        <div id="spiritBody"></div>
+        <div class="hint">快捷编辑「精灵地图(出没精灵/推荐等级)」与「精灵属性/进化路线」。展开地图卡片可浏览对应精灵，点击「保存图鉴」持久化。总览页 ✨ 精灵页签同款可编辑，地图编辑区可收起。</div>
+        <div id="spiritMapsWrap" style="display:none">
+          <div class="search"><span>🔍</span><input id="spiritSearch" placeholder="搜索 地图名 / 精灵名称…" /></div>
+          <div id="spiritBody"></div>
+        </div>
         <h3 style="margin:14px 0 8px;font-size:13px">📖 全类目总览（奴隶武器/宝物/坐骑/精灵地图）</h3>
         <div id="atlasBox" style="max-height:600px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px"></div>
       </div>

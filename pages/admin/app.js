@@ -1235,8 +1235,8 @@ async function saveConfig() {
       payload[sec][key] =
         inp.type === "checkbox" ? (inp.checked ? "真" : "假") : inp.value;
     });
-    const r = await getBridge().apiPost("config/save", payload);
-    msg.textContent = "已保存: " + JSON.stringify(r);
+    await getBridge().apiPost("config/save", payload);
+    msg.textContent = "配置已保存";
     msg.classList.add("ok");
     toast("配置已保存", "ok");
     await loadConfig();
@@ -1271,8 +1271,8 @@ async function resetConfig() {
       if (!payload[sec]) payload[sec] = {};
       payload[sec][key] = defaults[k];
     });
-    const r = await getBridge().apiPost("config/save", payload);
-    msg.textContent = "已恢复本页默认（" + secList.join("、") + "）: " + JSON.stringify(r);
+    await getBridge().apiPost("config/save", payload);
+    msg.textContent = "已恢复本页默认（" + secList.join("、") + "）";
     msg.classList.add("ok");
     toast("已恢复本页默认值", "ok");
     await loadConfig();
@@ -1989,7 +1989,7 @@ async function saveCmdEditor() {
     });
 
     const r = await getBridge().apiPost("config/save", payload);
-    if (msg) { msg.textContent = "已保存: " + JSON.stringify(r); msg.classList.add("ok"); }
+    if (msg) { msg.textContent = "指令已保存"; msg.classList.add("ok"); }
     toast("指令已保存", "ok");
     closeCmdEditor();
     await loadCommands();
@@ -2459,12 +2459,12 @@ async function saveSpirits() {
       });
     });
     const payload = { spirits, maps, shop };
-    const r = await getBridge().apiPost("spirits/save", payload);
+    await getBridge().apiPost("spirits/save", payload);
     SPIRIT_DIRTY = false;
     SPIRIT_CUSTOM = { maps: true, spirits: true, shop: true };
-    msg.textContent = "已保存: " + JSON.stringify(r.keys);
+    msg.textContent = "图鉴已保存";
     msg.classList.add("ok");
-    toast("精灵图鉴已保存", "ok");
+    toast("图鉴已保存", "ok");
     renderSpiritBody();
   } catch (e) {
     msg.textContent = "保存失败: " + e.message;
@@ -2681,6 +2681,14 @@ document.querySelectorAll("#varsHelp .var-tag").forEach(el => {
 // 精灵图鉴
 document.getElementById("btnSpiritLoad")?.addEventListener("click", loadSpirits);
 document.getElementById("btnSpiritSave")?.addEventListener("click", saveSpirits);
+document.getElementById("btnSpiritMapsToggle")?.addEventListener("click", () => {
+  const w = document.getElementById("spiritMapsWrap");
+  const b = document.getElementById("btnSpiritMapsToggle");
+  if (!w) return;
+  const show = w.style.display === "none";
+  w.style.display = show ? "" : "none";
+  if (b) b.textContent = show ? "🗺 收起地图编辑" : "🗺 地图编辑";
+});
 document.getElementById("btnSpiritReset")?.addEventListener("click", async () => {
   // 仅恢复精灵系统（地图/属性/道具）为内置，不碰其他页
   if (!SPIRIT) { toast("请先加载图鉴", "bad"); return; }
@@ -2724,17 +2732,10 @@ const DEFAULT_RIDE_SHOP = {
   "老八": { price: 500000, img: "data/img/坐骑图标/老八.jpg" },
 };
 let SHOP_RIDE = {};
-let SHOP_WEAPON = {};
 let SHOP_DIRTY = false;
 let SHOP_RIDE_CUSTOM = true;   // false=当前展示的是内置默认（未自定义），保存后即转为自定义
-let SHOP_WEAPON_CUSTOM = true;
-let GACHA_WEAPONS = { SSR: [], SR: [], R: [] };  // 抽奖武器池（只读，文件名来源）
-// 内置默认（仅用于“恢复默认”按钮与空态提示计数，不掺入编辑区）
-const WEAPON_DEFAULTS = {
-  "木剑": { price: 1000 }, "铁剑": { price: 3000 }, "苍雪剑": { price: 8000 },
-  "烈焰刀": { price: 20000 }, "青龙偃月刀": { price: 60000 }, "雷鸣剑": { price: 150000 },
-  "鬼泪村正": { price: 300000 }, "神使沧溟": { price: 800000 }, "炎宿朱雀": { price: 1500000 },
-};
+let GACHA_WEAPONS = { SSR: [], SR: [], R: [] };  // 抽奖武器名对照（只读）
+let POOL_WEAPONS = { SSR: [], SR: [], R: [] };   // 抽奖武器池文件（可编辑：改名/改稀有度/删除/上传）
 
 function _parseShopInput(raw, normalize) {
   // 统一入口：raw 可为 dict（生产内存归一形态）/ JSON 串 / 空。
@@ -2768,263 +2769,109 @@ function _normRideObj(d) {
   return out;
 }
 
-function _normWeaponObj(d) {
-  const out = {};
-  Object.keys(d).forEach((k) => {
-    const v = d[k];
-    if (v && typeof v === "object" && !Array.isArray(v)) out[k] = { price: Number(v.price) || 0, atk: Number(v.atk) || 0, desc: String(v.desc || ""), img: String(v.img || "") };
-    else out[k] = { price: Number(v) || 0, atk: 0, desc: "", img: "" };
-  });
-  return out;
+async function loadPool() {
+  // 抽奖武器池文件列表（生效目录，操作即时生效，无需保存）
+  try {
+    const d = await getBridge().apiGet("weapons/pool").catch(() => null);
+    if (d && d.ok && d.pool) POOL_WEAPONS = d.pool;
+  } catch (e) {}
+  try { renderPoolBox(); } catch (e) {}
+  try { if (ATLAS_CUR === "weapon") renderAtlas(); } catch (e) {}
 }
-
-function parseShopWeapon(raw) {
-  // 兼容旧调用：只返回数据对象
-  return _parseShopInput(raw, _normWeaponObj).data;
+function poolCount() {
+  try { return ["SSR", "SR", "R"].reduce((n, r) => n + ((POOL_WEAPONS && POOL_WEAPONS[r]) || []).length, 0); } catch (e) { return 0; }
 }
-function syncShopWeaponRaw(){ try{ const el=document.getElementById("shopWeapon"); if(el) el.value=JSON.stringify(SHOP_WEAPON,null,2);}catch(e){} }
-function renderShopWeaponBox(forceOpen=false){
-  const box=document.getElementById("shopWeaponBox");
+function renderPoolBox(forceOpen=false){
+  const box=document.getElementById("poolWeaponBox");
   if(!box) return;
-  const entries=Object.entries(SHOP_WEAPON);
   const curDetails=box.querySelector("details");
   const wasOpen=curDetails?curDetails.open:forceOpen;
-  let html=`<details class="panel" style="margin:0"${wasOpen?" open":""}><summary style="cursor:pointer;font-weight:600">⚔️ 武器商城 (weapon_shop) — ${entries.length} 件（抽奖武器自动同步，可改价/改数值/绑图）${(SHOP_WEAPON_CUSTOM || SHOP_DIRTY) ? "" : " · <span style='color:var(--muted);font-weight:400'>内置默认·未自定义</span>"}</summary>`;
-  html+=`<div class="hint" style="margin-top:8px">每行一个武器，支持改名、改价、改攻击/描述、删、绑图（图片路径如 data/gacha_img/SSR/炎宿朱雀.png，留空用抽奖默认图）</div>`;
-  if (!entries.length) {
-    html += `<div class="hint" style="margin:8px 0">当前为空，运行时武器菜单仅显示抽奖武器池；可添加或恢复默认（${Object.keys(WEAPON_DEFAULTS).length} 件）</div>`;
-  }
-  entries.forEach(([name,val])=>{
-    let price=0, atk=0, desc="", img="";
-    if(val && typeof val==="object"){ price=val.price??0; atk=val.atk??0; desc=val.desc??""; img=val.img??""; }
-    else price=Number(val)||0;
-    // 图片自动匹配：自定义优先，否则按抽奖池精确路径（稀有度目录+真实扩展名）自动配图
-    let autoImg=""; try{ autoImg=String(((window._GACHA_IMG||{})[name])||""); }catch(e){ autoImg=""; }
-    if(!autoImg){ try{ ["SSR","SR","R"].forEach((rar)=>{ if(!autoImg && ((GACHA_WEAPONS&&GACHA_WEAPONS[rar])||[]).includes(name)) autoImg=`data/gacha_img/${rar}/${name}.png`; }); }catch(e){} }
-    const showImg=img||autoImg;
-    const imgSrc=showImg?`<img src="${esc(showImg)}" style="width:36px;height:36px;object-fit:cover;border:1px solid var(--line);border-radius:6px" onerror="this.style.display='none'">`:`<span style="color:var(--muted);font-size:11px">无图</span>`;
-    // 原始值参照：稀有度 + 内置默认价，一眼可观测
-    let _rar=""; try{ ["SSR","SR","R"].forEach((r)=>{ if(((GACHA_WEAPONS&&GACHA_WEAPONS[r])||[]).includes(name)) _rar=r; }); }catch(e){}
-    let _def=""; try{ const _d=WEAPON_DEFAULTS[name]; if(_d&&typeof _d==="object") _def=_d.price??""; else if(_d!==undefined) _def=_d; }catch(e){}
-    const _ref=(_rar||_def!=="")?`<div style="font-size:11px;color:var(--muted);margin:6px 2px 0">📌 原始：${_rar?esc(_rar)+" · ":""}${_def!==""?"默认价 "+esc(_def):""}${img?" · 图：自定义":(autoImg?" · 图：自动匹配":"")}</div>`:"";
-    html+=`<div data-weapon-item="${esc(name)}" style="margin-top:8px">`+_ref+
-      `<div class="s-fields">`+
-      `<div class="s-row"><small>武器名</small><input data-weapon-name value="${esc(name)}"></div>`+
-      `<div class="s-row"><small>价格</small><input type="number" data-weapon-price value="${esc(price)}" style="width:90px"></div>`+
-      `<div class="s-row"><small>攻击</small><input type="number" data-weapon-atk value="${esc(atk)}" style="width:70px"></div>`+
-      `<div class="s-row" style="flex:1"><small>描述</small><input data-weapon-desc value="${esc(desc)}" placeholder="可选"></div>`+
-      `<div class="s-row" style="flex:1"><small>图片路径</small><input data-weapon-img value="${esc(img)}" placeholder="留空自动匹配"></div>`+
-      `<div style="display:flex;gap:4px;align-items:center">${imgSrc}<button class="ghost sm" data-weapon-pick="${esc(name)}">选图</button><button class="ghost sm" data-weapon-pick-builtin="${esc(name)}">内置选图</button><button class="s-del" data-weapon-del="${esc(name)}">删除</button></div>`+
-      `</div></div>`;
-  });
-  html+=`<div style="margin-top:8px"><button class="ghost sm" id="btnWeaponAdd">＋ 添加武器</button> <button class="ghost sm" id="btnWeaponReset">恢复默认</button> <button class="ghost sm" id="btnWeaponSyncGacha">一键同步抽奖武器进商城</button></div></details>`;
-  // 抽奖武器池对照区（只读：来源为抽奖图片文件，删改去根目录）
-  try {
-    const _pool = [];
-    ["SSR", "SR", "R"].forEach((rar) => {
-      ((GACHA_WEAPONS && GACHA_WEAPONS[rar]) || []).forEach((n) => _pool.push({ rar, n }));
+  let html=`<details class="panel" style="margin:0"${wasOpen?" open":""}><summary style="cursor:pointer;font-weight:600">🎰 抽奖武器池 — ${poolCount()} 件（文件即池，操作即时生效）</summary>`;
+  html+=`<div class="hint" style="margin-top:8px">武器=图片文件本身：改名改文件名，稀有度改所在目录，删即删文件；操作即时生效无需保存，抽奖/菜单/详情自动跟随</div>`;
+  ["SSR","SR","R"].forEach((rar)=>{
+    const items=(POOL_WEAPONS&&POOL_WEAPONS[rar])||[];
+    html+=`<div style="font-weight:600;margin:10px 0 4px">${esc(rar)} (${items.length})</div>`;
+    if(!items.length){ html+=`<div class="hint">空</div>`; return; }
+    items.forEach((it)=>{
+      const name=it.name;
+      const pv=(it.thumb||it.img)?`<img src="${esc(it.thumb||it.img)}" style="width:36px;height:36px;object-fit:cover;border:1px solid var(--line);border-radius:6px" onerror="this.style.display='none'">`:`<span style="color:var(--muted);font-size:11px">无图</span>`;
+      html+=`<div class="s-fields" data-pool-item="${esc(rar)}|${esc(name)}" style="margin-top:6px">`+
+        `<div class="s-row" style="font-weight:600;min-width:90px"><div style="padding-top:4px">✦ ${esc(name)}</div></div>`+
+        `<div class="s-row"><small>稀有度</small><select data-pool-rar>${["SSR","SR","R"].map((r)=>`<option value="${r}"${r===rar?" selected":""}>${r}</option>`).join("")}</select></div>`+
+        `<div style="display:flex;gap:4px;align-items:center">${pv}<button class="ghost sm" data-pool-rename>改名</button><button class="s-del" data-pool-del>删除</button></div>`+
+        `</div>`;
     });
-    if (_pool.length) {
-      html += `<div class="hint" style="margin-top:10px">🎰 抽奖武器池（${_pool.length} 件，来源：抽奖图片文件；已在商城的显示 ✅，缺失的可一键同步）</div>`;
-      html += `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px">` + _pool.map(({ rar, n }) => {
-        const _in = SHOP_WEAPON[n] !== undefined;
-        return `<span class="badge" style="font-size:11.5px" title="${esc(rar)}">${esc(rar)}·${esc(n)}${_in ? " ✅" : ""}</span>`;
-      }).join("") + `</div>`;
-    }
-  } catch (e) {}
+  });
+  html+=`<div style="margin-top:10px;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><select id="poolUploadRar">${["SSR","SR","R"].map((r)=>`<option value="${r}">${r}</option>`).join("")}</select><button class="ghost sm" id="btnPoolUpload">＋ 上传武器</button></div></details>`;
   box.innerHTML=html;
-  box.querySelectorAll("[data-weapon-name]").forEach(inp=>inp.addEventListener("change",(e)=>{
-    const old=e.target.closest("[data-weapon-item]").dataset.weaponItem;
-    const nn=e.target.value.trim();
-    if(!nn||nn===old){e.target.value=old;return;}
-    if(SHOP_WEAPON[nn]!==undefined){toast("已存在同名","bad");e.target.value=old;return;}
-    SHOP_WEAPON[nn]=SHOP_WEAPON[old]; delete SHOP_WEAPON[old]; SHOP_DIRTY=true; syncShopWeaponRaw(); renderShopWeaponBox(true);
+  const _poolKey = (el) => {
+    const wrap = el.closest("[data-pool-item]");
+    if (!wrap) return [null, null];
+    const parts = String(wrap.dataset.poolItem || "").split("|");
+    return [parts[0] || null, parts.slice(1).join("|") || null];
+  };
+  box.querySelectorAll("[data-pool-rename]").forEach(b=>b.addEventListener("click", async()=>{
+    const [, old] = _poolKey(b);
+    if (!old) return;
+    const nn = await uiPrompt(`武器「${old}」改名（只改文件名，不改扩展名）：`, old, "改名");
+    if (!nn) return;
+    const clean = String(nn).trim();
+    if (!clean || clean === old) return;
+    try {
+      const r = await getBridge().apiPost("weapons/pool/rename", { old, new: clean });
+      if (r && r.error) throw new Error(r.error);
+      toast("已改名", "ok"); await loadPool();
+    } catch (e) { toast("改名失败: " + e.message, "bad"); }
   }));
-  box.querySelectorAll("[data-weapon-price]").forEach(inp=>inp.addEventListener("change",(e)=>{
-    const k=e.target.closest("[data-weapon-item]").dataset.weaponItem;
-    const v=SHOP_WEAPON[k]; const p=Number(e.target.value)||0;
-    if(v && typeof v==="object") SHOP_WEAPON[k].price=p; else SHOP_WEAPON[k]={price:p, atk:0, desc:"", img:""};
-    SHOP_DIRTY=true; syncShopWeaponRaw();
+  box.querySelectorAll("[data-pool-rar]").forEach(sel=>sel.addEventListener("change", async(e)=>{
+    const [rar, name] = _poolKey(e.target);
+    const to = e.target.value;
+    if (!name || !to || to === rar) return;
+    try {
+      const r = await getBridge().apiPost("weapons/pool/move", { name, to });
+      if (r && r.error) throw new Error(r.error);
+      toast(`已移入 ${to}`, "ok"); await loadPool();
+    } catch (err) { toast("移动失败: " + err.message, "bad"); e.target.value = rar; }
   }));
-  box.querySelectorAll("[data-weapon-atk]").forEach(inp=>inp.addEventListener("change",(e)=>{
-    const k=e.target.closest("[data-weapon-item]").dataset.weaponItem;
-    const v=SHOP_WEAPON[k]; const p=Number(e.target.value)||0;
-    if(v && typeof v==="object") SHOP_WEAPON[k].atk=p; else SHOP_WEAPON[k]={price:Number(v)||0, atk:p, desc:"", img:""};
-    SHOP_DIRTY=true; syncShopWeaponRaw();
+  box.querySelectorAll("[data-pool-del]").forEach(b=>b.addEventListener("click", async()=>{
+    const [, name] = _poolKey(b);
+    if (!name) return;
+    if (!(await uiConfirm(`确认删除抽奖武器「${name}」？文件将直接删除，即时生效。`, "删除武器"))) return;
+    try {
+      const r = await getBridge().apiPost("weapons/pool/delete", { name });
+      if (r && r.error) throw new Error(r.error);
+      toast("已删除", "ok"); await loadPool();
+    } catch (e) { toast("删除失败: " + e.message, "bad"); }
   }));
-  box.querySelectorAll("[data-weapon-desc]").forEach(inp=>inp.addEventListener("change",(e)=>{
-    const k=e.target.closest("[data-weapon-item]").dataset.weaponItem;
-    const v=SHOP_WEAPON[k]; const s=e.target.value;
-    if(v && typeof v==="object") SHOP_WEAPON[k].desc=s; else SHOP_WEAPON[k]={price:Number(v)||0, atk:0, desc:s, img:""};
-    SHOP_DIRTY=true; syncShopWeaponRaw();
-  }));
-  box.querySelectorAll("[data-weapon-img]").forEach(inp=>inp.addEventListener("change",(e)=>{
-    const k=e.target.closest("[data-weapon-item]").dataset.weaponItem;
-    const v=SHOP_WEAPON[k]; const img=e.target.value.trim();
-    if(v && typeof v==="object"){ if(img) v.img=img; else delete v.img; }
-    else if(img) SHOP_WEAPON[k]={price:Number(v)||0, atk:0, desc:"", img};
-    SHOP_DIRTY=true; syncShopWeaponRaw(); renderShopWeaponBox(true);
-  }));
-  box.querySelectorAll("[data-weapon-pick]").forEach(b=>b.addEventListener("click", ()=>{
-    const k=b.dataset.weaponPick;
-    const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*";
-    inp.onchange=async(e)=>{
-      const file=e.target.files[0]; if(!file) return;
-      try{ const path="data/img/"+file.name; const v=SHOP_WEAPON[k];
-        if(v && typeof v==="object") SHOP_WEAPON[k].img=path; else SHOP_WEAPON[k]={price:Number(v)||0, atk:0, desc:"", img:path};
-        SHOP_DIRTY=true; syncShopWeaponRaw(); renderShopWeaponBox(true); toast("图片已绑定，需保存","ok");
-      }catch(err){ toast("绑定失败:"+err.message,"bad"); }
+  document.getElementById("btnPoolUpload")?.addEventListener("click", ()=>{
+    const rarSel = document.getElementById("poolUploadRar");
+    const rar = (rarSel && rarSel.value) || "SSR";
+    const inp = document.createElement("input"); inp.type = "file"; inp.accept = "image/*";
+    inp.onchange = async (e) => {
+      const file = e.target.files[0]; if (!file) return;
+      try {
+        const fd = new FormData(); fd.append("file", file);
+        const r = await getBridge().apiPost("weapons/pool/upload?rar=" + encodeURIComponent(rar), fd);
+        if (r && r.error) throw new Error(r.error);
+        toast(`已上传至 ${rar}`, "ok"); await loadPool();
+      } catch (err) { toast("上传失败: " + err.message, "bad"); }
     };
     inp.click();
-  }));
-  box.querySelectorAll("[data-weapon-pick-builtin]").forEach(b=>b.addEventListener("click", async ()=>{
-    const k=b.dataset.weaponPickBuiltin;
-    window.SHOP_PICK_TARGET=k; window.SHOP_PICK_KIND="weapon";
-    toast("已进入根目录，请单击选中图片后点“确定绑定”","ok");
-    document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("on"));
-    const rb=document.querySelector("[data-tab=\"imgs\"]"); if(rb) rb.classList.add("on");
-    document.querySelectorAll(".tab").forEach(x=>x.classList.remove("on"));
-    const tab=document.getElementById("tab-imgs"); if(tab) tab.classList.add("on");
-    await loadImages("");
-    const old=document.getElementById("shopPickTip"); if(old) old.remove();
-    const tip=document.createElement("div"); tip.id="shopPickTip"; tip.style="background:var(--accSoft);border:1px solid var(--acc);padding:8px 12px;border-radius:8px;margin-bottom:10px";
-    tip.innerHTML=`<b>为武器 "${esc(k)}" 选择内置图：</b> 请在下方根目录单击选中图片文件（png/jpg/gif等），然后 <button class="ghost sm" id="btnShopPickConfirm">确定绑定</button> <button class="ghost sm" id="btnShopPickCancel">取消</button>`;
-    const panel=document.querySelector("#tab-imgs .panel"); if(panel) panel.prepend(tip);
-    document.getElementById("btnShopPickConfirm")?.addEventListener("click", ()=>{
-      const sel=IMG_SELECTED;
-      if(!sel){ toast("请先选中图片文件","bad"); return; }
-      const ext=(sel.split(".").pop()||"").toLowerCase();
-      if(!["png","jpg","jpeg","gif","webp","bmp","ico"].includes(ext)){ toast("请选择图片文件，当前选择非图片","bad"); return; }
-      if(window._imgIsDir && window._imgIsDir(sel)){ toast("请选择图片文件，不能选择文件夹","bad"); return; }
-      const v=SHOP_WEAPON[k];
-      if(v && typeof v==="object") SHOP_WEAPON[k].img=sel; else SHOP_WEAPON[k]={price:Number(v)||0, atk:0, desc:"", img:sel};
-      SHOP_DIRTY=true; syncShopWeaponRaw(); renderShopWeaponBox(true); toast("已绑定 "+sel+"，需保存","ok");
-      tip.remove(); window.SHOP_PICK_TARGET=null; window.SHOP_PICK_KIND=null;
-      document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("on"));
-      const cb=document.querySelector("[data-tab=\"shops\"]"); if(cb) cb.classList.add("on");
-      document.querySelectorAll(".tab").forEach(x=>x.classList.remove("on"));
-      const stab=document.getElementById("tab-shops"); if(stab) stab.classList.add("on");
-    });
-    document.getElementById("btnShopPickCancel")?.addEventListener("click", ()=>{ tip.remove(); window.SHOP_PICK_TARGET=null; window.SHOP_PICK_KIND=null; });
-  }));
-  box.querySelectorAll("[data-weapon-del]").forEach(b=>b.addEventListener("click",async()=>{
-    const k=b.dataset.weaponDel;
-    const _last = Object.keys(SHOP_WEAPON).length <= 1;
-    if(!(await uiConfirm("确认删除武器 \""+k+"\"？（需保存生效）" + (_last ? "\n\n注意：这是最后一件，删光后运行时仅显示抽奖武器池。" : ""),"删除武器"))) return;
-    delete SHOP_WEAPON[k]; SHOP_DIRTY=true; syncShopWeaponRaw(); renderShopWeaponBox(true); toast("已删除，需保存","ok");
-  }));
-  const addBtn=document.getElementById("btnWeaponAdd");
-  if(addBtn) addBtn.addEventListener("click", ()=>openWeaponAddModal());
-  const resetBtn=document.getElementById("btnWeaponReset");
-  if(resetBtn) resetBtn.addEventListener("click", async()=>{
-    SHOP_WEAPON=JSON.parse(JSON.stringify(WEAPON_DEFAULTS)); SHOP_DIRTY=true; syncShopWeaponRaw(); renderShopWeaponBox(true); toast("已恢复默认，需保存","ok");
-  });
-  const syncBtn=document.getElementById("btnWeaponSyncGacha");
-  if(syncBtn) syncBtn.addEventListener("click", async()=>{
-    let added = 0;
-    ["SSR", "SR", "R"].forEach((rar) => {
-      ((GACHA_WEAPONS && GACHA_WEAPONS[rar]) || []).forEach((n) => {
-        if (SHOP_WEAPON[n] === undefined) { SHOP_WEAPON[n] = { price: 50000, atk: 0, desc: "抽奖同步", img: "" }; added++; }
-      });
-    });
-    if (!added) { toast("抽奖武器已全部在商城中", "ok"); return; }
-    SHOP_DIRTY=true; syncShopWeaponRaw(); renderShopWeaponBox(true); toast(`已同步 ${added} 件抽奖武器，需保存`, "ok");
   });
 }
-function openWeaponAddModal(){
-  const modal=document.getElementById("appModal");
-  if(!modal) return;
-  const icon=document.getElementById("appModalIcon");
-  const title=document.getElementById("appModalTitle");
-  const content=document.getElementById("appModalContent");
-  const inputWrap=document.getElementById("appModalInputWrap");
-  const cancelBtn=document.getElementById("appModalCancel");
-  const okBtn=document.getElementById("appModalOk");
-  if(icon) icon.textContent="⚔️";
-  if(title) title.textContent="添加武器";
-  if(inputWrap) inputWrap.style.display="none";
-  content.innerHTML=`
-    <div style="display:flex;flex-direction:column;gap:10px">
-      <div><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">武器名称：</label>
-        <input id="weaponAddName" style="width:100%;padding:6px 10px;border-radius:8px" placeholder="如：雷鸣剑"></div>
-      <div style="display:flex;gap:8px">
-        <div style="flex:1"><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">价格：</label>
-          <input id="weaponAddPrice" type="number" value="50000" style="width:100%;padding:6px 10px;border-radius:8px"></div>
-        <div style="flex:1"><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">攻击：</label>
-          <input id="weaponAddAtk" type="number" value="0" style="width:100%;padding:6px 10px;border-radius:8px"></div>
-      </div>
-      <div><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">描述（可选）：</label>
-        <input id="weaponAddDesc" style="width:100%;padding:6px 10px;border-radius:8px" placeholder="如：雷属性，暴击+5%"></div>
-      <div><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">图片路径（可选，留空用抽奖默认图）：</label>
-        <input id="weaponAddImg" style="width:100%;padding:6px 10px;border-radius:8px" placeholder="data/gacha_img/SSR/xxx.png"></div>
-      <div class="hint">保存后记得点商城页「保存」持久化；图片也可在列表中用“选图/内置选图”绑定</div>
-    </div>`;
-  if(cancelBtn){ cancelBtn.style.display=""; cancelBtn.textContent="取消"; cancelBtn.onclick=()=>{ modal.className=""; }; }
-  if(okBtn){
-    okBtn.textContent="确定添加"; okBtn.style.background="var(--acc)"; okBtn.style.borderColor="transparent";
-    okBtn.onclick=()=>{
-      const n=(document.getElementById("weaponAddName")?.value||"").trim();
-      const p=Number(document.getElementById("weaponAddPrice")?.value)||0;
-      const a=Number(document.getElementById("weaponAddAtk")?.value)||0;
-      const d=(document.getElementById("weaponAddDesc")?.value||"").trim();
-      const img=(document.getElementById("weaponAddImg")?.value||"").trim();
-      if(!n){ toast("请填写武器名称","bad"); return; }
-      if(SHOP_WEAPON[n]!==undefined){ toast("已存在同名武器","bad"); return; }
-      SHOP_WEAPON[n]={price:p, atk:a, desc:d, img};
-      SHOP_DIRTY=true; syncShopWeaponRaw();
-      try{ renderShopWeaponBox(true); }catch(e){}
-      try{ renderAtlas(); }catch(e){}
-      modal.className=""; toast("已添加武器，需保存","ok");
-    };
-  }
-  modal.className="show";
-  setTimeout(()=>{ try{ document.getElementById("weaponAddName")?.focus(); }catch(e){} },50);
-}
-function openWeaponEditModal(name){
-  const cur = SHOP_WEAPON[name];
-  if(cur === undefined){ toast("武器不存在","bad"); return; }
-  const modal=document.getElementById("appModal");
-  if(!modal) return;
-  const icon=document.getElementById("appModalIcon");
-  const title=document.getElementById("appModalTitle");
-  const content=document.getElementById("appModalContent");
-  const inputWrap=document.getElementById("appModalInputWrap");
-  const cancelBtn=document.getElementById("appModalCancel");
-  const okBtn=document.getElementById("appModalOk");
-  const v = (cur && typeof cur === "object") ? cur : { price: Number(cur)||0, atk: 0, desc: "", img: "" };
-  if(icon) icon.textContent="⚔️";
-  if(title) title.textContent=`修改武器默认值：${name}`;
-  if(inputWrap) inputWrap.style.display="none";
-  content.innerHTML=`
-    <div style="display:flex;flex-direction:column;gap:10px">
-      <div style="display:flex;gap:8px">
-        <div style="flex:1"><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">价格：</label>
-          <input id="weaponEditPrice" type="number" value="${esc(v.price ?? 0)}" style="width:100%;padding:6px 10px;border-radius:8px"></div>
-        <div style="flex:1"><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">攻击：</label>
-          <input id="weaponEditAtk" type="number" value="${esc(v.atk ?? 0)}" style="width:100%;padding:6px 10px;border-radius:8px"></div>
-      </div>
-      <div><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">描述：</label>
-        <input id="weaponEditDesc" value="${esc(v.desc ?? "")}" style="width:100%;padding:6px 10px;border-radius:8px"></div>
-      <div><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">图片路径（留空用抽奖默认图）：</label>
-        <input id="weaponEditImg" value="${esc(v.img ?? "")}" style="width:100%;padding:6px 10px;border-radius:8px" placeholder="data/gacha_img/SSR/xxx.png"></div>
-      <div class="hint">点确定后需点商城页「保存」持久化</div>
-    </div>`;
-  if(cancelBtn){ cancelBtn.style.display=""; cancelBtn.textContent="取消"; cancelBtn.onclick=()=>{ modal.className=""; }; }
-  if(okBtn){
-    okBtn.textContent="确定修改"; okBtn.style.background="var(--acc)"; okBtn.style.borderColor="transparent";
-    okBtn.onclick=()=>{
-      const p=Number(document.getElementById("weaponEditPrice")?.value)||0;
-      const a=Number(document.getElementById("weaponEditAtk")?.value)||0;
-      const d=(document.getElementById("weaponEditDesc")?.value||"").trim();
-      const img=(document.getElementById("weaponEditImg")?.value||"").trim();
-      SHOP_WEAPON[name]={price:p, atk:a, desc:d, img};
-      SHOP_DIRTY=true; syncShopWeaponRaw();
-      try{ renderShopWeaponBox(true); }catch(e){}
-      try{ renderAtlas(); }catch(e){}
-      modal.className=""; toast("已修改，需保存","ok");
-    };
-  }
-  modal.className="show";
+function poolUploadTo(rar) {
+  // 总览页＋添加：直接上传进指定稀有度
+  const inp = document.createElement("input"); inp.type = "file"; inp.accept = "image/*";
+  inp.onchange = async (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    try {
+      const fd = new FormData(); fd.append("file", file);
+      const r = await getBridge().apiPost("weapons/pool/upload?rar=" + encodeURIComponent(rar || "SSR"), fd);
+      if (r && r.error) throw new Error(r.error);
+      toast("已上传", "ok"); await loadPool();
+    } catch (err) { toast("上传失败: " + err.message, "bad"); }
+  };
+  inp.click();
 }
 function parseShopRide(raw) {
   // 兼容旧调用：只返回数据对象
@@ -3214,7 +3061,8 @@ async function renderAtlas(curCfg){
         window._TREAS_DIRTY = false;
       }
     } catch(e) { Treas = ["酒神葫芦", "四象护符"]; }
-    const weapons = Object.keys(SHOP_WEAPON || {});
+    const weapons = [];
+    try { ["SSR", "SR", "R"].forEach((r) => ((POOL_WEAPONS && POOL_WEAPONS[r]) || []).forEach((it) => weapons.push({ rar: r, name: it.name }))); } catch (e) {}
     const rides = Object.keys(SHOP_RIDE || {});
     const _spiritMaps = (() => { try { return Object.keys((SPIRIT && SPIRIT.maps) || {}); } catch (e) { return []; } })();
     const _tabs = [["weapon", "⚔️ 武器", weapons.length], ["treasure", "🎁 宝物", Treas.length], ["ride", "🐴 坐骑", rides.length], ["spirit", "✨ 精灵", _spiritMaps.length]];
@@ -3229,19 +3077,18 @@ async function renderAtlas(curCfg){
       return h;
     };
     const _effOf = (n) => { try { const e = (window._TREAS_EFF || {})[n]; if (e && typeof e === "object") return String(e.effect || ""); return String(e || ""); } catch (e) { return ""; } };
-    const _priceOf = (n) => { try { const v = SHOP_WEAPON[n]; if (v && typeof v === "object") return Number(v.price) || 0; return Number(v) || 0; } catch (e) { return 0; } };
     if (ATLAS_CUR === "weapon") {
-      let h = `<div style="border:1px solid var(--line);border-radius:var(--radius-xs);padding:8px 10px;background:var(--panel2)"><div style="font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px">奴隶系统-武器 (${weapons.length}) <button class="ghost sm" id="btnAtlasAddWeapon" style="margin-left:auto">＋ 添加</button></div><div style="display:flex;flex-wrap:wrap;gap:5px">`;
+      let h = `<div style="border:1px solid var(--line);border-radius:var(--radius-xs);padding:8px 10px;background:var(--panel2)"><div style="font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px">抽奖武器池 (${weapons.length}) <select id="atlasPoolRar" style="margin-left:auto;padding:3px 6px;border-radius:6px">${["SSR", "SR", "R"].map((r) => `<option value="${r}">${r}</option>`).join("")}</select><button class="ghost sm" id="btnAtlasAddWeapon">＋ 上传</button></div><div style="display:flex;flex-wrap:wrap;gap:5px">`;
       if (!weapons.length) h += `<span style="color:var(--muted)">暂无</span>`;
-      else h += weapons.map(n => `<span class="badge badge-primary" style="font-size:11.5px;display:inline-flex;align-items:center;gap:5px;padding:3px 8px" title="价格:${esc(_priceOf(n))}">${esc(n)}·${esc(_priceOf(n))}<span style="cursor:pointer" data-atlas-edit-weapon="${esc(n)}" title="修改默认值">✎</span><span style="cursor:pointer;font-weight:bold" data-atlas-del="奴隶系统-武器|${esc(n)}" title="删除">×</span></span>`).join("");
-      h += `</div><div class="hint" style="margin-top:6px">✎ 可改价格/攻击/描述/图片默认值，× 删除</div></div>`;
+      else h += weapons.map(({ rar, name: n }) => `<span class="badge badge-primary" style="font-size:11.5px;display:inline-flex;align-items:center;gap:5px;padding:3px 8px" title="${esc(rar)}">${esc(rar)}·${esc(n)}<span style="cursor:pointer;font-weight:bold" data-atlas-del="抽奖武器池|${esc(n)}" title="删除文件">×</span></span>`).join("");
+      h += `</div><div class="hint" style="margin-top:6px">文件即池：× 删除文件即时生效；改名/改稀有度请到🛒商城→抽奖武器池</div></div>`;
       html += h;
     }
     else if (ATLAS_CUR === "treasure") {
       let h = `<div style="border:1px solid var(--line);border-radius:var(--radius-xs);padding:8px 10px;background:var(--panel2)"><div style="font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px">奴隶系统-宝物 (${Treas.length}) <button class="ghost sm" id="btnAtlasAddTreasure" style="margin-left:auto">＋ 添加</button></div><div style="display:flex;flex-wrap:wrap;gap:5px">`;
       if (!Treas.length) h += `<span style="color:var(--muted)">暂无</span>`;
       else h += Treas.map(n => { const e = _effOf(n); return `<span class="badge badge-primary" style="font-size:11.5px;display:inline-flex;align-items:center;gap:5px;padding:3px 8px" title="${esc(e || "无自定义效果")}">🎁 ${esc(n)}${e ? "·" + esc(e.slice(0, 12)) : ""}<span style="cursor:pointer" data-atlas-edit-treasure="${esc(n)}" title="修改效果">✎</span><span style="cursor:pointer;font-weight:bold" data-atlas-del="奴隶系统-宝物|${esc(n)}" title="删除">×</span></span>`; }).join("");
-      h += `</div><div class="hint" style="margin-top:6px">✎ 可改宝物效果（不止名字），× 删除；效果保存到商城图鉴 treasure_effects</div></div>`;
+      h += `</div><div class="hint" style="margin-top:6px">✎ 可改宝物效果（不止名字），× 删除；改动即时保存</div></div>`;
       html += h;
     }
     else if (ATLAS_CUR === "spirit") {
@@ -3255,31 +3102,72 @@ async function renderAtlas(curCfg){
       html += h;
     }
     else html += mkSec("坐骑系统-坐骑", rides, "btnAtlasAddRide", "ride", "坐骑系统-坐骑");
-    html += `</div><div class="hint" style="margin-top:6px">点击 × 删除，✎ 改默认值，＋ 添加；修改后点上方“保存”同步到 商城图鉴/设置</div>`;
+    html += `</div><div class="hint" style="margin-top:6px">武器增删即时生效；宝物/坐骑改动即时保存，只动各自范围；精灵卡改动点「保存图鉴」持久化</div>`;
     box.innerHTML = html;
     box.querySelectorAll("[data-atlas-tab]").forEach((b) => b.addEventListener("click", () => {
       ATLAS_CUR = b.dataset.atlasTab;
       renderAtlas();
     }));
+    const persistTreasure = async () => {
+      // 宝物名+效果即时持久化（图鉴页内闭环，不碰商城）
+      const cleanEff = {};
+      Object.entries(window._TREAS_EFF || {}).forEach(([k, v]) => {
+        const s = (v && typeof v === "object") ? String(v.effect || "") : String(v || "");
+        if (s.trim()) cleanEff[k] = s.trim();
+      });
+      const r = await getBridge().apiPost("config/save", {
+        "设置": { "宝物": (window._TREAS_LIST || Treas).filter(Boolean).join("|") },
+        "商城图鉴": { "treasure_effects": JSON.stringify(cleanEff) }
+      });
+      if (r && r.error) throw new Error(r.error);
+      window._TREAS_DIRTY = false;
+      try { if (CFG && CFG.cur && CFG.cur["设置"]) CFG.cur["设置"]["宝物"] = (window._TREAS_LIST || Treas).filter(Boolean).join("|"); } catch (e) {}
+    };
+    const persistRideShop = async () => {
+      // 坐骑商城即时持久化（商城/总览共用同一内存态，只写 ride_shop）
+      const cleanRide = {};
+      Object.entries(SHOP_RIDE).forEach(([k, v]) => {
+        if (v && typeof v === "object" && !Array.isArray(v)) {
+          if (!v.img) cleanRide[k] = v.price;
+          else cleanRide[k] = v;
+        } else cleanRide[k] = v;
+      });
+      const r = await getBridge().apiPost("config/save", { "商城图鉴": { "ride_shop": JSON.stringify(cleanRide) } });
+      if (r && r.error) throw new Error(r.error);
+      SHOP_DIRTY = false;
+      try { syncShopRaw(); renderShopRideBox(true); } catch (e) {}
+    };
     box.querySelectorAll("[data-atlas-del]").forEach(el => el.addEventListener("click", async () => {
       const [sys, name] = el.dataset.atlasDel.split("|");
-      const _lastW = sys.includes("武器") && Object.keys(SHOP_WEAPON).length <= 1;
       const _lastR = sys.includes("坐骑") && Object.keys(SHOP_RIDE).length <= 1;
-      if (!(await uiConfirm(`确认删除 ${sys} "${name}"？` + ((_lastW || _lastR) ? "\n\n注意：这是最后一件，删光后运行时自动使用内置默认。" : ""), "删除图鉴"))) return;
-      if (sys.includes("武器")) { delete SHOP_WEAPON[name]; SHOP_DIRTY = true; syncShopWeaponRaw(); renderShopWeaponBox(true); }
-      else if (sys.includes("宝物")) {
-        window._TREAS_LIST = (window._TREAS_LIST || Treas).filter(x => x !== name);
-        try { if (window._TREAS_EFF) delete window._TREAS_EFF[name]; } catch (e) {}
-        window._TREAS_DIRTY = true; SHOP_DIRTY = true;
-        toast("已删除宝物，请点击商城页「保存」持久化", "ok");
-      } else if (sys.includes("坐骑")) { delete SHOP_RIDE[name]; SHOP_DIRTY = true; syncShopRaw(); renderShopRideBox(true); }
+      if (sys.includes("抽奖武器")) {
+        if (!(await uiConfirm(`确认删除抽奖武器「${name}」？文件将直接删除，即时生效。`, "删除武器"))) return;
+        try {
+          const r = await getBridge().apiPost("weapons/pool/delete", { name });
+          if (r && r.error) throw new Error(r.error);
+          toast("已删除", "ok"); await loadPool();
+        } catch (e) { toast("删除失败: " + e.message, "bad"); }
+        return;
+      }
+      if (!(await uiConfirm(`确认删除 ${sys} "${name}"？` + (_lastR ? "\n\n注意：这是最后一件，删光后运行时自动使用内置默认。" : ""), "删除图鉴"))) return;
+      try {
+        if (sys.includes("宝物")) {
+          window._TREAS_LIST = (window._TREAS_LIST || Treas).filter(x => x !== name);
+          try { if (window._TREAS_EFF) delete window._TREAS_EFF[name]; } catch (e) {}
+          await persistTreasure();
+          toast("已删除并保存", "ok");
+        } else if (sys.includes("坐骑")) {
+          delete SHOP_RIDE[name];
+          await persistRideShop();
+          toast("已删除并保存", "ok");
+        }
+      } catch (e) { toast("删除失败: " + e.message, "bad"); }
       renderAtlas();
     }));
     try {
       const _sc = document.getElementById("atlasSpiritCards");
       if (_sc) bindSpiritMapCards(_sc);
     } catch (e) {}
-    box.querySelectorAll("[data-atlas-edit-weapon]").forEach(el => el.addEventListener("click", () => openWeaponEditModal(el.dataset.atlasEditWeapon)));
     box.querySelectorAll("[data-atlas-edit-treasure]").forEach(el => el.addEventListener("click", async () => {
       const n = el.dataset.atlasEditTreasure;
       const cur = (() => { try { const e = (window._TREAS_EFF || {})[n]; if (e && typeof e === "object") return String(e.effect || ""); return String(e || ""); } catch (e) { return ""; } })();
@@ -3288,10 +3176,14 @@ async function renderAtlas(curCfg){
       window._TREAS_EFF = window._TREAS_EFF || {};
       if (String(v).trim()) window._TREAS_EFF[n] = String(v).trim();
       else delete window._TREAS_EFF[n];
-      SHOP_DIRTY = true; window._TREAS_DIRTY = true;
-      toast("已修改宝物效果，需保存", "ok"); renderAtlas();
+      try { await persistTreasure(); toast("已保存", "ok"); }
+      catch (e) { toast("保存失败: " + e.message, "bad"); }
+      renderAtlas();
     }));
-    document.getElementById("btnAtlasAddWeapon")?.addEventListener("click", () => openWeaponAddModal());
+    document.getElementById("btnAtlasAddWeapon")?.addEventListener("click", () => {
+      const sel = document.getElementById("atlasPoolRar");
+      poolUploadTo((sel && sel.value) || "SSR");
+    });
     document.getElementById("btnAtlasAddTreasure")?.addEventListener("click", async () => {
       let n = await uiPrompt("输入宝物名（奴隶系统-宝物）：", "", "添加宝物");
       if (!n) return; n = n.trim(); if (!n) return;
@@ -3300,8 +3192,9 @@ async function renderAtlas(curCfg){
       window._TREAS_LIST = [..._tl, n];
       const eff = await uiPrompt(`宝物「${n}」效果（可选，留空用通用）：`, "", "宝物效果");
       if (eff && String(eff).trim()) { window._TREAS_EFF = window._TREAS_EFF || {}; window._TREAS_EFF[n] = String(eff).trim(); }
-      window._TREAS_DIRTY = true; SHOP_DIRTY = true;
-      toast("已添加宝物，请点击商城页「保存」持久化", "ok"); renderAtlas();
+      try { await persistTreasure(); toast("已添加并保存", "ok"); }
+      catch (e) { window._TREAS_DIRTY = true; toast("保存失败: " + e.message, "bad"); }
+      renderAtlas();
     });
     document.getElementById("btnAtlasAddRide")?.addEventListener("click", () => openRideAddModal());
   } catch (e) { box.innerHTML = `<span style="color:var(--muted)">图鉴加载失败: ${esc(e.message)}</span>`; }
@@ -3318,7 +3211,6 @@ async function loadShops() {
     try {
       const gachaData = await getBridge().apiGet("gacha/weapons").catch(() => null);
       if (gachaData && (gachaData.ok || gachaData.pool)) GACHA_WEAPONS = gachaData.pool || gachaData;
-      try { window._GACHA_IMG = (gachaData && gachaData.img && typeof gachaData.img === "object") ? gachaData.img : (window._GACHA_IMG || {}); } catch (e) {}
     } catch (e) {}
     const sec = (cur || {})["商城图鉴"] || {};
     const _rr = _parseShopInput(sec["ride_shop"], _normRideObj);
@@ -3326,11 +3218,6 @@ async function loadShops() {
     else if (!_rr.blank) { SHOP_RIDE = {}; SHOP_RIDE_CUSTOM = true; }
     else { SHOP_RIDE = JSON.parse(JSON.stringify(DEFAULT_RIDE_SHOP)); SHOP_RIDE_CUSTOM = false; }
     if (_rr.corrupt) toast("坐骑商城配置损坏，已载入内置，保存将覆盖", "bad");
-    const _pw = _parseShopInput(sec["weapon_shop"], _normWeaponObj);
-    if (Object.keys(_pw.data).length) { SHOP_WEAPON = _pw.data; SHOP_WEAPON_CUSTOM = true; }
-    else if (!_pw.blank) { SHOP_WEAPON = {}; SHOP_WEAPON_CUSTOM = true; }
-    else { SHOP_WEAPON = JSON.parse(JSON.stringify(WEAPON_DEFAULTS)); SHOP_WEAPON_CUSTOM = false; }
-    if (_pw.corrupt) toast("武器商城配置损坏，已载入内置，保存将覆盖", "bad");
     try {
       const _te = sec["treasure_effects"];
       if (_te && typeof _te === "object" && !Array.isArray(_te)) window._TREAS_EFF = { ..._te };
@@ -3339,10 +3226,9 @@ async function loadShops() {
     } catch (e) { window._TREAS_EFF = window._TREAS_EFF || {}; }
     SHOP_DIRTY = false;
     syncShopRaw();
-    syncShopWeaponRaw();
     renderShopRideBox();
-    renderShopWeaponBox();
     try { renderShop(); } catch (e) {}
+    try { await loadPool(); } catch (e) {}
     try { renderAtlas(cur); } catch (e) {}
     if (msg) { msg.textContent = ""; msg.classList.remove("ok", "bad"); }
   } catch (e) {
@@ -3359,30 +3245,11 @@ async function saveShops() {
         else cleanRide[k] = v;
       } else cleanRide[k] = v;
     });
-    const cleanWeapon = {};
-    Object.entries(SHOP_WEAPON).forEach(([k, v]) => {
-      if (v && typeof v === "object" && !Array.isArray(v)) {
-        const o={ price: Number(v.price)||0 };
-        if(Number(v.atk)) o.atk=Number(v.atk)||0;
-        if(String(v.desc||"")) o.desc=String(v.desc||"");
-        if(String(v.img||"").trim()) o.img=String(v.img||"").trim();
-        if(Object.keys(o).length===1) cleanWeapon[k]=o.price;
-        else cleanWeapon[k]=o;
-      } else cleanWeapon[k] = v;
-    });
-    const cleanTreasureEff = {};
-    Object.entries(window._TREAS_EFF || {}).forEach(([k, v]) => {
-      const s = (v && typeof v === "object") ? String(v.effect || "") : String(v || "");
-      if (s.trim()) cleanTreasureEff[k] = s.trim();
-    });
-    const payload = { "商城图鉴": { "ride_shop": JSON.stringify(cleanRide), "weapon_shop": JSON.stringify(cleanWeapon), "treasure_effects": JSON.stringify(cleanTreasureEff) } };
-    if (window._TREAS_DIRTY && Array.isArray(window._TREAS_LIST)) {
-      payload["设置"] = { "宝物": window._TREAS_LIST.filter(Boolean).join("|") };
-    }
-    const r = await getBridge().apiPost("config/save", payload);
+    // 商城页只存坐骑：武器=池文件即时生效，宝物名/效果由图鉴页即时保存，互不干扰
+    const payload = { "商城图鉴": { "ride_shop": JSON.stringify(cleanRide) } };
+    await getBridge().apiPost("config/save", payload);
     SHOP_DIRTY = false;
     SHOP_RIDE_CUSTOM = true;
-    SHOP_WEAPON_CUSTOM = true;
     window._TREAS_DIRTY = false;
     try {
       if (typeof CFG === "object" && CFG && CFG["设置"] && payload["设置"]) CFG["设置"]["宝物"] = payload["设置"]["宝物"];
@@ -3392,10 +3259,9 @@ async function saveShops() {
         await getBridge().apiPost("spirits/save", { shop: SPIRIT.shop });
       } catch (e) {}
     }
-    if (msg) { msg.textContent = "商城图鉴已保存: " + JSON.stringify(r.sections || r) + " 节"; msg.classList.add("ok"); }
-    toast("商城图鉴已保存", "ok");
+    if (msg) { msg.textContent = "商城已保存"; msg.classList.add("ok"); }
+    toast("商城已保存", "ok");
     syncShopRaw();
-    syncShopWeaponRaw();
   } catch (e) {
     if (msg) { msg.textContent = "保存失败: " + e.message; msg.classList.add("bad"); }
     toast("保存失败: " + e.message, "bad");
@@ -3406,7 +3272,7 @@ async function exportShops() {
   try {
     const cur = await getBridge().apiGet("config/get");
     const sec = (cur || {})["商城图鉴"] || {};
-    const payload = { ride_shop: sec["ride_shop"] || "", weapon_shop: sec["weapon_shop"] || "" };
+    const payload = { ride_shop: sec["ride_shop"] || "" };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     downloadBlob(blob, `xbbot_shop_${Date.now()}.json`);
   } catch (e) { toast("导出失败: " + e.message, "bad"); }
@@ -3417,19 +3283,18 @@ async function importShops() {
     const file = e.target.files[0]; if (!file) return;
     try {
       const txt = await file.text(); const data = JSON.parse(txt);
-      // 兼容旧格式 {商城图鉴: {...}} / 直接 {ride_shop/weapon_shop: "..."} / 裸商城JSON
+      // 兼容旧格式 {商城图鉴: {...}} / 直接 {ride_shop: "..."} / 裸商城JSON（仅坐骑，武器已改为文件池）
       let sec = {};
       if (data["商城图鉴"]) sec = data["商城图鉴"];
-      else if (data["ride_shop"] !== undefined || data["weapon_shop"] !== undefined) sec = data;
+      else if (data["ride_shop"] !== undefined) sec = data;
       else sec = data;
       const payload = {};
       if (sec["ride_shop"] !== undefined) payload["ride_shop"] = sec["ride_shop"];
-      if (sec["weapon_shop"] !== undefined) payload["weapon_shop"] = sec["weapon_shop"];
       if (!Object.keys(payload).length) {
         // 可能是直接的 ride_shop 内容
         const keys = Object.keys(sec);
         if (keys.length) payload["ride_shop"] = JSON.stringify(sec);
-        else throw new Error("未找到 ride_shop/weapon_shop 数据");
+        else throw new Error("未找到 ride_shop 数据");
       }
       await getBridge().apiPost("config/save", { "商城图鉴": payload });
       toast("商城已导入", "ok"); await loadShops();
