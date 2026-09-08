@@ -535,6 +535,24 @@ def _pool_find(stem):
     return None, None
 
 
+def _pool_thumb(p):
+    try:
+        sz = _os.path.getsize(p)
+    except Exception:
+        return ""
+    if not (0 < sz <= _POOL_THUMB_MAX):
+        return ""
+    try:
+        with open(p, "rb") as f:
+            raw = f.read()
+        ext = _os.path.splitext(p)[1].lower().lstrip(".") or "png"
+        if ext == "jpg":
+            ext = "jpeg"
+        return "data:image/%s;base64,%s" % (ext, base64.b64encode(raw).decode("ascii"))
+    except Exception:
+        return ""
+
+
 def _pool_item(rar, p, base):
     try:
         fn = _os.path.basename(p)
@@ -549,18 +567,7 @@ def _pool_item(rar, p, base):
                 rp = ""
         except Exception:
             rp = ""
-        thumb = ""
-        try:
-            if 0 < sz <= _POOL_THUMB_MAX:
-                with open(p, "rb") as f:
-                    raw = f.read()
-                ext = _os.path.splitext(fn)[1].lower().lstrip(".") or "png"
-                if ext == "jpg":
-                    ext = "jpeg"
-                thumb = "data:image/%s;base64,%s" % (ext, base64.b64encode(raw).decode("ascii"))
-        except Exception:
-            thumb = ""
-        return {"name": nm, "file": fn, "rar": rar, "img": rp, "thumb": thumb, "size": sz}
+        return {"name": nm, "file": fn, "rar": rar, "img": rp, "size": sz}
     except Exception:
         return None
 
@@ -658,10 +665,34 @@ async def handle_pool_delete(request):
         return _err(f"pool delete failed: {e}", 500)
 
 
+async def handle_pool_img(request):
+    """抽奖武器单张预览（按需取缩略图，列表不再批量下发）"""
+    try:
+        data = await get_req_json(request, default={})
+        name = ""
+        if isinstance(data, dict):
+            name = str(data.get("name", "") or "").strip()
+        if not name:
+            name = (get_req_query(request, "name", "") or "").strip()
+        if not name:
+            return _err("name required", 400)
+        _, src = _pool_find(name)
+        if not src:
+            return _err("not found", 404)
+        thumb = _pool_thumb(src)
+        if not thumb:
+            return _err("too large or unreadable", 400)
+        return json_response({"ok": True, "name": name, "thumb": thumb})
+    except Exception as e:
+        return _err(f"pool img failed: {e}", 500)
+
+
 async def handle_pool_upload(request):
-    """抽奖武器上传（multipart file + ?rar=SSR，存生效目录）"""
+    """抽奖武器上传（multipart file + ?rar=SSR&replace=0&name=，存生效目录；replace=1 时覆盖同名）"""
     try:
         rar = (get_req_query(request, "rar", "") or "").strip().upper()
+        replace = (get_req_query(request, "replace", "") or "").strip().lower() in ("1", "true")
+        fixname = (get_req_query(request, "name", "") or "").strip()
         if rar not in _POOL_RARS:
             try:
                 p = await get_req_json(request, default={})
@@ -715,6 +746,18 @@ async def handle_pool_upload(request):
         if not data:
             return _err("empty file", 400)
         d = _pool_dir(rar)
+        if replace and fixname:
+            # 换图：删掉该稀有度下同名旧文件（扩展名可能不同），再写入
+            try:
+                for fn in _os.listdir(d):
+                    try:
+                        if _os.path.splitext(fn)[0] == fixname and _os.path.isfile(_os.path.join(d, fn)):
+                            _os.remove(_os.path.join(d, fn))
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+            stem = fixname
         dst = _os.path.join(d, stem + ext)
         if _os.path.exists(dst):
             return _err("同名文件已存在", 400)
