@@ -1210,6 +1210,200 @@ _LAST_BACKUP_TIME = 0.0
 # 并发调用者等待在途备份完成直接复用，根治并发/重叠调用生成双份时间戳文件
 _BACKUP_GEN_LOCK = threading.Lock()
 _BACKUP_IN_PROGRESS = None
+# 跨进程去重：文件锁（msvcrt/fcntl，进程死自动释放）+ sidecar（重载/多进程共享最近备份）
+_BACKUP_FILE_WINDOW = 30.0
+
+
+def _backup_sidecar_path():
+    try:
+        if BACKUP_DIR and os.path.isdir(BACKUP_DIR):
+            return os.path.join(BACKUP_DIR, ".xb_last_backup.json")
+    except Exception:
+        pass
+    return ""
+
+
+def _read_backup_sidecar():
+    """读跨进程最近备份 (ts, path)，失败回 (0, "")，永不抛错"""
+    try:
+        _p = _backup_sidecar_path()
+        if _p and os.path.isfile(_p):
+            with open(_p, "r", encoding="utf-8") as _f:
+                _d = json.load(_f)
+            if isinstance(_d, dict):
+                _ts = float(_d.get("ts", 0) or 0)
+                _path = str(_d.get("path", "") or "")
+                if _ts > 0 and _path and os.path.isfile(_path):
+                    return _ts, _path
+    except Exception:
+        pass
+    return 0.0, ""
+
+
+def _write_backup_sidecar(ts, path):
+    try:
+        _p = _backup_sidecar_path()
+        if _p:
+            with open(_p, "w", encoding="utf-8") as _f:
+                json.dump({"ts": float(ts), "path": str(path)}, _f)
+    except Exception:
+        pass
+
+
+def _clear_backup_busy():
+    try:
+        if BACKUP_DIR:
+            _bp = os.path.join(BACKUP_DIR, ".xb_backup.busy")
+            if os.path.isfile(_bp):
+                os.remove(_bp)
+    except Exception:
+        pass
+
+
+def _reserve_backup_slot():
+    """跨进程预约本次生成。返回 (mine, reuse_path)：mine=True 本调用负责生成；
+    mine=False 时若 reuse_path 非空可直接复用，否则调用方等待后接管。永不抛错。"""
+    try:
+        if not (BACKUP_DIR and os.path.isdir(BACKUP_DIR)):
+            return True, ""
+        _fl = _BackupFileLock()
+        try:
+            _fl.acquire(timeout=15)
+        except Exception:
+            pass
+        try:
+            _now = time.time()
+            try:
+                _s, _p = _read_backup_sidecar()
+                if _s > 0 and (_now - _s < _BACKUP_FILE_WINDOW) and _p:
+                    return False, _p
+            except Exception:
+                pass
+            _bp = os.path.join(BACKUP_DIR, ".xb_backup.busy")
+            _busy_fresh = False
+            try:
+                if os.path.isfile(_bp) and (_now - os.path.getmtime(_bp) < 120):
+                    _busy_fresh = True
+            except Exception:
+                pass
+            if _busy_fresh:
+                return False, ""
+            try:
+                with open(_bp, "w", encoding="utf-8") as _bf:
+                    _bf.write(str(_now))
+            except Exception:
+                pass
+            return True, ""
+        finally:
+            try:
+                _fl.release()
+            except Exception:
+                pass
+    except Exception:
+        return True, ""
+
+
+def _wait_backup_slot(timeout=90):
+    """等待跨进程在途备份完成，返回复用路径或 ''。永不抛错。"""
+    try:
+        _deadline = time.time() + timeout
+        while time.time() < _deadline:
+            time.sleep(0.5)
+            try:
+                _s, _p = _read_backup_sidecar()
+                if _s > 0 and _p:
+                    return _p
+                if BACKUP_DIR:
+                    _bp = os.path.join(BACKUP_DIR, ".xb_backup.busy")
+                    if not (os.path.isfile(_bp) and (time.time() - os.path.getmtime(_bp) < 120)):
+                        return ""
+            except Exception:
+                return ""
+    except Exception:
+        pass
+    return ""
+
+
+class _BackupFileLock:
+    """跨进程备份互斥（with 语法）。拿不到锁返回 False，调用方走等待复用；永不抛错。"""
+
+    def __init__(self):
+        self._fh = None
+        self._locked = False
+        self._is_windows = (os.name == "nt")
+
+    def acquire(self, timeout=90):
+        try:
+            if not BACKUP_DIR:
+                return True
+            try:
+                os.makedirs(BACKUP_DIR, exist_ok=True)
+            except Exception:
+                pass
+            _lp = os.path.join(BACKUP_DIR, ".xb_backup.lock")
+            self._fh = open(_lp, "a+b")
+            if self._is_windows:
+                import msvcrt
+                _deadline = time.time() + timeout
+                while True:
+                    try:
+                        msvcrt.locking(self._fh.fileno(), msvcrt.LK_NBLCK, 1)
+                        self._locked = True
+                        return True
+                    except Exception:
+                        if time.time() >= _deadline:
+                            return False
+                        time.sleep(0.5)
+            else:
+                import fcntl
+                _deadline = time.time() + timeout
+                while True:
+                    try:
+                        fcntl.flock(self._fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                        self._locked = True
+                        return True
+                    except Exception:
+                        if time.time() >= _deadline:
+                            return False
+                        time.sleep(0.5)
+        except Exception:
+            return True if self._fh is None else False
+        return False
+
+    def release(self):
+        try:
+            if self._fh is not None and self._locked:
+                if self._is_windows:
+                    try:
+                        import msvcrt
+                        self._fh.seek(0)
+                        msvcrt.locking(self._fh.fileno(), msvcrt.LK_UNLCK, 1)
+                    except Exception:
+                        pass
+                else:
+                    try:
+                        import fcntl
+                        fcntl.flock(self._fh.fileno(), fcntl.LOCK_UN)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        try:
+            if self._fh is not None:
+                self._fh.close()
+        except Exception:
+            pass
+        self._fh = None
+        self._locked = False
+
+    def __enter__(self):
+        self.acquire()
+        return self
+
+    def __exit__(self, *a):
+        self.release()
+        return False
+
 
 def backup_user_data(force=False, auto_upload=True):
     global _last_backup, BACKUP_INTERVAL, _LAST_BACKUP_CHECK, _LAST_BACKUP_PATH, _LAST_BACKUP_TIME, _BACKUP_IN_PROGRESS
@@ -1217,6 +1411,15 @@ def backup_user_data(force=False, auto_upload=True):
     # 5秒全局防抖保护：无论是否 force，若 5 秒内刚生成过完好备份，直接复用，杜绝重复创建双份备份
     if (now - _LAST_BACKUP_TIME < 5) and _LAST_BACKUP_PATH and os.path.isfile(_LAST_BACKUP_PATH):
         return _LAST_BACKUP_PATH
+    # 跨进程/重载去重：sidecar 在 30 秒窗口内有完好备份直接复用
+    try:
+        _sts, _sp = _read_backup_sidecar()
+        if _sts > 0 and (now - _sts < _BACKUP_FILE_WINDOW):
+            _LAST_BACKUP_TIME = max(_LAST_BACKUP_TIME, _sts)
+            _LAST_BACKUP_PATH = _sp
+            return _sp
+    except Exception:
+        pass
     # 串行化等待：若已有备份正在生成中，等待其完成并复用产物（最多等90秒）
     _wait_dst = None
     with _BACKUP_GEN_LOCK:
@@ -1288,6 +1491,21 @@ def backup_user_data(force=False, auto_upload=True):
                         return None
             except Exception:
                 pass
+    # 跨进程预约：他进程在途则等待复用，否则由本调用生成
+    try:
+        _mine, _reuse = _reserve_backup_slot()
+        if not _mine:
+            if _reuse and os.path.isfile(_reuse):
+                _LAST_BACKUP_TIME = time.time()
+                _LAST_BACKUP_PATH = _reuse
+                return _reuse
+            _wp = _wait_backup_slot(timeout=90)
+            if _wp and os.path.isfile(_wp):
+                _LAST_BACKUP_TIME = time.time()
+                _LAST_BACKUP_PATH = _wp
+                return _wp
+    except Exception:
+        pass
     try:
         # 冷备前落盘配置，确保备份出来的 db 自包含 100% 配置与用户数据
         try:
@@ -1336,6 +1554,15 @@ def backup_user_data(force=False, auto_upload=True):
             _LAST_BACKUP_PATH = dst
         with _BACKUP_GEN_LOCK:
             _BACKUP_IN_PROGRESS = None
+        # 跨进程可见：写 sidecar + 清 busy（重载/他进程 30 秒内直接复用）
+        try:
+            _write_backup_sidecar(now, dst)
+        except Exception:
+            pass
+        try:
+            _clear_backup_busy()
+        except Exception:
+            pass
         try:
             recall_set("last_backup_ts", str(int(now)))
         except Exception:
@@ -1363,6 +1590,10 @@ def backup_user_data(force=False, auto_upload=True):
         try:
             with _BACKUP_GEN_LOCK:
                 _BACKUP_IN_PROGRESS = None
+        except Exception:
+            pass
+        try:
+            _clear_backup_busy()
         except Exception:
             pass
         return None

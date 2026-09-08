@@ -723,7 +723,7 @@ const TAB_LOADERS = {
   config: async () => { return loadConfig(); },
   rank: async () => { const t = (document.getElementById("rankType") || {}).value || "money"; return loadRank(t); },
   cmds: async () => { return loadCommands(); },
-  spirits: async () => { return loadSpirits(); },
+  spirits: async () => { try { await loadShops(); } catch(e){} return loadSpirits(); },
   shops: async () => { return loadShops(); },
   backups: async () => {
     if (typeof loadBackupCfg === "function") try { await loadBackupCfg(); } catch (e) {}
@@ -1544,7 +1544,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.7.7"
+        version: res.version || "0.7.8"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -2027,6 +2027,7 @@ let SPIRIT = null;          // {spirits, maps, shop}
 let SPIRIT_CUR = "地图";    // 仅 "地图" | "商城"
 let SPIRIT_DIRTY = false;
 let SPIRIT_OPEN = {};       // mapName -> bool(展开详情)
+let SPIRIT_CUSTOM = { maps: true, spirits: true, shop: true };  // false=展示内置默认未自定义
 
 const SPIRIT_FIELDS = [
   ["type", "属性"], ["hp", "生命"], ["atk", "攻击"], ["def", "防御"],
@@ -2039,13 +2040,23 @@ async function loadSpirits() {
   try {
     const res = await getBridge().apiGet("spirits");
     SPIRIT = res || {};
-    // 编辑区只展示用户真实配置（_raw），空=未自定义，运行时自动用内置
+    // 编辑区：有自定义用自定义；无则预填内置为起点并标记未自定义（保存后即转自定义）
     try {
-      if (res && res._raw) {
-        SPIRIT.maps = res._raw.maps || {};
-        SPIRIT.spirits = res._raw.spirits || {};
-        SPIRIT.shop = res._raw.shop || {};
-      }
+      const _raw = (res && res._raw) || {};
+      const _bi = (res && res._builtin) || {};
+      SPIRIT_CUSTOM = { maps: true, spirits: true, shop: true };
+      ["maps", "spirits", "shop"].forEach((k) => {
+        const _r = (_raw && _raw[k]) || {};
+        if (_r && Object.keys(_r).length) { SPIRIT[k] = _r; SPIRIT_CUSTOM[k] = true; }
+        else if (_raw && (k in _raw)) { SPIRIT[k] = {}; SPIRIT_CUSTOM[k] = true; }
+        else {
+          const _b = (_bi && _bi[k]) || {};
+          if (_b && Object.keys(_b).length) {
+            SPIRIT[k] = JSON.parse(JSON.stringify(_b));
+            SPIRIT_CUSTOM[k] = false;
+          } else { SPIRIT[k] = {}; SPIRIT_CUSTOM[k] = true; }
+        }
+      });
     } catch (e) {}
     SPIRIT_DIRTY = false;
     SPIRIT_OPEN = {};
@@ -2117,8 +2128,7 @@ function renderMaps(q) {
   if (!body) return;
   const maps = SPIRIT.maps || {};
   const spirits = SPIRIT.spirits || {};
-  const mapNames = Object.keys(maps).filter((k) => {
-    if (!q) return true;
+  const mapNames = Object.keys(maps).filter((k) => {    if (!q) return true;
     if (k.toLowerCase().includes(q)) return true;
     return (maps[k].drops || []).some((s) => String(s).toLowerCase().includes(q));
   });
@@ -2126,8 +2136,7 @@ function renderMaps(q) {
     if (q) {
       body.innerHTML = `<div class="hint">无匹配地图</div>`;
       return;
-    }
-    const _bc = _spiritBuiltinCount("maps");
+    }    const _bc = _spiritBuiltinCount("maps");
     body.innerHTML = `<div class="hint">当前无自定义地图，运行中使用内置 ${_bc} 张地图`
       + (_bc ? ` <button class="ghost sm" id="btnSpiritUseBuiltinMaps">载入内置为起点</button>` : ``) + `</div>`
       + `<button id="mapAddItem" class="ghost" style="margin-top:10px">＋ 添加地图</button>`;
@@ -2149,7 +2158,9 @@ function renderMaps(q) {
     });
     return;
   }
-  body.innerHTML = mapNames.map((mname) => {
+  const _unCustomBanner = (!q && !SPIRIT_DIRTY && (!SPIRIT_CUSTOM.maps || !SPIRIT_CUSTOM.spirits))
+    ? `<div class="hint" style="margin-bottom:8px">当前为内置默认（未自定义），可直接改，保存后即转为你的自定义版本</div>` : "";
+  body.innerHTML = _unCustomBanner + mapNames.map((mname) => {
     const d = maps[mname] || {};
     const drops = (d.drops || []).map(String);
     const open = q ? true : !!SPIRIT_OPEN[mname];
@@ -2240,7 +2251,7 @@ function renderShop(q = "", forceOpen = false) {
   const names = Object.keys(shop).filter((k) => !q || k.toLowerCase().includes(q));
   const curDetails = body.querySelector("details");
   const wasOpen = curDetails ? curDetails.open : forceOpen;
-  let html = `<details class="panel" style="margin:0"${wasOpen ? " open" : ""}><summary style="cursor:pointer;font-weight:600">🎒 精灵道具商城 (spirit_shop) — ${names.length} 件（点击折叠/展开）</summary>`;
+  let html = `<details class="panel" style="margin:0"${wasOpen ? " open" : ""}><summary style="cursor:pointer;font-weight:600">🎒 精灵道具商城 (spirit_shop) — ${names.length} 件（点击折叠/展开）${(!SPIRIT_CUSTOM.shop && !SPIRIT_DIRTY && !q) ? " · <span style='color:var(--muted);font-weight:400'>内置默认·未自定义</span>" : ""}</summary>`;
   html += `<div class="hint" style="margin-top:8px">编辑精灵球、药品等道具价格与效果（保存时将与精灵配置一并持久化）</div>`;
   if (!Object.keys(shop).length && !q) {
     html += `<div class="hint" style="margin:8px 0">当前无自定义道具，运行中使用内置 ${_spiritBuiltinCount("shop")} 件`
@@ -2342,6 +2353,7 @@ async function saveSpirits() {
     const payload = { spirits, maps, shop };
     const r = await getBridge().apiPost("spirits/save", payload);
     SPIRIT_DIRTY = false;
+    SPIRIT_CUSTOM = { maps: true, spirits: true, shop: true };
     msg.textContent = "已保存: " + JSON.stringify(r.keys);
     msg.classList.add("ok");
     toast("精灵图鉴已保存", "ok");
@@ -2587,6 +2599,9 @@ const DEFAULT_RIDE_SHOP = {
 let SHOP_RIDE = {};
 let SHOP_WEAPON = {};
 let SHOP_DIRTY = false;
+let SHOP_RIDE_CUSTOM = true;   // false=当前展示的是内置默认（未自定义），保存后即转为自定义
+let SHOP_WEAPON_CUSTOM = true;
+let GACHA_WEAPONS = { SSR: [], SR: [], R: [] };  // 抽奖武器池（只读，文件名来源）
 // 内置默认（仅用于“恢复默认”按钮与空态提示计数，不掺入编辑区）
 const WEAPON_DEFAULTS = {
   "木剑": { price: 1000 }, "铁剑": { price: 3000 }, "苍雪剑": { price: 8000 },
@@ -2617,7 +2632,7 @@ function renderShopWeaponBox(forceOpen=false){
   const entries=Object.entries(SHOP_WEAPON);
   const curDetails=box.querySelector("details");
   const wasOpen=curDetails?curDetails.open:forceOpen;
-  let html=`<details class="panel" style="margin:0"${wasOpen?" open":""}><summary style="cursor:pointer;font-weight:600">⚔️ 武器商城 (weapon_shop) — ${entries.length} 件（抽奖武器自动同步，可改价）</summary>`;
+  let html=`<details class="panel" style="margin:0"${wasOpen?" open":""}><summary style="cursor:pointer;font-weight:600">⚔️ 武器商城 (weapon_shop) — ${entries.length} 件（抽奖武器自动同步，可改价）${(SHOP_WEAPON_CUSTOM || SHOP_DIRTY) ? "" : " · <span style='color:var(--muted);font-weight:400'>内置默认·未自定义</span>"}</summary>`;
   html+=`<div class="hint" style="margin-top:8px">每行一个武器，支持改名、改价、删（价格用于商城购买，抽奖武器自动加入）</div>`;
   if (!entries.length) {
     html += `<div class="hint" style="margin:8px 0">当前为空，运行时武器菜单仅显示抽奖武器池；可添加或恢复默认（${Object.keys(WEAPON_DEFAULTS).length} 件）</div>`;
@@ -2632,7 +2647,21 @@ function renderShopWeaponBox(forceOpen=false){
       `<div style="display:flex;gap:4px;align-items:center">${imgPreview}<button class="s-del" data-weapon-del="${esc(name)}">删除</button></div>`+
       `</div>`;
   });
-  html+=`<div style="margin-top:8px"><button class="ghost sm" id="btnWeaponAdd">＋ 添加武器</button> <button class="ghost sm" id="btnWeaponReset">恢复默认</button></div></details>`;
+  html+=`<div style="margin-top:8px"><button class="ghost sm" id="btnWeaponAdd">＋ 添加武器</button> <button class="ghost sm" id="btnWeaponReset">恢复默认</button> <button class="ghost sm" id="btnWeaponSyncGacha">一键同步抽奖武器进商城</button></div></details>`;
+  // 抽奖武器池对照区（只读：来源为抽奖图片文件，删改去根目录）
+  try {
+    const _pool = [];
+    ["SSR", "SR", "R"].forEach((rar) => {
+      ((GACHA_WEAPONS && GACHA_WEAPONS[rar]) || []).forEach((n) => _pool.push({ rar, n }));
+    });
+    if (_pool.length) {
+      html += `<div class="hint" style="margin-top:10px">🎰 抽奖武器池（${_pool.length} 件，来源：抽奖图片文件；已在商城的显示 ✅，缺失的可一键同步）</div>`;
+      html += `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px">` + _pool.map(({ rar, n }) => {
+        const _in = SHOP_WEAPON[n] !== undefined;
+        return `<span class="badge" style="font-size:11.5px" title="${esc(rar)}">${esc(rar)}·${esc(n)}${_in ? " ✅" : ""}</span>`;
+      }).join("") + `</div>`;
+    }
+  } catch (e) {}
   box.innerHTML=html;
   box.querySelectorAll("[data-weapon-name]").forEach(inp=>inp.addEventListener("change",(e)=>{
     const old=e.target.closest("[data-weapon-item]").dataset.weaponItem;
@@ -2663,6 +2692,17 @@ function renderShopWeaponBox(forceOpen=false){
   const resetBtn=document.getElementById("btnWeaponReset");
   if(resetBtn) resetBtn.addEventListener("click", async()=>{
     SHOP_WEAPON=JSON.parse(JSON.stringify(WEAPON_DEFAULTS)); SHOP_DIRTY=true; syncShopWeaponRaw(); renderShopWeaponBox(true); toast("已恢复默认，需保存","ok");
+  });
+  const syncBtn=document.getElementById("btnWeaponSyncGacha");
+  if(syncBtn) syncBtn.addEventListener("click", async()=>{
+    let added = 0;
+    ["SSR", "SR", "R"].forEach((rar) => {
+      ((GACHA_WEAPONS && GACHA_WEAPONS[rar]) || []).forEach((n) => {
+        if (SHOP_WEAPON[n] === undefined) { SHOP_WEAPON[n] = { price: 50000, atk: 0, desc: "抽奖同步" }; added++; }
+      });
+    });
+    if (!added) { toast("抽奖武器已全部在商城中", "ok"); return; }
+    SHOP_DIRTY=true; syncShopWeaponRaw(); renderShopWeaponBox(true); toast(`已同步 ${added} 件抽奖武器，需保存`, "ok");
   });
 }
 
@@ -2698,7 +2738,7 @@ function renderShopRideBox(forceOpen = false) {
   // 默认收起；若用户已手动展开或发生增删改，则保持展开
   const curDetails = box.querySelector("details");
   const wasOpen = curDetails ? curDetails.open : forceOpen;
-  let html = `<details class="panel" style="margin:0"${wasOpen ? " open" : ""}><summary style="cursor:pointer;font-weight:600">🐴 坐骑商城 (ride_shop) — ${entries.length} 件（点击折叠/展开）</summary>`;
+  let html = `<details class="panel" style="margin:0"${wasOpen ? " open" : ""}><summary style="cursor:pointer;font-weight:600">🐴 坐骑商城 (ride_shop) — ${entries.length} 件（点击折叠/展开）${(SHOP_RIDE_CUSTOM || SHOP_DIRTY) ? "" : " · <span style='color:var(--muted);font-weight:400'>内置默认·未自定义</span>"}</summary>`;
   html += `<div class="hint" style="margin-top:8px">每行一个坐骑，支持改名、改价、删、绑图（图片路径如 data/img/坐骑图标/企鹅.jpg，留空用默认图）</div>`;
   if (!entries.length) {
     html += `<div class="hint" style="margin:8px 0">当前为空，运行时使用内置坐骑（${Object.keys(DEFAULT_RIDE_SHOP).length} 种）；可添加或恢复默认</div>`;
@@ -2877,16 +2917,26 @@ async function renderAtlas(curCfg){
 async function loadShops() {
   const msg = document.getElementById("shopMsg");
   try {
-    const [cur, spiritData] = await Promise.all([
+    const [cur, spiritData, gachaData] = await Promise.all([
       getBridge().apiGet("config/get"),
-      SPIRIT ? Promise.resolve(SPIRIT) : getBridge().apiGet("spirits").catch(() => null)
+      SPIRIT ? Promise.resolve(SPIRIT) : getBridge().apiGet("spirits").catch(() => null),
+      getBridge().apiGet("gacha/weapons").catch(() => null)
     ]);
     if (spiritData) SPIRIT = spiritData;
+    try {
+      if (gachaData && (gachaData.ok || gachaData.pool)) GACHA_WEAPONS = gachaData.pool || gachaData;
+    } catch (e) {}
     const sec = (cur || {})["商城图鉴"] || {};
     const rideRaw = (sec["ride_shop"] || "").toString();
-    SHOP_RIDE = parseShopRide(rideRaw);
+    const _pr = parseShopRide(rideRaw);
+    if (Object.keys(_pr).length) { SHOP_RIDE = _pr; SHOP_RIDE_CUSTOM = true; }
+    else if (rideRaw.trim()) { SHOP_RIDE = {}; SHOP_RIDE_CUSTOM = true; }
+    else { SHOP_RIDE = JSON.parse(JSON.stringify(DEFAULT_RIDE_SHOP)); SHOP_RIDE_CUSTOM = false; }
     const weaponRaw = (sec["weapon_shop"] || "").toString();
-    SHOP_WEAPON = parseShopWeapon(weaponRaw);
+    const _pw = parseShopWeapon(weaponRaw);
+    if (Object.keys(_pw).length) { SHOP_WEAPON = _pw; SHOP_WEAPON_CUSTOM = true; }
+    else if (weaponRaw.trim()) { SHOP_WEAPON = {}; SHOP_WEAPON_CUSTOM = true; }
+    else { SHOP_WEAPON = JSON.parse(JSON.stringify(WEAPON_DEFAULTS)); SHOP_WEAPON_CUSTOM = false; }
     SHOP_DIRTY = false;
     syncShopRaw();
     syncShopWeaponRaw();
@@ -2919,6 +2969,8 @@ async function saveShops() {
     const payload = { "商城图鉴": { "ride_shop": JSON.stringify(cleanRide), "weapon_shop": JSON.stringify(cleanWeapon) } };
     const r = await getBridge().apiPost("config/save", payload);
     SHOP_DIRTY = false;
+    SHOP_RIDE_CUSTOM = true;
+    SHOP_WEAPON_CUSTOM = true;
     if (SPIRIT && SPIRIT.shop) {
       try {
         await getBridge().apiPost("spirits/save", { shop: SPIRIT.shop });
@@ -3889,110 +3941,6 @@ async function openAirdropModal() {
   modal.className = "show";
 }
 
-// ==================== 4. 图鉴可视化工坊 ====================
-function openVisualItemBuilder() {
-  const modal = document.getElementById("appModal");
-  if (!modal) return;
-  const icon = document.getElementById("appModalIcon");
-  const title = document.getElementById("appModalTitle");
-  const content = document.getElementById("appModalContent");
-  const inputWrap = document.getElementById("appModalInputWrap");
-  const cancelBtn = document.getElementById("appModalCancel");
-  const okBtn = document.getElementById("appModalOk");
-
-  if (icon) icon.textContent = "🎨";
-  if (title) title.textContent = "图鉴与武器装备 · 可视化工坊";
-  if (inputWrap) inputWrap.style.display = "none";
-
-  content.innerHTML = `
-    <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:14px">
-      <div style="display:flex;flex-direction:column;gap:8px">
-        <div>
-          <label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">装备 / 精灵名称：</label>
-          <input id="builderName" value="弑神赤霄剑" style="width:100%;padding:6px 10px;border-radius:8px">
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <div>
-            <label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">稀有度评级：</label>
-            <select id="builderRarity" style="width:100%;padding:6px;border-radius:8px;background:var(--panel2);color:var(--text);border:1px solid var(--line)">
-              <option value="UR" selected>🔥 UR 极罕神品</option>
-              <option value="SSR">✨ SSR 传奇传说</option>
-              <option value="SR">💎 SR 稀有史诗</option>
-              <option value="R">🌟 R 优秀精良</option>
-              <option value="N">⚪ N 普通平民</option>
-            </select>
-          </div>
-          <div>
-            <label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">商城货币售价：</label>
-            <input type="number" id="builderPrice" value="8888" style="width:100%;padding:6px 10px;border-radius:8px">
-          </div>
-        </div>
-        <div>
-          <div style="display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted);margin-bottom:2px">
-            <span>攻击战力加成:</span><strong id="valAtk" style="color:var(--text)">580</strong>
-          </div>
-          <input type="range" id="sliderAtk" min="10" max="1000" value="580" style="width:100%">
-        </div>
-        <div>
-          <div style="display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted);margin-bottom:2px">
-            <span>防御减伤加成:</span><strong id="valDef" style="color:var(--text)">320</strong>
-          </div>
-          <input type="range" id="sliderDef" min="10" max="1000" value="320" style="width:100%">
-        </div>
-      </div>
-      <!-- 右侧实时卡片预览 -->
-      <div style="background:linear-gradient(145deg, #1E1B4B, #0F172A);border-radius:14px;padding:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;border:2px solid #8B5CF6;box-shadow:0 8px 24px rgba(139,92,246,0.25)">
-        <div id="cardRarityBadge" style="background:#8B5CF6;color:#fff;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:1px;margin-bottom:8px">UR 极罕神品</div>
-        <div id="cardItemIcon" style="font-size:42px;margin:4px 0">⚔️</div>
-        <div id="cardItemName" style="color:#fff;font-weight:700;font-size:14px;margin-bottom:4px">弑神赤霄剑</div>
-        <div id="cardCombatScore" style="color:#F59E0B;font-weight:800;font-size:18px;margin-bottom:8px">战力 900</div>
-        <div id="cardItemDesc" style="font-size:10.5px;color:#94A3B8;text-align:center;line-height:1.4">赤霄出鞘，诸神退散。大幅增强佩戴者群聊斗法胜率。</div>
-      </div>
-    </div>
-  `;
-
-  // 动态滑块联动
-  const updateCard = () => {
-    const nm = document.getElementById("builderName")?.value || "神秘法宝";
-    const rar = document.getElementById("builderRarity")?.value || "UR";
-    const atk = parseInt(document.getElementById("sliderAtk")?.value || 0, 10);
-    const def = parseInt(document.getElementById("sliderDef")?.value || 0, 10);
-
-    const el = (id) => document.getElementById(id);
-    if (el("valAtk")) el("valAtk").textContent = atk;
-    if (el("valDef")) el("valDef").textContent = def;
-    if (el("cardItemName")) el("cardItemName").textContent = nm;
-    if (el("cardCombatScore")) el("cardCombatScore").textContent = `战力 ${atk + def}`;
-    if (el("cardRarityBadge")) el("cardRarityBadge").textContent = `${rar} 极品装备`;
-  };
-
-  ["builderName", "builderRarity", "sliderAtk", "sliderDef"].forEach(id => {
-    const elem = document.getElementById(id);
-    if (elem) elem.oninput = updateCard;
-  });
-
-  if (cancelBtn) {
-    cancelBtn.style.display = "";
-    cancelBtn.textContent = "关闭";
-    cancelBtn.onclick = () => { modal.className = ""; };
-  }
-  if (okBtn) {
-    okBtn.textContent = "💾 保存至商城图鉴";
-    okBtn.onclick = async () => {
-      const nm = document.getElementById("builderName")?.value || "定制装备";
-      const pr = document.getElementById("builderPrice")?.value || "1000";
-      const atk = document.getElementById("sliderAtk")?.value || "100";
-      CFG["商城图鉴"] = CFG["商城图鉴"] || {};
-      CFG["商城图鉴"][nm] = `${pr}|${atk}`;
-      toast(`已成功将【${nm}】保存至商城图鉴！`, "ok");
-      modal.className = "";
-      await saveConfig();
-    };
-  }
-  modal.className = "show";
-}
-
-
 // 绑定新模块事件监听
 document.getElementById("btnSimSend")?.addEventListener("click", () => sendSimulatorCommand());
 document.getElementById("simInput")?.addEventListener("keydown", (e) => { if (e.key === "Enter") sendSimulatorCommand(); });
@@ -4005,7 +3953,6 @@ document.querySelectorAll("[data-sim-cmd]").forEach(btn => {
 });
 document.getElementById("btnRefreshAnalytics")?.addEventListener("click", loadAnalytics);
 document.getElementById("btnUsersAirdrop")?.addEventListener("click", openAirdropModal);
-document.getElementById("btnVisualItemBuilder")?.addEventListener("click", openVisualItemBuilder);
 
 // Tab 切换时自动加载大屏数据
 const origInitNav = typeof initNav === "function" ? initNav : null;
@@ -4051,8 +3998,6 @@ function initNewModules() {
   });
   document.getElementById("btnDbDoctorOv")?.addEventListener("click", runDbDoctor);
   document.getElementById("btnUsersAirdrop")?.addEventListener("click", openAirdropModal);
-  document.getElementById("btnVisualItemBuilder")?.addEventListener("click", openVisualItemBuilder);
-  document.getElementById("btnVisualItemBuilder2")?.addEventListener("click", openVisualItemBuilder);
 }
 
 if (document.readyState === "loading") {

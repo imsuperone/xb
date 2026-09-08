@@ -5,23 +5,25 @@
 | 项目属性 | 当前值 |
 | :--- | :--- |
 | **插件名称** | `astrbot_plugin_xbbot` (小白统一模块) |
-| **当前版本** | `v0.7.7` (已发布并在 GitHub 与本地保持对齐) |
+| **当前版本** | `v0.7.8` (已发布并在 GitHub 与本地保持对齐) |
 | **项目作者** | Light (`faxlight@faxt.top`) |
 | **开源仓库** | `https://github.com/imsuperone/xb` |
 | **经济基线 (v0.68.28)** | 接龙 20金币+0魅力全局锁定；WebDAV 持久兜底防丢 |
 | **主代码目录** | `c:\Users\Light\Desktop\DRxb\astrbot_plugins\astrbot_plugin_xbbot` |
-| **离线发行包** | `C:\Users\Light\Desktop\DRxb\astrbot_plugin_xbbot_v0.7.7.zip` |
+| **离线发行包** | `C:\Users\Light\Desktop\DRxb\astrbot_plugin_xbbot_v0.7.8.zip` |
 | **平台依赖** | AstrBot >= 3.4.0, Python >= 3.10 (支持 3.14t/自由线程) |
 | **底层协议端** | OneBot v11 (aiocqhttp), NapCat, Lagrange 原生图文 |
 
 ---
 
-## 🚦 系统运行状态与核心机制指标 (至 v0.7.7)
+## 🚦 系统运行状态与核心机制指标 (至 v0.7.8)
 
 - **Python 模块语法解析**：41/41 语法解析通过 (100%)。
-- **版本号命名与迭代规范 (0.7.xx 规范)**：当前基准版本 `0.7.7`，严格遵循 `0.7.xx`（`0.7.0`~`0.7.99`）后置补丁递增规则；仅在补丁位满 99 或用户明确要求时才更迭前段大版本（`0.8.xx`/`1.0.xx`）。
+- **版本号命名与迭代规范 (0.7.xx 规范)**：当前基准版本 `0.7.8`，严格遵循 `0.7.xx`（`0.7.0`~`0.7.99`）后置补丁递增规则；仅在补丁位满 99 或用户明确要求时才更迭前段大版本（`0.8.xx`/`1.0.xx`）。
 - **9 处版本强一致校验**：每次发版必须同步以下 9 处：
   `metadata.yaml`, `main.py`, `core/api/updater.py`, `core/api/users.py`, `engines/superadmin.py`, `pages/admin/index.html`, `pages/admin/app.js`, `CHANGELOG.md`, `README.md`。
+- **备份跨进程去重与商城类目 (v0.7.8)**：
+  - 文件锁 + busy 预约 + sidecar 30 秒窗口，多进程/重载只出一份；商城预填内置为起点；武器商城接入抽奖池；`商城/图鉴` 分家，可视化工坊删除。
 - **图鉴自助与空回退 (v0.7.7)**：
   - `cfg()` dict 走 JSON 序列化，自定义商城生产链路生效；空图鉴自动回退内置；编辑器如实展示 + 删光提示。
 - **三件套彻底删除 (v0.7.6)**：
@@ -60,7 +62,7 @@
   - 4800 ops 群聊风暴 p50 9.38ms，DB 零泄漏零逃逸异常；WebAPI 80/80；接龙 30s 自愈与资金守恒断言 100% 通过。
 - **主事件循环延迟 (Lag)**：0ms 纯内存极速分发（已根除旧版 56s 阻塞）。
 - **配置项定义模式**：28 个系统，298 个配置项解析通过 (100%)。
-- **WebUI 前端元素检查**：181 个 DOM ID 无重复；57 个 API 端点（52 逻辑 + 5 别名兼容）100% 对齐后置路由。
+- **WebUI 前端元素检查**：179 个 DOM ID 无重复；58 个 API 端点（53 逻辑 + 5 别名兼容）100% 对齐后置路由。
 
 ---
 
@@ -96,6 +98,7 @@
 - **POST `/astrbot_plugin_xbbot/backup/webdav/delete`**：物理删除 WebDAV 远端备份文件（RFC 4918 DELETE）
 - **POST `/astrbot_plugin_xbbot/backups/doctor`**：SQLite 碎片整理 (VACUUM) 与健康体检
 - **POST `/astrbot_plugin_xbbot/backups/prune`**：按保留数量一键修剪本地 + 云端旧备份
+- **GET `/astrbot_plugin_xbbot/gacha/weapons`**：抽奖武器池（SSR/SR/R 文件名，供武器商城对照同步）
 - **GET `/astrbot_plugin_xbbot/version/check`**：云端 Release 与 main 分支更新探测（防缓存双通道）
 
 ---

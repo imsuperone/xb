@@ -1570,7 +1570,7 @@
   <div class="wrap">
     <header>
       <div class="brand">
-        <h1>管理控制台 <span class="ver">v0.7.7</span> <span id="verBadge" style="display:none;font-size:11px;padding:3px 8px;border-radius:12px;background:linear-gradient(135deg, #10B981, #059669);color:#fff;font-weight:600;cursor:pointer;margin-left:4px;box-shadow:0 2px 6px rgba(16,185,129,0.3)" title="点击查看更新并一键升级">🚀 发现新版本</span></h1>
+        <h1>管理控制台 <span class="ver">v0.7.8</span> <span id="verBadge" style="display:none;font-size:11px;padding:3px 8px;border-radius:12px;background:linear-gradient(135deg, #10B981, #059669);color:#fff;font-weight:600;cursor:pointer;margin-left:4px;box-shadow:0 2px 6px rgba(16,185,129,0.3)" title="点击查看更新并一键升级">🚀 发现新版本</span></h1>
         <div class="sub">
           <span class="status-badge"><span class="status-dot"></span> 运行正常</span>
         </div>
@@ -1591,8 +1591,8 @@
         <button data-tab="groups">👥 群聊开关</button>
         <button data-tab="config">⚙️ 必要配置</button>
         <button data-tab="cmds">🎮 指令与玩法</button>
-        <button data-tab="shops">🎨 图鉴工坊</button>
-        <button data-tab="spirits">📖 精灵图鉴</button>
+        <button data-tab="shops">🛒 商城</button>
+        <button data-tab="spirits">📖 图鉴</button>
         <button data-tab="backups">💾 备份管理</button>
         <button data-tab="imgs">📁 根目录浏览</button>
         <button data-tab="logs">📜 运行日志</button>
@@ -1870,13 +1870,12 @@
       </div>
     </div>
 
-    <!-- 图鉴 -->
+    <!-- 商城：坐骑 / 武器 / 精灵道具 -->
     <div class="tab" id="tab-shops">
       <div class="panel">
         <div class="toolbar">
-          <h2>📚 图鉴</h2>
+          <h2>🛒 商城</h2>
           <div style="display:flex;gap:5px;margin-left:auto;flex-wrap:wrap">
-            <button id="btnVisualItemBuilder" class="sm" style="background:linear-gradient(135deg, #6366F1, #8B5CF6);color:#fff;font-weight:600;border:none;box-shadow:0 2px 8px rgba(99,102,241,0.3);cursor:pointer">🎨 图鉴可视化工坊</button>
             <button id="btnShopLoad" class="ghost">🔄 加载</button>
             <button id="btnShopExport" class="ghost">📥 导出</button>
             <button id="btnShopImport" class="ghost">📤 导入</button>
@@ -1884,7 +1883,7 @@
           </div>
           <span class="msg" id="shopMsg"></span>
         </div>
-        <div class="hint">左栏为商城（可改价/增删），右栏为图鉴（所有道具按系统归类，如 奴隶系统-武器）。持久化至 商城图鉴/精灵图鉴 配置。</div>
+        <div class="hint">坐骑 / 武器 / 精灵道具三类商城（可改价/增删/绑图）。武器商城已接入抽奖武器池；图鉴总览在「📖 图鉴」页。持久化至 商城图鉴/精灵图鉴 配置。</div>
         <div class="responsive-shop-grid">
           <div>
             <h3 style="margin:0 0 8px;font-size:13px">🛒 商城</h3>
@@ -1892,21 +1891,16 @@
             <div id="shopWeaponBox" style="margin-top:10px"></div>
             <div id="shopSpiritBox" style="margin-top:10px"></div>
           </div>
-          <div>
-            <h3 style="margin:0 0 8px;font-size:13px">📖 图鉴</h3>
-            <div id="atlasBox" style="max-height:600px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px"></div>
-          </div>
         </div>
       </div>
     </div>
 
-    <!-- 精灵图鉴 -->
+    <!-- 图鉴：精灵图鉴 + 全类目总览 -->
     <div class="tab" id="tab-spirits">
       <div class="panel">
         <div class="toolbar">
-          <h2>📖 精灵图鉴编辑</h2>
+          <h2>📖 图鉴</h2>
           <div style="display:flex;gap:5px;margin-left:auto;flex-wrap:wrap">
-            <button id="btnVisualItemBuilder2" class="sm" style="background:linear-gradient(135deg, #6366F1, #8B5CF6);color:#fff;font-weight:600;border:none;box-shadow:0 2px 8px rgba(99,102,241,0.3);cursor:pointer">🎨 图鉴可视化工坊</button>
             <button id="btnSpiritLoad" class="ghost">🔄 加载</button>
             <button id="btnSpiritExport" class="ghost">📥 导出</button>
             <button id="btnSpiritImport" class="ghost">📤 导入</button>
@@ -1917,6 +1911,8 @@
         <div class="hint">快捷编辑「精灵地图(出没精灵/推荐等级)」与「精灵属性/进化路线」。展开地图卡片可浏览对应精灵，点击「保存图鉴」持久化。</div>
         <div class="search"><span>🔍</span><input id="spiritSearch" placeholder="搜索 地图名 / 精灵名称…" /></div>
         <div id="spiritBody"></div>
+        <h3 style="margin:14px 0 8px;font-size:13px">📖 全类目总览（奴隶武器/宝物/坐骑）</h3>
+        <div id="atlasBox" style="max-height:600px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px"></div>
       </div>
     </div>
 

@@ -108,7 +108,7 @@ def _raw_file_response(data_bytes, filename):
 PLUGIN_ID = "astrbot_plugin_xbbot"
 PLUGIN_DESC = "小白(奴/签/银/娱/私/灵/骑/超管/帮派/冒险+主菜单+WebUI), 现代SQLite存储"
 PLUGIN_AUTHOR = "Light"
-PLUGIN_VERSION = "0.7.7"
+PLUGIN_VERSION = "0.7.8"
 PLUGIN_REPO = "https://github.com/imsuperone/xb"
 
 # 复用 router 的主菜单，保持单源
@@ -127,7 +127,7 @@ except Exception:
         "| ⚔️ 帮派系统 | 🗺️ 冒险系统 |\r\n"
         "----------------\r\n"
         "发送系统关键词打开菜单，如【签到系统】【精灵系统】\r\n"
-        "当前版本：v0.7.7"
+        "当前版本：v0.7.8"
     )
 
 
@@ -276,6 +276,7 @@ class XbBot(Star):
         context.register_web_api(f"/{PLUGIN_ID}/images/export", self.page_images_export, ["GET", "POST"], "导出文件")
         context.register_web_api(f"/{PLUGIN_ID}/spirits", self.page_spirits_get, ["GET"], "精灵图鉴读取")
         context.register_web_api(f"/{PLUGIN_ID}/spirits/save", self.page_spirits_save, ["POST"], "精灵图鉴保存")
+        context.register_web_api(f"/{PLUGIN_ID}/gacha/weapons", self.page_gacha_weapons, ["GET"], "抽奖武器池")
         context.register_web_api(f"/{PLUGIN_ID}/backups/list", self.page_backups_list, ["GET"], "备份列表")
         context.register_web_api(f"/{PLUGIN_ID}/backups/restore", self.page_backups_restore, ["POST"], "恢复备份")
         context.register_web_api(f"/{PLUGIN_ID}/backups/delete", self.page_backups_delete, ["POST"], "删除备份")
@@ -839,6 +840,13 @@ class XbBot(Star):
             return await handle_spirits_save(request)
         except Exception as e:
             return _err(f"spirits save failed: {e}", 500)
+
+    async def page_gacha_weapons(self, request=None, *args, **kwargs):
+        try:
+            from .core.api.game import handle_gacha_weapons
+            return await handle_gacha_weapons(request)
+        except Exception as e:
+            return _err(f"gacha weapons failed: {e}", 500)
 
     async def page_slave_users(self, request=None, *args, **kwargs):
         try:
