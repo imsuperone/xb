@@ -448,10 +448,10 @@ def _version():
                 except Exception:
                     pass
         if not ver:
-            ver = "0.7.8"
+            ver = "0.7.9"
         return f"小白版本：{ver}"
     except Exception:
-        return "小白版本：0.7.8"
+        return "小白版本：0.7.9"
 
 # ---- 统一入口（测试指令仅超管，WebUI可配但不显示于MENU，已删 个人信息） ----
 # 注意：凡 handle() 响应的别名必须同步进本表，否则非超管命中时走静默 None 而非无权限提醒

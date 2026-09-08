@@ -356,6 +356,7 @@ async def handle_spirits_save(request):
                         except Exception:
                             _o[_f] = 0
                     _o["evolve"] = str(_it.get("evolve", "") or "")
+                    _o["img"] = str(_it.get("img", "") or "")
                     _clean[str(_n)] = _o
                 val = _clean
             elif key == "maps":

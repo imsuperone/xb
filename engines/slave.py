@@ -439,6 +439,19 @@ def treasures_of(u):
     return [t for t in uget(u, "treasure").split("|") if t]
 
 
+def _treasure_effect(tname):
+    """宝物效果文案统一口径：酒神/四象走专属，自增宝物走通用收藏（获取/升阶/详情三处共用）"""
+    try:
+        t = str(tname or "")
+        if "酒神" in t:
+            return T.GOURD_EFFECT
+        if "四象" in t or "护符" in t:
+            return T.CHARM_EFFECT
+        return T.TREASURE_EFFECT_GENERIC if hasattr(T, "TREASURE_EFFECT_GENERIC") else ""
+    except Exception:
+        return ""
+
+
 def star_of(u, w):
     try:
         return int(uget(u, w + "升星", "0"))
@@ -1538,7 +1551,7 @@ def cmd_treasure_up(gid, qq, tname, st):
                 + "\r\n升阶失败只扣除材料，宝物不会消失哦~")
     uset(u, tname, str(have - need))
     uset(u, tname + "升阶", str(stage + 1))
-    eff = T.GOURD_EFFECT if "酒神" in tname else T.CHARM_EFFECT
+    eff = _treasure_effect(tname)
     return (f"✨ [{tname}] 升至{stage+1}阶!\r\n{T.T_STAGE.format(n=stage+1)} "
             + eff)
 
@@ -1624,11 +1637,7 @@ def cmd_treasure_menu(gid, qq, st):
     u = U(st, qq)
 
     def eff(t):
-        if "酒神" in t:
-            return T.GOURD_EFFECT
-        if "四象" in t or "护符" in t:
-            return T.CHARM_EFFECT
-        return ""
+        return _treasure_effect(t)
 
     lines = ["🎁 宝物图鉴", "━━━━━━━━━━━━━━"]
     for t in treas:
@@ -1969,7 +1978,7 @@ def _route_locked(gid, qq, raw):
     if q in treas:
         stage = int(uget(U(st, qq), q + "升阶", "0"))
         have = int(uget(U(st, qq), q, "0"))
-        eff = T.GOURD_EFFECT if "酒神" in q else T.CHARM_EFFECT
+        eff = _treasure_effect(q)
         return (T.T_NAME.format(name=q) + "\r\n" + T.T_STAGE.format(n=stage)
                 + "\r\n" + T.T_EFFECT.format(effect=eff)
                 + f"\r\n持有数量: {have}")
