@@ -185,14 +185,14 @@ def _resolve_qq_from_name(name, gid=None):
     name = str(name).strip()
     if not name:
         return None
-    # 优先本群分群昵称
+    # 优先本群分群昵称反向索引（精确 O(1)，模糊限本群）
     if gid:
         try:
             from . import slave as SL0
-            byg = getattr(SL0, "NOTE_NAMES_BY_GROUP", {}) or {}
-            for (_g, _q), _n in byg.items():
-                if str(_g) == str(gid) and str(_n).strip() == name:
-                    return str(_q)
+            if hasattr(SL0, "find_qq_by_name"):
+                _q0 = SL0.find_qq_by_name(gid, name)
+                if _q0:
+                    return str(_q0)
         except Exception:
             pass
     # via ST._AT_NAMES

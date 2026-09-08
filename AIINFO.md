@@ -5,23 +5,25 @@
 | 项目属性 | 当前值 |
 | :--- | :--- |
 | **插件名称** | `astrbot_plugin_xbbot` (小白统一模块) |
-| **当前版本** | `v0.7.3` (已发布并在 GitHub 与本地保持对齐) |
+| **当前版本** | `v0.7.4` (已发布并在 GitHub 与本地保持对齐) |
 | **项目作者** | Light (`faxlight@faxt.top`) |
 | **开源仓库** | `https://github.com/imsuperone/xb` |
 | **经济基线 (v0.68.28)** | 接龙 20金币+0魅力全局锁定；WebDAV 持久兜底防丢 |
 | **主代码目录** | `c:\Users\Light\Desktop\DRxb\astrbot_plugins\astrbot_plugin_xbbot` |
-| **离线发行包** | `C:\Users\Light\Desktop\DRxb\astrbot_plugin_xbbot_v0.7.3.zip` |
+| **离线发行包** | `C:\Users\Light\Desktop\DRxb\astrbot_plugin_xbbot_v0.7.4.zip` |
 | **平台依赖** | AstrBot >= 3.4.0, Python >= 3.10 (支持 3.14t/自由线程) |
 | **底层协议端** | OneBot v11 (aiocqhttp), NapCat, Lagrange 原生图文 |
 
 ---
 
-## 🚦 系统运行状态与核心机制指标 (至 v0.7.3)
+## 🚦 系统运行状态与核心机制指标 (至 v0.7.4)
 
 - **Python 模块语法解析**：41/41 语法解析通过 (100%)。
-- **版本号命名与迭代规范 (0.7.xx 规范)**：当前基准版本 `0.7.3`，严格遵循 `0.7.xx`（`0.7.0`~`0.7.99`）后置补丁递增规则；仅在补丁位满 99 或用户明确要求时才更迭前段大版本（`0.8.xx`/`1.0.xx`）。
+- **版本号命名与迭代规范 (0.7.xx 规范)**：当前基准版本 `0.7.4`，严格遵循 `0.7.xx`（`0.7.0`~`0.7.99`）后置补丁递增规则；仅在补丁位满 99 或用户明确要求时才更迭前段大版本（`0.8.xx`/`1.0.xx`）。
 - **9 处版本强一致校验**：每次发版必须同步以下 9 处：
   `metadata.yaml`, `main.py`, `core/api/updater.py`, `core/api/users.py`, `engines/superadmin.py`, `pages/admin/index.html`, `pages/admin/app.js`, `CHANGELOG.md`, `README.md`。
+- **性能三连击 (v0.7.4)**：
+  - `NOTE_NAMES_REV` 反向索引（@反查精确 O(1)）；大屏统计 SQL 聚合下推；空投批量单事务。
 - **备份串行化与双端修剪 (v0.7.3)**：
   - `_BACKUP_GEN_LOCK` + 在途复用根治并发双份；`xb-auto-backup` 线程名单例防重载累积；`backups/prune` 按保留数修剪本地 + 云端（仅 `xbbot_*.db`）；云端列表 10 份/页。
 - **分群昵称隔离与删除用户修复 (v0.7.2)**：

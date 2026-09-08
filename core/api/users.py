@@ -17,7 +17,7 @@ except ImportError:
     except ImportError:
         import slave  # type: ignore
 
-PLUGIN_VERSION = "0.7.3"
+PLUGIN_VERSION = "0.7.4"
 
 
 def _extract_param(request, key, default=""):
@@ -669,20 +669,24 @@ async def handle_users_airdrop(request):
         if not targets:
             return _err("未找到符合发放条件的目标用户", 404)
 
-        success_count = 0
-        for g, q in targets:
-            try:
-                if add_money > 0:
-                    ST.coins_add(g, q, add_money)
-                if add_stamina > 0:
-                    ST.acct_add(g, q, "stamina", add_stamina)
-                if add_tickets > 0:
-                    ST.acct_add(g, q, "lottery_tickets", add_tickets)
-                if add_stamina > 0 or add_tickets > 0:
-                    ST.acct_save(g, q)
-                success_count += 1
-            except Exception:
-                pass
+        try:
+            success_count = _airdrop_batch(targets, add_money, add_stamina, add_tickets)
+        except Exception:
+            # 批量失败降级为逐用户老路径，保证发放不中断
+            success_count = 0
+            for g, q in targets:
+                try:
+                    if add_money > 0:
+                        ST.coins_add(g, q, add_money)
+                    if add_stamina > 0:
+                        ST.acct_add(g, q, "stamina", add_stamina)
+                    if add_tickets > 0:
+                        ST.acct_add(g, q, "lottery_tickets", add_tickets)
+                    if add_stamina > 0 or add_tickets > 0:
+                        ST.acct_save(g, q)
+                    success_count += 1
+                except Exception:
+                    pass
 
         try:
             ST.flush_all()
@@ -702,3 +706,96 @@ async def handle_users_airdrop(request):
         })
     except Exception as e:
         return _err(f"airdrop error: {e}", 500)
+
+
+def _airdrop_batch(targets, add_money, add_stamina, add_tickets):
+    """批量空投：缺失行补齐 + 条件更新 + 单事务一次提交（原 N 用户 × 3 事务）。
+
+    语义与逐用户老路径一致：金币钳位 [0, 1e11]，体力/奖券下限 0；
+    脏缓存用户走老路径保语义，其余批量后清缓存按需重载。返回成功数。
+    """
+    pairs = []
+    for g, q in targets or []:
+        try:
+            pairs.append((int(g), int(q)))
+        except Exception:
+            continue
+    if not pairs:
+        return 0
+    legacy, batched = [], []
+    for gi, qi in pairs:
+        _dirty = False
+        try:
+            for _k in ((str(gi), str(qi)), (gi, qi), (str(gi), qi), (gi, str(qi))):
+                _a = ST._ACC_CACHE.get(_k)
+                if _a is not None and getattr(_a, "dirty", False):
+                    _dirty = True
+                    break
+        except Exception:
+            _dirty = True
+        (legacy if _dirty else batched).append((gi, qi))
+    done = 0
+    for g, q in legacy:
+        try:
+            if add_money > 0:
+                ST.coins_add(g, q, add_money)
+            if add_stamina > 0:
+                ST.acct_add(g, q, "stamina", add_stamina)
+            if add_tickets > 0:
+                ST.acct_add(g, q, "lottery_tickets", add_tickets)
+            if add_stamina > 0 or add_tickets > 0:
+                ST.acct_save(g, q)
+            done += 1
+        except Exception:
+            pass
+    if not batched:
+        return done
+    with ST._LOCK:
+        if ST._DB is None:
+            raise RuntimeError("DB未初始化")
+        try:
+            if add_money > 0:
+                ST._DB.executemany(
+                    "INSERT OR IGNORE INTO wallet(gid, qq, money) VALUES(?, ?, 0)", batched)
+                ST._DB.executemany(
+                    "UPDATE wallet SET money = CASE WHEN money + ? < 0 THEN 0 "
+                    "WHEN money + ? > 100000000000 THEN 100000000000 "
+                    "ELSE money + ? END WHERE gid = ? AND qq = ?",
+                    [(add_money, add_money, add_money, g, q) for g, q in batched])
+            if add_stamina > 0 or add_tickets > 0:
+                ST._DB.executemany(
+                    "INSERT OR IGNORE INTO accounts(gid, qq, data) VALUES(?, ?, '{}')", batched)
+                if add_stamina > 0:
+                    ST._DB.executemany(
+                        "UPDATE accounts SET data = json_set(data, '$.stamina', CAST("
+                        "CASE WHEN CAST(COALESCE(json_extract(data, '$.stamina'), '0') AS INTEGER) + ? < 0 THEN 0 "
+                        "ELSE CAST(COALESCE(json_extract(data, '$.stamina'), '0') AS INTEGER) + ? END "
+                        "AS TEXT)) WHERE gid = ? AND qq = ?",
+                        [(add_stamina, add_stamina, g, q) for g, q in batched])
+                if add_tickets > 0:
+                    ST._DB.executemany(
+                        "UPDATE accounts SET data = json_set(data, '$.lottery_tickets', CAST("
+                        "CASE WHEN CAST(COALESCE(json_extract(data, '$.lottery_tickets'), '0') AS INTEGER) + ? < 0 THEN 0 "
+                        "ELSE CAST(COALESCE(json_extract(data, '$.lottery_tickets'), '0') AS INTEGER) + ? END "
+                        "AS TEXT)) WHERE gid = ? AND qq = ?",
+                        [(add_tickets, add_tickets, g, q) for g, q in batched])
+            ST._DB.commit()
+        except Exception:
+            try:
+                ST._DB.rollback()
+            except Exception:
+                pass
+            raise
+    try:
+        for g, q in batched:
+            for _k in ((str(g), str(q)), (g, q), (str(g), q), (g, str(q))):
+                _a = ST._ACC_CACHE.pop(_k, None)
+                if _a is not None:
+                    try:
+                        _a.dirty = False
+                        _a.kv.clear()
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+    return done + len(batched)

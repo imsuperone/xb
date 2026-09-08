@@ -185,11 +185,21 @@ _CARD_TTL = 300.0
 NOTE_NAMES = {}   # qq -> card/nickname (由适配层注入，跨群最新兜底，仅兼容展示)
 # 分群昵称表：(gid, qq) -> card/nickname，根治多群同人串昵称（A群卡片覆盖B群）
 NOTE_NAMES_BY_GROUP = {}
+# 分群昵称反向索引：(gid, 清洗后昵称) -> qq，@名字反查精确命中 O(1)，写时维护
+NOTE_NAMES_REV = {}
 _KNOWN = {}       # gid -> set(qq) 记录本群出现过的成员(@目标/发送者/已开户), 用于判断"是否存在人"
 
 
+def _clean_nm(s):
+    """昵称归一化（去括号/空白），反查比对统一口径"""
+    try:
+        return _re.sub(r"[\[\]【】\(\)\s]", "", str(s or ""))
+    except Exception:
+        return str(s or "")
+
+
 def set_note_name(gid, qq, name):
-    """写入分群昵称 + 全局最新兜底（写路径唯一入口，O(1)）"""
+    """写入分群昵称 + 反向索引 + 全局最新兜底（写路径唯一入口，O(1)）"""
     try:
         g = str(gid or "").strip()
         q = str(qq or "").strip()
@@ -197,7 +207,15 @@ def set_note_name(gid, qq, name):
         if not q.isdigit() or not n:
             return
         if g:
+            old = NOTE_NAMES_BY_GROUP.get((g, q), "")
+            if old:
+                _oc = _clean_nm(old)
+                if _oc and NOTE_NAMES_REV.get((g, _oc)) == q:
+                    NOTE_NAMES_REV.pop((g, _oc), None)
             NOTE_NAMES_BY_GROUP[(g, q)] = n
+            _nc = _clean_nm(n)
+            if _nc:
+                NOTE_NAMES_REV[(g, _nc)] = q
         # 保留全局最新，供无 gid 的旧展示路径兜底
         NOTE_NAMES[q] = n
     except Exception:
@@ -226,9 +244,38 @@ def clear_note_name(gid, qq):
         g = str(gid or "").strip()
         q = str(qq or "").strip()
         if g and q:
-            NOTE_NAMES_BY_GROUP.pop((g, q), None)
+            old = NOTE_NAMES_BY_GROUP.pop((g, q), None)
+            if old:
+                _oc = _clean_nm(old)
+                if _oc and NOTE_NAMES_REV.get((g, _oc)) == q:
+                    NOTE_NAMES_REV.pop((g, _oc), None)
     except Exception:
         pass
+
+
+def find_qq_by_name(gid, name):
+    """本群昵称反查 qq：精确 O(1)，模糊仅扫本群已清洗键（不清别群，不逐条正则）"""
+    try:
+        g = str(gid or "").strip()
+        c = _clean_nm(name)
+        if not c:
+            return None
+        if g:
+            q = NOTE_NAMES_REV.get((g, c))
+            if q:
+                return str(q)
+            for (g2, cn), q2 in NOTE_NAMES_REV.items():
+                if g2 != g or not cn:
+                    continue
+                if cn == c or c in cn or cn in c:
+                    return str(q2)
+            return None
+        for _q, _n in NOTE_NAMES.items():
+            if _clean_nm(_n) == c:
+                return str(_q)
+    except Exception:
+        pass
+    return None
 
 
 def mark_known(gid, qq):
@@ -1689,15 +1736,14 @@ def _route_locked(gid, qq, raw):
         if m:
             nm = m.group(1).strip()
             clean_nm = _re.sub(r"[\[\]【】\(\)\s]", "", nm)
-            # 1. 查本群分群昵称（优先，防跨群串扰）
-            for (_g, _q), _n in NOTE_NAMES_BY_GROUP.items():
-                if str(_g) != str(gid):
-                    continue
-                clean_n = _re.sub(r"[\[\]【】\(\)\s]", "", str(_n or ""))
-                if clean_n and (clean_n == clean_nm or clean_nm in clean_n or clean_n in clean_nm):
-                    target = str(_q)
-                    text = text.replace(m.group(0), "", 1).strip()
-                    break
+            # 1. 查本群分群昵称反向索引（精确 O(1)，模糊限本群）
+            try:
+                _t = find_qq_by_name(gid, nm)
+            except Exception:
+                _t = None
+            if _t:
+                target = str(_t)
+                text = text.replace(m.group(0), "", 1).strip()
             # 1b. 查全局 NOTE_NAMES 兜底（dm/旧数据）
             if not target and NOTE_NAMES:
                 for _q, _n in NOTE_NAMES.items():
@@ -1816,14 +1862,13 @@ def _route_locked(gid, qq, raw):
                         t = m_num.group(1)
                     else:
                         clean_rest = _re.sub(r"[\[\]【】\(\)\s]", "", rest)
-                        # 1. 查本群分群昵称（优先，防跨群串扰）
-                        for (_g, _q), _n in NOTE_NAMES_BY_GROUP.items():
-                            if str(_g) != str(gid):
-                                continue
-                            clean_n = _re.sub(r"[\[\]【】\(\)\s]", "", str(_n or ""))
-                            if clean_n and (clean_n == clean_rest or clean_rest in clean_n or clean_n in clean_rest):
-                                t = str(_q)
-                                break
+                        # 1. 查本群分群昵称反向索引（精确 O(1)，模糊限本群）
+                        try:
+                            _t2 = find_qq_by_name(gid, rest)
+                        except Exception:
+                            _t2 = None
+                        if _t2:
+                            t = str(_t2)
                         # 1b. 查全局 NOTE_NAMES 兜底
                         if not t:
                             for _q, _n in NOTE_NAMES.items():
