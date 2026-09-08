@@ -1544,7 +1544,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.7.9"
+        version: res.version || "0.7.10"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -2040,23 +2040,34 @@ async function loadSpirits() {
   try {
     const res = await getBridge().apiGet("spirits");
     SPIRIT = res || {};
-    // 编辑区：有自定义用自定义；无则预填内置为起点并标记未自定义（保存后即转自定义）
+    // 编辑区：有自定义用自定义；无则预填内置为起点并标记未自定义（保存后即转自定义）。
+    // 用后端 _meta.configured 判定显式清空（_raw 恒含三键，不可用 in 判断）。
+    // 兼容旧后端（无 _raw/_meta）：顶层即有效数据，直接沿用。
     try {
-      const _raw = (res && res._raw) || {};
-      const _bi = (res && res._builtin) || {};
-      SPIRIT_CUSTOM = { maps: true, spirits: true, shop: true };
-      ["maps", "spirits", "shop"].forEach((k) => {
-        const _r = (_raw && _raw[k]) || {};
-        if (_r && Object.keys(_r).length) { SPIRIT[k] = _r; SPIRIT_CUSTOM[k] = true; }
-        else if (_raw && (k in _raw)) { SPIRIT[k] = {}; SPIRIT_CUSTOM[k] = true; }
-        else {
-          const _b = (_bi && _bi[k]) || {};
-          if (_b && Object.keys(_b).length) {
-            SPIRIT[k] = JSON.parse(JSON.stringify(_b));
-            SPIRIT_CUSTOM[k] = false;
-          } else { SPIRIT[k] = {}; SPIRIT_CUSTOM[k] = true; }
-        }
-      });
+      const _hasMeta = res && res._raw && res._meta && res._meta.configured;
+      if (_hasMeta) {
+        const _raw = res._raw || {};
+        const _bi = res._builtin || {};
+        const _cf = res._meta.configured || {};
+        SPIRIT_CUSTOM = { maps: true, spirits: true, shop: true };
+        ["maps", "spirits", "shop"].forEach((k) => {
+          const _r = (_raw && _raw[k]) || {};
+          if (_r && Object.keys(_r).length) { SPIRIT[k] = _r; SPIRIT_CUSTOM[k] = true; }
+          else if (_cf[k]) { SPIRIT[k] = {}; SPIRIT_CUSTOM[k] = true; }
+          else {
+            const _b = (_bi && _bi[k]) || {};
+            if (_b && Object.keys(_b).length) {
+              SPIRIT[k] = JSON.parse(JSON.stringify(_b));
+              SPIRIT_CUSTOM[k] = false;
+            } else { SPIRIT[k] = {}; SPIRIT_CUSTOM[k] = true; }
+          }
+        });
+      } else {
+        SPIRIT.maps = (res && res.maps) || {};
+        SPIRIT.spirits = (res && res.spirits) || {};
+        SPIRIT.shop = (res && res.shop) || {};
+        SPIRIT_CUSTOM = { maps: true, spirits: true, shop: true };
+      }
     } catch (e) {}
     SPIRIT_DIRTY = false;
     SPIRIT_OPEN = {};
@@ -2634,21 +2645,51 @@ const WEAPON_DEFAULTS = {
   "鬼泪村正": { price: 300000 }, "神使沧溟": { price: 800000 }, "炎宿朱雀": { price: 1500000 },
 };
 
-function parseShopWeapon(raw) {
-  // 只解析用户真实配置，不掺内置默认（空=未自定义，运行时用抽奖武器池；删光有提示）
-  if (!raw) return {};
+function _parseShopInput(raw, normalize) {
+  // 统一入口：raw 可为 dict（生产内存归一形态）/ JSON 串 / 空。
+  // 返回 {data, blank}：blank=true 从未配置；空对象+非blank=用户显式清空；corrupt 按清空处理并告警。
+  if (raw === undefined || raw === null) return { data: {}, blank: true };
+  if (typeof raw === "object" && !Array.isArray(raw)) {
+    const keys = Object.keys(raw);
+    if (!keys.length) return { data: {}, blank: false };
+    try { return { data: normalize(raw), blank: false }; }
+    catch (e) { return { data: {}, blank: false, corrupt: true }; }
+  }
+  const s = String(raw).trim();
+  if (!s) return { data: {}, blank: true };
   try {
-    const d = JSON.parse(raw);
+    const d = JSON.parse(s);
     if (typeof d === "object" && d && !Array.isArray(d)) {
-      const out = {};
-      Object.keys(d).forEach((k)=>{
-        if (typeof d[k]==="object" && d[k]!==null) out[k]={price: Number(d[k].price)||0, atk: Number(d[k].atk)||0, desc: String(d[k].desc||"")};
-        else out[k]={price: Number(d[k])||0, atk: 0, desc: ""};
-      });
-      return out;
+      if (!Object.keys(d).length) return { data: {}, blank: false };
+      return { data: normalize(d), blank: false };
     }
-  } catch(e) {}
-  return {};
+  } catch (e) {}
+  return { data: {}, blank: false, corrupt: true };
+}
+
+function _normRideObj(d) {
+  const out = {};
+  Object.keys(d).forEach((k) => {
+    const v = d[k];
+    if (v && typeof v === "object" && !Array.isArray(v)) out[k] = { price: Number(v.price) || 0, img: String(v.img || "") };
+    else out[k] = { price: Number(v) || 0, img: "" };
+  });
+  return out;
+}
+
+function _normWeaponObj(d) {
+  const out = {};
+  Object.keys(d).forEach((k) => {
+    const v = d[k];
+    if (v && typeof v === "object" && !Array.isArray(v)) out[k] = { price: Number(v.price) || 0, atk: Number(v.atk) || 0, desc: String(v.desc || "") };
+    else out[k] = { price: Number(v) || 0, atk: 0, desc: "" };
+  });
+  return out;
+}
+
+function parseShopWeapon(raw) {
+  // 兼容旧调用：只返回数据对象
+  return _parseShopInput(raw, _normWeaponObj).data;
 }
 function syncShopWeaponRaw(){ try{ const el=document.getElementById("shopWeapon"); if(el) el.value=JSON.stringify(SHOP_WEAPON,null,2);}catch(e){} }
 function renderShopWeaponBox(forceOpen=false){
@@ -2732,23 +2773,8 @@ function renderShopWeaponBox(forceOpen=false){
 }
 
 function parseShopRide(raw) {
-  // 只解析用户真实配置，不掺内置默认（空=未自定义，运行时用 RIDES 内置；删光有提示）
-  if (!raw) return {};
-  try {
-    const d = JSON.parse(raw);
-    if (typeof d === "object" && d && !Array.isArray(d)) {
-      const out = {};
-      Object.keys(d).forEach((k) => {
-        if (typeof d[k] === "object" && d[k] !== null) {
-          out[k] = { price: Number(d[k].price) || 0, img: String(d[k].img || "") };
-        } else {
-          out[k] = { price: Number(d[k]) || 0, img: "" };
-        }
-      });
-      return out;
-    }
-  } catch (e) {}
-  return {};
+  // 兼容旧调用：只返回数据对象
+  return _parseShopInput(raw, _normRideObj).data;
 }
 function syncShopRaw() {
   try {
@@ -2947,28 +2973,26 @@ async function renderAtlas(curCfg){
 async function loadShops() {
   const msg = document.getElementById("shopMsg");
   try {
-    const [cur, spiritData, gachaData] = await Promise.all([
+    const [cur, spiritData] = await Promise.all([
       getBridge().apiGet("config/get"),
-      SPIRIT ? Promise.resolve(SPIRIT) : getBridge().apiGet("spirits").catch(() => null),
-      getBridge().apiGet("gacha/weapons").catch(() => null)
+      SPIRIT ? Promise.resolve(SPIRIT) : getBridge().apiGet("spirits").catch(() => null)
     ]);
     if (spiritData) SPIRIT = spiritData;
-    window._TREAS_DIRTY = false;
-    window._TREAS_LIST = null;
     try {
+      const gachaData = await getBridge().apiGet("gacha/weapons").catch(() => null);
       if (gachaData && (gachaData.ok || gachaData.pool)) GACHA_WEAPONS = gachaData.pool || gachaData;
     } catch (e) {}
     const sec = (cur || {})["商城图鉴"] || {};
-    const rideRaw = (sec["ride_shop"] || "").toString();
-    const _pr = parseShopRide(rideRaw);
-    if (Object.keys(_pr).length) { SHOP_RIDE = _pr; SHOP_RIDE_CUSTOM = true; }
-    else if (rideRaw.trim()) { SHOP_RIDE = {}; SHOP_RIDE_CUSTOM = true; }
+    const _rr = _parseShopInput(sec["ride_shop"], _normRideObj);
+    if (Object.keys(_rr.data).length) { SHOP_RIDE = _rr.data; SHOP_RIDE_CUSTOM = true; }
+    else if (!_rr.blank) { SHOP_RIDE = {}; SHOP_RIDE_CUSTOM = true; }
     else { SHOP_RIDE = JSON.parse(JSON.stringify(DEFAULT_RIDE_SHOP)); SHOP_RIDE_CUSTOM = false; }
-    const weaponRaw = (sec["weapon_shop"] || "").toString();
-    const _pw = parseShopWeapon(weaponRaw);
-    if (Object.keys(_pw).length) { SHOP_WEAPON = _pw; SHOP_WEAPON_CUSTOM = true; }
-    else if (weaponRaw.trim()) { SHOP_WEAPON = {}; SHOP_WEAPON_CUSTOM = true; }
+    if (_rr.corrupt) toast("坐骑商城配置损坏，已载入内置，保存将覆盖", "bad");
+    const _pw = _parseShopInput(sec["weapon_shop"], _normWeaponObj);
+    if (Object.keys(_pw.data).length) { SHOP_WEAPON = _pw.data; SHOP_WEAPON_CUSTOM = true; }
+    else if (!_pw.blank) { SHOP_WEAPON = {}; SHOP_WEAPON_CUSTOM = true; }
     else { SHOP_WEAPON = JSON.parse(JSON.stringify(WEAPON_DEFAULTS)); SHOP_WEAPON_CUSTOM = false; }
+    if (_pw.corrupt) toast("武器商城配置损坏，已载入内置，保存将覆盖", "bad");
     SHOP_DIRTY = false;
     syncShopRaw();
     syncShopWeaponRaw();
