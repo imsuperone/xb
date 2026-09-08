@@ -108,7 +108,7 @@ def _raw_file_response(data_bytes, filename):
 PLUGIN_ID = "astrbot_plugin_xbbot"
 PLUGIN_DESC = "小白(奴/签/银/娱/私/灵/骑/超管/帮派/冒险+主菜单+WebUI), 现代SQLite存储"
 PLUGIN_AUTHOR = "Light"
-PLUGIN_VERSION = "0.7.12"
+PLUGIN_VERSION = "0.7.13"
 PLUGIN_REPO = "https://github.com/imsuperone/xb"
 
 # 复用 router 的主菜单，保持单源
@@ -127,7 +127,7 @@ except Exception:
         "| ⚔️ 帮派系统 | 🗺️ 冒险系统 |\r\n"
         "----------------\r\n"
         "发送系统关键词打开菜单，如【签到系统】【精灵系统】\r\n"
-        "当前版本：v0.7.12"
+        "当前版本：v0.7.13"
     )
 
 
@@ -452,8 +452,7 @@ class XbBot(Star):
                         event.stop_event()
                     except Exception:
                         pass
-                    yield event.plain_result("无权限，仅超管可用")
-                    return
+                    return  # 全静默（BY DESIGN，见 AIINFO）
                 try:
                     menus = []
                     for mod, label in [(sign, "签到系统"), (spirit, "精灵系统"), (ent, "娱乐系统"), (bank, "银行系统"), (slave, "奴隶系统"), (ride, "坐骑系统"), (guild, "帮派系统"), (adventure, "冒险系统")]:
@@ -529,8 +528,7 @@ class XbBot(Star):
                         event.stop_event()
                     except Exception:
                         pass
-                    yield event.plain_result("无权限，仅超管可用")
-                    return
+                    return  # 全静默（BY DESIGN，见 AIINFO）
                 try:
                     try:
                         ST.recall_set(f"admin_{qq}", str(int(time.time())))

@@ -44,7 +44,6 @@ TREASURE_MENU_TAIL = "更多宝物持续更新中...\r\n目前宝物：{list}\r\
 NOT_IN_GROUP   = "Ta不是本群的小伙伴，无法操作！"
 BOT_NO_JOIN    = "机器人是不参加游戏的！"
 BOT_NO_TRADE   = "机器人是不可以被买卖的！"
-NO_PERMISSION  = "亲亲,你没有相关权限哦~"
 SELF_OP_WEIRD  = "啊这~亲这么厉害自己给自己当奴隶的嘛?"
 SELF_FIGHT     = "这是什么操作！？居然可以自己释放自己的吗！？"
 SELF_RELEASE   = "这是什么操作！？居然可以自己释放自己的吗！？"

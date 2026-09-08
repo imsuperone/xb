@@ -30,7 +30,7 @@ async def handle_admin_list(raw, gid, qq, is_admin, event):
                 event.stop_event()
             except Exception:
                 pass
-            return "无权限，仅超管可用"
+            return None  # 全静默（BY DESIGN，见 AIINFO）
         try:
             ST.recall_set(f"admin_{qq}", str(int(time.time())))
         except Exception:

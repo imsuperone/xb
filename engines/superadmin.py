@@ -449,13 +449,13 @@ def _version():
                 except Exception:
                     pass
         if not ver:
-            ver = "0.7.12"
+            ver = "0.7.13"
         return f"小白版本：{ver}"
     except Exception:
-        return "小白版本：0.7.12"
+        return "小白版本：0.7.13"
 
 # ---- 统一入口（测试指令仅超管，WebUI可配但不显示于MENU，已删 个人信息） ----
-# 注意：凡 handle() 响应的别名必须同步进本表，否则非超管命中时走静默 None 而非无权限提醒
+# 注意：凡 handle() 响应的别名必须同步进本表；非超管命中一律静默 None（BY DESIGN，见 AIINFO）
 _ADMIN_CMDS = ("群列表", "应用统计", "扣钱", "充钱", "清空", "重置", "禁言", "踢人", "备份xb", "备份", "备份数据", "xb备份", "测试webdav", "webdav测试", "开启维护", "打开维护", "关闭维护", "关闭维护模式", "维护信息", "查看维护", "小白版本", "版本", "xb版本", "插件版本", "检查更新", "小白更新", "检查版本", "查询更新", "更新", "查看更新", "小白升级", "测试testxb", "测试testxb1", "测试testxb2", "测试testxb3", "测试testxb4", "测试testxb5", "测试testxb6", "测试testxb7", "测试testxb8", "超管列表")
 
 
@@ -555,13 +555,13 @@ def handle(gid, qq, raw, is_admin=False):
 
     if text in ST.wake("超管系统", "超管系统"):
         if not is_admin:
-            return "亲亲,你没有相关权限哦~"
+            return None  # 全静默：非超管命中超管指令无任何提示（BY DESIGN，见 AIINFO）
         return MENU
     if not is_admin:
-        # 命中超管指令 -> 提醒无权限(而非静默)
+        # 全静默：命中超管指令仅拦截不提示（BY DESIGN，见 AIINFO）
         for c in _ADMIN_CMDS:
             if text.startswith(c):
-                return "亲亲，你没有相关权限哦~该指令仅限机器人管理员使用！"
+                return None
         return None
     if _cfg("开关", "真") != "真":
         return "【超管系统】已经被关闭了，无法使用该功能！"
