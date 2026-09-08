@@ -222,6 +222,16 @@ def set_config(cfg: dict):
 
 def cfg(sec, key, default=""):
     sec = str(sec).strip()
+    # WebDAV 密钥走独立文件：运行时透明叠加，内存/备份/快照里只留空
+    if sec == "备份配置" and key in _WD_SECRET_KEYS:
+        try:
+            if not _WD_SECRET_LOADED:
+                wd_secret_load()
+            sv = _WD_SECRET.get(key, "")
+            if sv != "":
+                return str(sv)
+        except Exception:
+            pass
     v = _CONFIG.get(sec) if isinstance(_CONFIG.get(sec), dict) else None
     if v is not None and key in v:
         _vv = v[key]
@@ -1682,11 +1692,13 @@ _WD_KEYS = ("WebDAV服务器地址", "WebDAV用户名", "WebDAV应用密码", "W
 
 def wd_cfg_backup(payload_sec=None):
     """WebDAV 与自动备份配置 DB 镜像写透：仅镜像本次保存 payload 里出现的键（含清空语义）。
-    其它节保存不碰镜像，避免误清。"""
+    其它节保存不碰镜像，避免误清。密钥（地址/用户名/密码）永不进镜像。"""
     if not isinstance(payload_sec, dict):
         return
     try:
         for k in _WD_KEYS:
+            if k in _WD_SECRET_KEYS:
+                continue
             if k in payload_sec:
                 recall_set("wdcfg__" + k, str(payload_sec.get(k, "") or ""))
     except Exception:
@@ -1694,18 +1706,136 @@ def wd_cfg_backup(payload_sec=None):
 
 def wd_cfg_restore():
     """WebDAV 与备份配置 DB 镜像恢复：从数据库 kv 表恢复备份配置，杜绝任何外部重置导致配置丢失。
-    当内存中缺键、为空或处于 schema 默认值（如'假'/'3'/'30'）且数据库有非空有效值时回填。"""
+    当内存中缺键、为空或处于 schema 默认值（如'假'/'3'/'30'）且数据库有非空有效值时回填。
+    密钥（地址/用户名/应用密码）走独立文件，不进镜像；此处顺带做一次性迁移。"""
     try:
         sec = _CONFIG.setdefault("备份配置", {}) if isinstance(_CONFIG, dict) else {}
         if not isinstance(sec, dict):
             return
         for k in _WD_KEYS:
+            if k in _WD_SECRET_KEYS:
+                continue
             v = recall_get("wdcfg__" + k, None)
             if v is not None and str(v) != "":
                 cur = str(sec.get(k, "") or "")
                 # 内存中若为未定制的 schema 默认值或空值，回填数据库保存的用户定制值
                 if not cur or cur in ("", "假", "3", "30", "/xbbot_backup/"):
                     sec[k] = str(v)
+    except Exception:
+        pass
+    try:
+        _wd_secret_migrate()
+    except Exception:
+        pass
+
+
+_WD_SECRET_KEYS = ("WebDAV服务器地址", "WebDAV用户名", "WebDAV应用密码")
+_WD_SECRET = {}
+_WD_SECRET_LOADED = False
+
+def _wd_secret_path():
+    try:
+        base = ""
+        try:
+            if CONFIG_FILE:
+                base = os.path.dirname(os.path.abspath(CONFIG_FILE))
+        except Exception:
+            base = ""
+        if not base:
+            try:
+                base = get_persistent_data_dir()
+            except Exception:
+                base = ""
+        if not base:
+            return ""
+        return os.path.join(base, "webdav_secret.json")
+    except Exception:
+        return ""
+
+
+def wd_secret_load(force=False):
+    """读独立密钥文件（内存缓存；备份/快照/导出永不触碰此文件）"""
+    global _WD_SECRET, _WD_SECRET_LOADED
+    if _WD_SECRET_LOADED and not force:
+        return dict(_WD_SECRET)
+    d = {}
+    try:
+        p = _wd_secret_path()
+        if p and os.path.isfile(p):
+            with open(p, encoding="utf-8") as f:
+                raw = json.load(f)
+            if isinstance(raw, dict):
+                for k in _WD_SECRET_KEYS:
+                    if raw.get(k) not in (None, ""):
+                        d[k] = str(raw.get(k))
+    except Exception:
+        pass
+    _WD_SECRET = d
+    _WD_SECRET_LOADED = True
+    return dict(d)
+
+
+def wd_secret_set(key, value):
+    """写单密钥：空值=删除该键；落独立文件。返回 True=已变更"""
+    global _WD_SECRET, _WD_SECRET_LOADED
+    try:
+        sec = wd_secret_load()
+        key = str(key)
+        if key not in _WD_SECRET_KEYS:
+            return False
+        v = str(value or "")
+        if v == "":
+            if key not in sec:
+                return False
+            sec.pop(key, None)
+        elif sec.get(key) == v:
+            return False
+        else:
+            sec[key] = v
+        _WD_SECRET = sec
+        _WD_SECRET_LOADED = True
+        p = _wd_secret_path()
+        if p:
+            try:
+                with open(p, "w", encoding="utf-8") as f:
+                    json.dump(sec, f, ensure_ascii=False, indent=2)
+            except Exception:
+                pass
+        return True
+    except Exception:
+        return False
+
+
+def _wd_secret_migrate():
+    """一次性迁移：_CONFIG/DB 镜像里的旧密钥搬进独立文件并清空白 historically leaked 位置。
+    新备份/快照自此不再含密钥（历史备份文件不受影响）。"""
+    try:
+        sec = _CONFIG.get("备份配置") if isinstance(_CONFIG, dict) else None
+        moved = False
+        if isinstance(sec, dict):
+            for k in _WD_SECRET_KEYS:
+                v = str(sec.get(k, "") or "")
+                if v != "":
+                    try:
+                        cur = wd_secret_load().get(k, "")
+                    except Exception:
+                        cur = ""
+                    if cur == "":
+                        wd_secret_set(k, v)
+                    sec[k] = ""
+                    moved = True
+        for k in _WD_SECRET_KEYS:
+            try:
+                if str(recall_get("wdcfg__" + k, "") or "") != "":
+                    recall_set("wdcfg__" + k, "")
+                    moved = True
+            except Exception:
+                pass
+        if moved:
+            try:
+                save_config()
+            except Exception:
+                pass
     except Exception:
         pass
 

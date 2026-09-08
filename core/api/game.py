@@ -572,19 +572,68 @@ def _pool_item(rar, p, base):
         return None
 
 
+def _pool_write_file(rar, stem, data, ext):
+    """写池文件：先清同名旧文件（扩展名可能不同），再写入；返回 abspath"""
+    d = _pool_dir(rar)
+    try:
+        for fn in _os.listdir(d):
+            try:
+                if _os.path.splitext(fn)[0] == stem and _os.path.isfile(_os.path.join(d, fn)):
+                    _os.remove(_os.path.join(d, fn))
+            except Exception:
+                continue
+    except Exception:
+        pass
+    dst = _os.path.join(d, stem + ext)
+    with open(dst, "wb") as w:
+        w.write(data)
+    _pool_bust(rar)
+    return dst
+
+
 async def handle_pool_list(request):
-    """抽奖武器池列表（生效目录，附预览）"""
+    """抽奖武器池列表（生效目录，附可配属性；无缩略图，预览按需取）"""
     try:
         _sl = _pool_slave()
         base = _pool_base()
+        try:
+            _attrs = _sl._weapon_attrs_raw() if hasattr(_sl, "_weapon_attrs_raw") else {}
+            if not isinstance(_attrs, dict):
+                _attrs = {}
+        except Exception:
+            _attrs = {}
+        try:
+            _legacy = _sl._weapon_shop() if hasattr(_sl, "_weapon_shop") else {}
+            if not isinstance(_legacy, dict):
+                _legacy = {}
+        except Exception:
+            _legacy = {}
         out = {}
         for rar in _POOL_RARS:
             items = []
             try:
                 for p in (_sl._gacha_pool(rar) or []):
                     it = _pool_item(rar, p, base)
-                    if it:
-                        items.append(it)
+                    if not it:
+                        continue
+                    try:
+                        a = _attrs.get(it["name"]) or {}
+                        if not isinstance(a, dict):
+                            a = {}
+                        atk = a.get("atk", "")
+                        desc = a.get("desc", "")
+                        if (atk in ("", None)) and isinstance(_legacy.get(it["name"]), dict):
+                            atk = _legacy[it["name"]].get("atk", "")
+                        if (not desc) and isinstance(_legacy.get(it["name"]), dict):
+                            desc = _legacy[it["name"]].get("desc", "")
+                        try:
+                            atk = int(float(atk or 0))
+                        except Exception:
+                            atk = 0
+                        it["attrs"] = {"atk": atk, "desc": str(desc or "")}
+                    except Exception:
+                        it["attrs"] = {"atk": 0, "desc": ""}
+                    items.append(it)
             except Exception:
                 pass
             items.sort(key=lambda x: x["name"])
@@ -592,6 +641,79 @@ async def handle_pool_list(request):
         return json_response({"ok": True, "pool": out})
     except Exception as e:
         return _err(f"pool list failed: {e}", 500)
+
+
+async def handle_pool_attrs(request):
+    """抽奖武器属性保存（{attrs: {名: {atk, desc}}}，只写 weapon_attrs，不碰文件）"""
+    try:
+        data = await get_req_json(request, default={})
+        if not isinstance(data, dict):
+            return _err("bad payload", 400)
+        raw = data.get("attrs", data)
+        if not isinstance(raw, dict):
+            return _err("attrs must be dict", 400)
+        clean = {}
+        for name, v in raw.items():
+            name = str(name or "").strip()
+            if not name:
+                continue
+            if not isinstance(v, dict):
+                continue
+            try:
+                atk = int(float(v.get("atk", 0) or 0))
+            except Exception:
+                atk = 0
+            if atk < 0:
+                atk = 0
+            desc = str(v.get("desc", "") or "").strip()
+            if atk or desc:
+                clean[name] = {"atk": atk, "desc": desc}
+        ST.set_ini("商城图鉴", "weapon_attrs", json.dumps(clean, ensure_ascii=False))
+        try:
+            ST.save_config()
+        except Exception:
+            pass
+        try:
+            st_cfg = dict(ST._CONFIG or {})
+            ST.sync_astrbot_config(st_cfg)
+        except Exception:
+            pass
+        return json_response({"ok": True, "count": len(clean)})
+    except Exception as e:
+        return _err(f"pool attrs failed: {e}", 500)
+
+
+async def handle_pool_replace_path(request):
+    """内置选图：用服务器已有图片文件覆盖池武器图（{name, src}，src 须在插件/数据目录内）"""
+    try:
+        try:
+            from .images import _safe_path as _img_safe
+        except ImportError:
+            from images import _safe_path as _img_safe  # type: ignore
+        data = await get_req_json(request, default={})
+        if not isinstance(data, dict):
+            return _err("bad payload", 400)
+        name = str(data.get("name", "") or "").strip()
+        src = str(data.get("src", "") or data.get("path", "") or "").strip()
+        if not name or not src:
+            return _err("name/src required", 400)
+        rar, _old = _pool_find(name)
+        if not _old:
+            return _err("not found", 404)
+        fp = _img_safe(src, _pool_base())
+        if not fp or not _os.path.isfile(fp):
+            return _err("源文件不存在或越界", 400)
+        ext = _os.path.splitext(fp)[1].lower()
+        if ext not in _POOL_IMG_EXTS:
+            return _err("源文件非图片", 400)
+        with open(fp, "rb") as f:
+            blob = f.read()
+        if not blob:
+            return _err("源文件为空", 400)
+        _pool_write_file(rar, name, blob, ext)
+        return json_response({"ok": True, "name": name})
+    except Exception as e:
+        return _err(f"pool replace failed: {e}", 500)
 
 
 async def handle_pool_rename(request):
@@ -745,25 +867,17 @@ async def handle_pool_upload(request):
             data = data.encode("utf-8", errors="ignore")
         if not data:
             return _err("empty file", 400)
-        d = _pool_dir(rar)
         if replace and fixname:
-            # 换图：删掉该稀有度下同名旧文件（扩展名可能不同），再写入
-            try:
-                for fn in _os.listdir(d):
-                    try:
-                        if _os.path.splitext(fn)[0] == fixname and _os.path.isfile(_os.path.join(d, fn)):
-                            _os.remove(_os.path.join(d, fn))
-                    except Exception:
-                        continue
-            except Exception:
-                pass
             stem = fixname
-        dst = _os.path.join(d, stem + ext)
-        if _os.path.exists(dst):
-            return _err("同名文件已存在", 400)
-        with open(dst, "wb") as w:
-            w.write(data)
-        _pool_bust(rar)
+        else:
+            dst = _os.path.join(_pool_dir(rar), stem + ext)
+            if _os.path.exists(dst):
+                return _err("同名文件已存在", 400)
+            with open(dst, "wb") as w:
+                w.write(data)
+            _pool_bust(rar)
+            return json_response({"ok": True, "name": stem, "rar": rar})
+        _pool_write_file(rar, stem, data, ext)
         return json_response({"ok": True, "name": stem, "rar": rar})
     except Exception as e:
         return _err(f"pool upload failed: {e}", 500)

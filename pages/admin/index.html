@@ -1316,7 +1316,7 @@
 
     .responsive-shop-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr;
       gap: 12px;
       margin-top: 10px;
     }
@@ -1570,7 +1570,7 @@
   <div class="wrap">
     <header>
       <div class="brand">
-        <h1>管理控制台 <span class="ver">v0.7.17</span> <span id="verBadge" style="display:none;font-size:11px;padding:3px 8px;border-radius:12px;background:linear-gradient(135deg, #10B981, #059669);color:#fff;font-weight:600;cursor:pointer;margin-left:4px;box-shadow:0 2px 6px rgba(16,185,129,0.3)" title="点击查看更新并一键升级">🚀 发现新版本</span></h1>
+        <h1>管理控制台 <span class="ver">v0.7.18</span> <span id="verBadge" style="display:none;font-size:11px;padding:3px 8px;border-radius:12px;background:linear-gradient(135deg, #10B981, #059669);color:#fff;font-weight:600;cursor:pointer;margin-left:4px;box-shadow:0 2px 6px rgba(16,185,129,0.3)" title="点击查看更新并一键升级">🚀 发现新版本</span></h1>
         <div class="sub">
           <span class="status-badge"><span class="status-dot"></span> 运行正常</span>
         </div>
@@ -1884,10 +1884,9 @@
           </div>
           <span class="msg" id="shopMsg"></span>
         </div>
-        <div class="hint">坐骑商城（改价/增删/绑图，需点保存）与抽奖武器池（改名/改稀有度/删/传，即时生效）；图鉴总览在「📖 图鉴」页。</div>
+        <div class="hint">坐骑商城（改价/增删/绑图，点保存）/ 抽奖武器池（改名/稀有度/删/传即时生效，属性点保存）/ 精灵道具（点保存道具）；各存各的，互不干扰。</div>
         <div class="responsive-shop-grid">
           <div>
-            <h3 style="margin:0 0 8px;font-size:13px">🛒 商城</h3>
             <div id="shopRideBox"></div>
             <div id="poolWeaponBox" style="margin-top:10px"></div>
             <div id="shopSpiritBox" style="margin-top:10px"></div>
@@ -1908,7 +1907,7 @@
           </div>
           <span class="msg" id="spiritMsg"></span>
         </div>
-        <div class="hint">地图与属性在下方 ✨ 精灵页签分系统保存/恢复（地图、属性各一对按钮）；道具在 🛒 商城页保存。导出的文件可直接导入。</div>
+        <div class="hint">地图/属性在下方 ✨ 精灵页签内编辑保存；导出的文件可直接导入。</div>
         <h3 style="margin:14px 0 8px;font-size:13px">📖 全类目总览（奴隶武器/宝物/坐骑/精灵地图）</h3>
         <div id="atlasBox" style="max-height:600px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px"></div>
       </div>
@@ -1937,7 +1936,7 @@
       </div>
       <div class="panel" style="margin-top:10px">
         <h2>☁️ WebDAV 与自动备份配置</h2>
-        <div class="hint">WebDAV 地址与账号只在此处填写保存（坚果云请用应用密码）。保存后自动写入数据库镜像，重启不丢失。</div>
+        <div class="hint">WebDAV 地址与账号只在此处填写保存（坚果云请用应用密码）。地址/账号/密码存独立文件，不进备份与快照；密码框留空=保持不变。</div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:10px">
           <div style="display:flex;align-items:center;justify-content:space-between;background:var(--panel2);padding:10px 14px;border-radius:10px;border:1px solid var(--line)">
             <span style="font-size:12.5px;font-weight:600">WebDAV备份开关</span>
@@ -1949,7 +1948,7 @@
           </div>
           <label style="font-size:12.5px">服务器地址<input id="wdUrl" type="text" placeholder="https://dav.jianguoyun.com/dav/" style="width:100%;margin-top:4px"></label>
           <label style="font-size:12.5px">用户名<input id="wdUser" type="text" placeholder="账号/邮箱" style="width:100%;margin-top:4px"></label>
-          <label style="font-size:12.5px">应用密码<input id="wdPwd" type="password" placeholder="应用密码/Token" style="width:100%;margin-top:4px"></label>
+          <label style="font-size:12.5px">应用密码<input id="wdPwd" type="password" placeholder="留空保持不变" style="width:100%;margin-top:4px"></label>
           <label style="font-size:12.5px">远端目录<input id="wdDir" type="text" placeholder="/xbbot_backup/" style="width:100%;margin-top:4px"></label>
           <label style="font-size:12.5px">备份间隔小时<input id="autoHours" type="number" min="1" style="width:100%;margin-top:4px"></label>
           <label style="font-size:12.5px">保留备份数量<input id="autoKeep" type="number" min="1" style="width:100%;margin-top:4px"></label>
@@ -2091,7 +2090,7 @@
           <div>👤 作者：<b>Light</b></div>
           <div>📦 插件：<code>astrbot_plugin_xbbot</code>（小白统一模块）</div>
           <div>🔗 仓库：<a href="https://github.com/imsuperone/xb" target="_blank" rel="noopener">https://github.com/imsuperone/xb</a></div>
-          <div>🏷️ 当前版本：<b id="aboutVersion">v0.7.17</b> <span id="aboutLatest" style="color:var(--muted)"></span></div>
+          <div>🏷️ 当前版本：<b id="aboutVersion">v0.7.18</b> <span id="aboutLatest" style="color:var(--muted)"></span></div>
           <div class="hint">版本检测走纪元算法，20 秒熔断；可在顶部点击版本徽标检查更新。</div>
         </div>
       </div>

@@ -439,6 +439,20 @@ def treasures_of(u):
     return [t for t in uget(u, "treasure").split("|") if t]
 
 
+def _treasure_names():
+    """宝物名单：读 设置.宝物（WebUI/图鉴写入口径），兼容旧 设置.treasure，二者合并去重"""
+    out = []
+    try:
+        for key in ("宝物", "treasure"):
+            for t in (cfg("设置", key, "") or "").split("|"):
+                t = str(t or "").strip()
+                if t and t not in out:
+                    out.append(t)
+    except Exception:
+        pass
+    return out
+
+
 def _treasure_effects_raw():
     """宝物自定义效果表（商城图鉴 treasure_effects {名: 效果}）；空=未自定义"""
     try:
@@ -483,14 +497,62 @@ def star_of(u, w):
         return 0
 
 
+def _weapon_attrs_raw():
+    """武器可配属性表（商城图鉴 weapon_attrs {名: {atk, desc}}）；空=未自定义"""
+    try:
+        v = store.cfg("商城图鉴", "weapon_attrs", "")
+        if isinstance(v, dict) and v:
+            return v
+        if v:
+            d = _json.loads(v)
+            if isinstance(d, dict) and d:
+                return d
+    except Exception:
+        pass
+    return {}
+
+
+def _weapon_attr(name, field, default=0):
+    try:
+        v = (_weapon_attrs_raw().get(str(name)) or {})
+        if not isinstance(v, dict):
+            return default
+        # 兼容旧 weapon_shop 残留的 atk/desc（商城已删，仅读）
+        if field not in v or v.get(field) in ("", None):
+            try:
+                old = (_weapon_shop().get(str(name)) or {})
+                if isinstance(old, dict) and old.get(field) not in ("", None):
+                    return old.get(field)
+            except Exception:
+                pass
+            return default
+        return v.get(field)
+    except Exception:
+        return default
+
+
+def _weapon_atk_bonus(name):
+    try:
+        return max(0, int(float(_weapon_attr(name, "atk", 0) or 0)))
+    except Exception:
+        return 0
+
+
+def _weapon_desc(name):
+    try:
+        return str(_weapon_attr(name, "desc", "") or "").strip()
+    except Exception:
+        return ""
+
+
 def atk_of(st, qq):
-    """武器攻击力: 鬼泪村正系成长表 100/200/400/600/800/1600"""
+    """武器攻击力: 星级成长表 + 单武器可配加成"""
     u = U(st, qq)
     table = STAR_ATK
     total = 0
     for w in weapons_of(u):
         s = min(star_of(u, w), 5)
-        total += table[s]
+        total += table[s] + _weapon_atk_bonus(w)
     return total
 
 
@@ -1029,7 +1091,7 @@ def cmd_flatter(gid, qq, st):
 
 
 def _grant_treasure(gid, qq, st):
-    treas = [t for t in (cfg("设置", "treasure", "") or "").split("|") if t]
+    treas = _treasure_names()
     if not treas:
         return None
     t = _random.choice(treas)
@@ -1545,7 +1607,7 @@ def cmd_starup(gid, qq, wname, st):
 
 def cmd_treasure_up(gid, qq, tname, st):
     tname = tname.strip("+＋ ").strip()
-    treas = [t for t in (cfg("设置", "treasure", "") or "").split("|") if t]
+    treas = _treasure_names()
     if tname not in treas:
         return T.TUP_NOT_EXIST
     u = U(st, qq)
@@ -1696,7 +1758,9 @@ def cmd_weapon_menu(gid, qq, st):
                 img_missing = " (图缺)"
         except Exception:
             pass
-        lines.append(f"◆ {n}　攻击+{STAR_ATK[min(5, star)]}　{own}{price_txt}{img_missing}")
+        _bonus = _weapon_atk_bonus(n)
+        _b_txt = f"(+{_bonus}配装)" if _bonus else ""
+        lines.append(f"◆ {n}　攻击+{STAR_ATK[min(5, star)] + _bonus}{_b_txt}　{own}{price_txt}{img_missing}")
     lines.append("━━━━━━━━━━━━━━")
     lines.append("成长: ★0+100 → ★3+600 → ★5+1600")
     lines.append("🎁 获取: 【抽武器】【十连抽】【三十连抽】【五十连抽】")
@@ -1707,7 +1771,7 @@ def cmd_weapon_menu(gid, qq, st):
 
 
 def cmd_treasure_menu(gid, qq, st):
-    treas = [t for t in (cfg("设置", "treasure", "") or "").split("|") if t]
+    treas = _treasure_names()
     u = U(st, qq)
 
     def eff(t):
@@ -1773,8 +1837,9 @@ def handle(gid, qq, raw):
         reply = _route(gid, qq, raw)
     except Exception:
         return "奴隶系统繁忙，请稍后重试~"
-    if isinstance(reply, str) and reply:
+    if reply:
         try:
+            # 字符串与元组(带图)统一落盘：此前元组直接返回，抽武器出金等会丢档
             save(str(gid))
         except Exception:
             pass
@@ -2041,7 +2106,7 @@ def _route_locked(gid, qq, raw):
     q = text
     if q.startswith("【") and q.endswith("】"):
         q = q[1:-1].strip()
-    treas = [t for t in (cfg("设置", "treasure", "") or "").split("|") if t]
+    treas = _treasure_names()
     ssr_img_map = {}
     try:
         ssr_pool = _gacha_pool("SSR")
@@ -2067,10 +2132,13 @@ def _route_locked(gid, qq, raw):
         else:
             imgp = ssr_img_map.get(q, _os.path.join(DATA_DIR, "gacha_img", "SSR", q + ".png"))
             _pp = _img_path(imgp)
+        _bonus = _weapon_atk_bonus(q)
+        _desc = _weapon_desc(q)
         _txt = (T.W_NAME.format(name=q) + f"★{lv}\r\n"
-                + T.W_EFFECT.format(atk=f"+{table[min(5, lv)]}") + "\r\n"
+                + T.W_EFFECT.format(atk=f"+{table[min(5, lv)] + _bonus}") + "\r\n"
                 + T.W_5STAR_EFFECT + "\r\n"
-                + ("✔你已拥有" if owned else "✖未拥有"))
+                + ("✔你已拥有" if owned else "✖未拥有")
+                + (f"\r\n📝 {_desc}" if _desc else ""))
         if _pp:
             return _txt, [_pp]
         return _txt

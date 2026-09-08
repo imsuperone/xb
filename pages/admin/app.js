@@ -1552,7 +1552,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.7.17"
+        version: res.version || "0.7.18"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -2365,20 +2365,21 @@ async function saveSpiritKind(kind) {
   }
 }
 async function resetSpiritKind(kind) {
-  // 按系统恢复内置（本地，需点对应保存生效，不碰其他系统）
+  // 按系统恢复内置：直接清理旧数据并持久化，不保留（数据库自有备份可回滚）
   if (!SPIRIT) { toast("请先加载图鉴", "bad"); return; }
   if (!["maps", "spirits", "shop"].includes(kind)) return;
   const label = SPIRIT_KIND_LABEL[kind] || kind;
-  if (!(await uiConfirm(`只恢复精灵${label}为内置默认？（需点保存${label}生效，其他系统不受影响）`, `恢复${label}默认`))) return;
+  if (!(await uiConfirm(`直接恢复精灵${label}为内置默认？旧数据不保留。`, `恢复${label}默认`))) return;
   try {
     const b = (SPIRIT._builtin && SPIRIT._builtin[kind]) || {};
     SPIRIT[kind] = JSON.parse(JSON.stringify(b));
-    SPIRIT_CUSTOM[kind] = false;
-    SPIRIT_DIRTY = true;
-    SPIRIT_OPEN = {};
+    SPIRIT_CUSTOM[kind] = true;
+    SPIRIT_DIRTY = false;
+    if (kind === "maps") SPIRIT_OPEN = {};
+    await getBridge().apiPost("spirits/save", { [kind]: SPIRIT[kind] || {} });
     try { renderShop(); } catch (e) {}
     refreshSpiritViews();
-    toast(`已恢复${label}内置，需保存`, "ok");
+    toast(`已恢复${label}默认`, "ok");
   } catch (e) { toast("恢复失败: " + e.message, "bad"); }
 }
 
@@ -2659,37 +2660,74 @@ async function loadPool() {
     const d = await getBridge().apiGet("weapons/pool").catch(() => null);
     if (d && d.ok && d.pool) POOL_WEAPONS = d.pool;
   } catch (e) {}
+  try {
+    POOL_ATTRS = {};
+    ["SSR", "SR", "R"].forEach((r) => ((POOL_WEAPONS && POOL_WEAPONS[r]) || []).forEach((it) => {
+      const a = (it && it.attrs) || {};
+      POOL_ATTRS[it.name] = { atk: Number(a.atk) || 0, desc: String(a.desc || "") };
+    }));
+    POOL_ATTRS_DIRTY = false;
+  } catch (e) {}
   try { renderPoolBox(); } catch (e) {}
   try { if (ATLAS_CUR === "weapon") renderAtlas(); } catch (e) {}
 }
 function poolCount() {
   try { return ["SSR", "SR", "R"].reduce((n, r) => n + ((POOL_WEAPONS && POOL_WEAPONS[r]) || []).length, 0); } catch (e) { return 0; }
 }
+let POOL_ATTRS = {};
+let POOL_ATTRS_DIRTY = false;
 function renderPoolBox(forceOpen=false){
   const box=document.getElementById("poolWeaponBox");
   if(!box) return;
   const curDetails=box.querySelector("details");
   const wasOpen=curDetails?curDetails.open:forceOpen;
-  let html=`<details class="panel" style="margin:0"${wasOpen?" open":""}><summary style="cursor:pointer;font-weight:600">🎰 抽奖武器池 — ${poolCount()} 件（文件即池，操作即时生效）</summary>`;
-  html+=`<div class="hint" style="margin-top:8px">武器=图片文件本身：改名改文件名，稀有度改所在目录，删即删文件；操作即时生效无需保存，抽奖/菜单/详情自动跟随</div>`;
+  const openGroups = {};
+  try { box.querySelectorAll("details[data-pool-group]").forEach((d) => { openGroups[d.dataset.poolGroup] = d.open; }); } catch (e) {}
+  let html=`<details class="panel" style="margin:0"${wasOpen?" open":""}><summary style="cursor:pointer;font-weight:600">🎰 抽奖武器池 — ${poolCount()} 件（文件即池，改名/稀有度/删/传即时生效，属性需保存）</summary>`;
+  html+=`<div class="hint" style="margin-top:8px">武器=图片文件本身：改名改文件名，稀有度改所在目录；攻击加成参战、描述进详情，改完点保存武器属性</div>`;
   ["SSR","SR","R"].forEach((rar)=>{
     const items=(POOL_WEAPONS&&POOL_WEAPONS[rar])||[];
-    html+=`<div style="font-weight:600;margin:10px 0 4px">${esc(rar)} (${items.length})</div>`;
-    if(!items.length){ html+=`<div class="hint">空</div>`; return; }
+    const open = openGroups[rar] !== undefined ? openGroups[rar] : false;
+    html+=`<details data-pool-group="${rar}" style="margin-top:8px;border:1px solid var(--line);border-radius:8px;padding:6px 10px"${open?" open":""}><summary style="cursor:pointer;font-weight:600">${esc(rar)} (${items.length})</summary>`;
+    if(!items.length){ html+=`<div class="hint">空</div>`; }
     items.forEach((it)=>{
       const name=it.name;
       const _ext=((it.file||"").split(".").pop()||"").toLowerCase();
       const _kb=(it.size!=null)?Math.max(1,Math.round(it.size/1024))+"KB":"";
-      const pv=`<span class="badge" style="font-size:11px" title="${esc(it.file||name)}">${esc(_ext||"?")}${_kb?" · "+_kb:""}</span>`;
+      const pv = it.thumb
+        ? `<img src="${esc(it.thumb)}" style="width:36px;height:36px;object-fit:cover;border:1px solid var(--line);border-radius:6px" onerror="this.style.display='none'">`
+        : `<span data-pool-thumb style="display:inline-flex;align-items:center"><span class="badge" style="font-size:11px" title="${esc(it.file||name)}">${esc(_ext||"?")}${_kb?" · "+_kb:""}</span></span>`;
+      const pa = (POOL_ATTRS && POOL_ATTRS[name]) || { atk: 0, desc: "" };
       html+=`<div class="s-fields" data-pool-item="${esc(rar)}|${esc(name)}" style="margin-top:6px">`+
         `<div class="s-row" style="font-weight:600;min-width:90px"><div style="padding-top:4px">✦ ${esc(name)}</div></div>`+
         `<div class="s-row"><small>稀有度</small><select data-pool-rar>${["SSR","SR","R"].map((r)=>`<option value="${r}"${r===rar?" selected":""}>${r}</option>`).join("")}</select></div>`+
-        `<div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${pv}<button class="ghost sm" data-pool-preview>预览</button><button class="ghost sm" data-pool-replace>换图</button><button class="ghost sm" data-pool-rename>改名</button><button class="s-del" data-pool-del>删除</button></div>`+
+        `<div class="s-row"><small>攻击加成</small><input type="number" data-pool-atk value="${esc(pa.atk ?? 0)}" style="width:70px"></div>`+
+        `<div class="s-row" style="flex:1"><small>描述</small><input data-pool-desc value="${esc(pa.desc ?? "")}" placeholder="详情页展示"></div>`+
+        `<div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${pv}<button class="ghost sm" data-pool-preview>预览</button><button class="ghost sm" data-pool-pick-builtin>内置选图</button><button class="ghost sm" data-pool-pick-upload>外置选图</button><button class="ghost sm" data-pool-rename>改名</button><button class="s-del" data-pool-del>删除</button></div>`+
         `</div>`;
     });
+    html+=`</details>`;
   });
-  html+=`<div style="margin-top:10px;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><select id="poolUploadRar">${["SSR","SR","R"].map((r)=>`<option value="${r}">${r}</option>`).join("")}</select><button class="ghost sm" id="btnPoolUpload">＋ 上传武器</button></div></details>`;
+  html+=`<div style="margin-top:10px;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><select id="poolUploadRar">${["SSR","SR","R"].map((r)=>`<option value="${r}">${r}</option>`).join("")}</select><button class="ghost sm" id="btnPoolUpload">＋ 上传武器</button><button class="ghost sm" id="btnPoolAttrsSave">💾 保存武器属性</button><button class="ghost sm" id="btnPoolAttrsReset">↩️ 恢复默认</button></div></details>`;
   box.innerHTML=html;
+  // 分区展开时懒加载图片预览（自动匹配，展开才取，不卡首屏）
+  box.querySelectorAll("details[data-pool-group]").forEach((d) => {
+    d.addEventListener("toggle", () => {
+      if (!d.open || d.dataset.thumbsLoaded) return;
+      d.dataset.thumbsLoaded = "1";
+      const rar = d.dataset.poolGroup;
+      ((POOL_WEAPONS && POOL_WEAPONS[rar]) || []).forEach((it) => {
+        if (it.thumb) return;
+        getBridge().apiPost("weapons/pool/img", { name: it.name }).then((r) => {
+          const thumb = r && (r.thumb || (r.data && r.data.thumb));
+          if (!thumb || (r && r.error)) return;
+          it.thumb = thumb;
+          const slot = box.querySelector(`[data-pool-item="${CSS.escape(rar + "|" + it.name)}"] [data-pool-thumb]`);
+          if (slot) slot.innerHTML = `<img src="${esc(thumb)}" style="width:36px;height:36px;object-fit:cover;border:1px solid var(--line);border-radius:6px" onerror="this.style.display='none'">`;
+        }).catch(() => {});
+      });
+    });
+  });
   const _poolKey = (el) => {
     const wrap = el.closest("[data-pool-item]");
     if (!wrap) return [null, null];
@@ -2740,7 +2778,21 @@ function renderPoolBox(forceOpen=false){
       showLightbox(thumb, name);
     } catch (e) { toast("预览失败: " + e.message, "bad"); }
   }));
-  box.querySelectorAll("[data-pool-replace]").forEach(b=>b.addEventListener("click", ()=>{
+  box.querySelectorAll("[data-pool-atk]").forEach(inp=>inp.addEventListener("input", ()=>{
+    const [, name] = _poolKey(inp);
+    if (!name) return;
+    POOL_ATTRS[name] = POOL_ATTRS[name] || { atk: 0, desc: "" };
+    POOL_ATTRS[name].atk = Math.max(0, Number(inp.value) || 0);
+    POOL_ATTRS_DIRTY = true;
+  }));
+  box.querySelectorAll("[data-pool-desc]").forEach(inp=>inp.addEventListener("input", ()=>{
+    const [, name] = _poolKey(inp);
+    if (!name) return;
+    POOL_ATTRS[name] = POOL_ATTRS[name] || { atk: 0, desc: "" };
+    POOL_ATTRS[name].desc = inp.value;
+    POOL_ATTRS_DIRTY = true;
+  }));
+  box.querySelectorAll("[data-pool-pick-upload]").forEach(b=>b.addEventListener("click", ()=>{
     const [rar, name] = _poolKey(b);
     if (!name) return;
     const inp = document.createElement("input"); inp.type = "file"; inp.accept = "image/*";
@@ -2755,6 +2807,43 @@ function renderPoolBox(forceOpen=false){
     };
     inp.click();
   }));
+  box.querySelectorAll("[data-pool-pick-builtin]").forEach(b=>b.addEventListener("click", async ()=>{
+    const [, name] = _poolKey(b);
+    if (!name) return;
+    window.SHOP_PICK_TARGET = name; window.SHOP_PICK_KIND = "pool";
+    toast("已进入根目录，请单击选中图片后点“确定绑定”", "ok");
+    document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("on"));
+    const rb=document.querySelector("[data-tab=\"imgs\"]"); if(rb) rb.classList.add("on");
+    document.querySelectorAll(".tab").forEach(x=>x.classList.remove("on"));
+    const tab=document.getElementById("tab-imgs"); if(tab) tab.classList.add("on");
+    await loadImages("");
+    const old=document.getElementById("shopPickTip"); if(old) old.remove();
+    const tip=document.createElement("div"); tip.id="shopPickTip"; tip.style="background:var(--accSoft);border:1px solid var(--acc);padding:8px 12px;border-radius:8px;margin-bottom:10px";
+    tip.innerHTML=`<b>为武器 "${esc(name)}" 选择内置图：</b> 请在下方根目录单击选中图片文件，然后 <button class="ghost sm" id="btnShopPickConfirm">确定绑定</button> <button class="ghost sm" id="btnShopPickCancel">取消</button>`;
+    const panel=document.querySelector("#tab-imgs .panel"); if(panel) panel.prepend(tip);
+    const backToShops=()=>{
+      document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("on"));
+      const cb=document.querySelector("[data-tab=\"shops\"]"); if(cb) cb.classList.add("on");
+      document.querySelectorAll(".tab").forEach(x=>x.classList.remove("on"));
+      const stab=document.getElementById("tab-shops"); if(stab) stab.classList.add("on");
+    };
+    document.getElementById("btnShopPickConfirm")?.addEventListener("click", async ()=>{
+      const sel=IMG_SELECTED;
+      if(!sel){ toast("请先选中图片文件","bad"); return; }
+      const ext=(sel.split(".").pop()||"").toLowerCase();
+      if(!["png","jpg","jpeg","gif","webp","bmp","ico"].includes(ext)){ toast("请选择图片文件","bad"); return; }
+      if(window._imgIsDir && window._imgIsDir(sel)){ toast("不能选择文件夹","bad"); return; }
+      try {
+        const r = await getBridge().apiPost("weapons/pool/replace_path", { name, src: sel });
+        if (r && r.error) throw new Error(r.error);
+        toast("已换图", "ok"); tip.remove(); window.SHOP_PICK_TARGET=null; window.SHOP_PICK_KIND=null;
+        backToShops(); await loadPool();
+      } catch (e) { toast("换图失败: " + e.message, "bad"); }
+    });
+    document.getElementById("btnShopPickCancel")?.addEventListener("click", ()=>{ tip.remove(); window.SHOP_PICK_TARGET=null; window.SHOP_PICK_KIND=null; backToShops(); });
+  }));
+  document.getElementById("btnPoolAttrsSave")?.addEventListener("click", () => savePoolAttrs());
+  document.getElementById("btnPoolAttrsReset")?.addEventListener("click", () => resetPoolAttrs());
   document.getElementById("btnPoolUpload")?.addEventListener("click", ()=>{
     const rarSel = document.getElementById("poolUploadRar");
     const rar = (rarSel && rarSel.value) || "SSR";
@@ -2770,6 +2859,29 @@ function renderPoolBox(forceOpen=false){
     };
     inp.click();
   });
+}
+async function savePoolAttrs() {
+  try {
+    const clean = {};
+    Object.entries(POOL_ATTRS || {}).forEach(([k, v]) => {
+      const atk = Math.max(0, Number((v && v.atk) || 0));
+      const desc = String((v && v.desc) || "").trim();
+      if (atk || desc) clean[k] = { atk, desc };
+    });
+    const r = await getBridge().apiPost("weapons/pool/attrs", { attrs: clean });
+    if (r && r.error) throw new Error(r.error);
+    POOL_ATTRS_DIRTY = false;
+    toast("武器属性已保存", "ok"); await loadPool();
+  } catch (e) { toast("保存失败: " + e.message, "bad"); }
+}
+async function resetPoolAttrs() {
+  if (!(await uiConfirm("直接清空全部武器自定义属性（攻击加成/描述）？文件不受影响，旧数据不保留。", "恢复默认"))) return;
+  try {
+    const r = await getBridge().apiPost("weapons/pool/attrs", { attrs: {} });
+    if (r && r.error) throw new Error(r.error);
+    POOL_ATTRS = {}; POOL_ATTRS_DIRTY = false;
+    toast("已恢复默认", "ok"); await loadPool();
+  } catch (e) { toast("恢复失败: " + e.message, "bad"); }
 }
 function poolUploadTo(rar) {
   // 总览页＋添加：直接上传进指定稀有度
@@ -2981,8 +3093,8 @@ async function renderAtlas(curCfg){
     let html = `<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">` + _tabs.map(([k, label, n]) =>
       `<button class="ghost sm" data-atlas-tab="${k}" ${ATLAS_CUR === k ? 'disabled style="opacity:.45"' : ""}>${label} (${n})</button>`
     ).join("") + `</div><div style="display:flex;flex-direction:column;gap:8px">`;
-    const mkSec = (title, items, addId, delAttr, sys) => {
-      let h = `<div style="border:1px solid var(--line);border-radius:var(--radius-xs);padding:8px 10px;background:var(--panel2)"><div style="font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px">${title} (${items.length}) <button class="ghost sm" id="${addId}" style="margin-left:auto">＋ 添加</button></div><div style="display:flex;flex-wrap:wrap;gap:5px">`;
+    const mkSec = (title, items, addId, delAttr, sys, extraBtns = "") => {
+      let h = `<div style="border:1px solid var(--line);border-radius:var(--radius-xs);padding:8px 10px;background:var(--panel2)"><div style="font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">${title} (${items.length}) <span style="margin-left:auto;display:inline-flex;gap:4px;flex-wrap:wrap">${extraBtns}<button class="ghost sm" id="${addId}">＋ 添加</button></span></div><div style="display:flex;flex-wrap:wrap;gap:5px">`;
       if (!items.length) h += `<span style="color:var(--muted)">暂无</span>`;
       else h += items.map(n => `<span class="badge badge-primary" style="font-size:11.5px;display:inline-flex;align-items:center;gap:5px;padding:3px 8px">${esc(n)}<span style="cursor:pointer;font-weight:bold" data-atlas-del="${esc(sys||title)}|${esc(n)}" title="删除">×</span></span>`).join("");
       h += `</div></div>`;
@@ -2990,14 +3102,14 @@ async function renderAtlas(curCfg){
     };
     const _effOf = (n) => { try { const e = (window._TREAS_EFF || {})[n]; if (e && typeof e === "object") return String(e.effect || ""); return String(e || ""); } catch (e) { return ""; } };
     if (ATLAS_CUR === "weapon") {
-      let h = `<div style="border:1px solid var(--line);border-radius:var(--radius-xs);padding:8px 10px;background:var(--panel2)"><div style="font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px">抽奖武器池 (${weapons.length}) <select id="atlasPoolRar" style="margin-left:auto;padding:3px 6px;border-radius:6px">${["SSR", "SR", "R"].map((r) => `<option value="${r}">${r}</option>`).join("")}</select><button class="ghost sm" id="btnAtlasAddWeapon">＋ 上传</button></div><div style="display:flex;flex-wrap:wrap;gap:5px">`;
+      let h = `<div style="border:1px solid var(--line);border-radius:var(--radius-xs);padding:8px 10px;background:var(--panel2)"><div style="font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">抽奖武器池 (${weapons.length}) <span style="margin-left:auto;display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap"><button class="ghost sm" id="btnAtlasSavePoolAttrs">💾 保存属性</button><button class="ghost sm" id="btnAtlasResetPoolAttrs">↩️ 恢复默认</button><select id="atlasPoolRar" style="padding:3px 6px;border-radius:6px">${["SSR", "SR", "R"].map((r) => `<option value="${r}">${r}</option>`).join("")}</select><button class="ghost sm" id="btnAtlasAddWeapon">＋ 上传</button></span></div><div style="display:flex;flex-wrap:wrap;gap:5px">`;
       if (!weapons.length) h += `<span style="color:var(--muted)">暂无</span>`;
       else h += weapons.map(({ rar, name: n }) => `<span class="badge badge-primary" style="font-size:11.5px;display:inline-flex;align-items:center;gap:5px;padding:3px 8px" title="${esc(rar)}">${esc(rar)}·${esc(n)}<span style="cursor:pointer;font-weight:bold" data-atlas-del="抽奖武器池|${esc(n)}" title="删除文件">×</span></span>`).join("");
       h += `</div><div class="hint" style="margin-top:6px">文件即池：× 删除文件即时生效；改名/改稀有度请到🛒商城→抽奖武器池</div></div>`;
       html += h;
     }
     else if (ATLAS_CUR === "treasure") {
-      let h = `<div style="border:1px solid var(--line);border-radius:var(--radius-xs);padding:8px 10px;background:var(--panel2)"><div style="font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px">奴隶系统-宝物 (${Treas.length}) <button class="ghost sm" id="btnAtlasAddTreasure" style="margin-left:auto">＋ 添加</button></div><div style="display:flex;flex-wrap:wrap;gap:5px">`;
+      let h = `<div style="border:1px solid var(--line);border-radius:var(--radius-xs);padding:8px 10px;background:var(--panel2)"><div style="font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">奴隶系统-宝物 (${Treas.length}) <span style="margin-left:auto;display:inline-flex;gap:4px;flex-wrap:wrap"><button class="ghost sm" id="btnAtlasSaveTreasure">💾 保存宝物</button><button class="ghost sm" id="btnAtlasResetTreasure">↩️ 恢复默认</button><button class="ghost sm" id="btnAtlasAddTreasure">＋ 添加</button></span></div><div style="display:flex;flex-wrap:wrap;gap:5px">`;
       if (!Treas.length) h += `<span style="color:var(--muted)">暂无</span>`;
       else h += Treas.map(n => { const e = _effOf(n); return `<span class="badge badge-primary" style="font-size:11.5px;display:inline-flex;align-items:center;gap:5px;padding:3px 8px" title="${esc(e || "无自定义效果")}">🎁 ${esc(n)}${e ? "·" + esc(e.slice(0, 12)) : ""}<span style="cursor:pointer" data-atlas-edit-treasure="${esc(n)}" title="修改效果">✎</span><span style="cursor:pointer;font-weight:bold" data-atlas-del="奴隶系统-宝物|${esc(n)}" title="删除">×</span></span>`; }).join("");
       h += `</div><div class="hint" style="margin-top:6px">✎ 可改宝物效果（不止名字），× 删除；改动即时保存</div></div>`;
@@ -3035,7 +3147,7 @@ async function renderAtlas(curCfg){
       h += `<div class="hint" style="margin-top:6px">地图/属性各对保存恢复，互不干扰</div></div>`;
       html += h;
     }
-    else html += mkSec("坐骑系统-坐骑", rides, "btnAtlasAddRide", "ride", "坐骑系统-坐骑");
+    else html += mkSec("坐骑系统-坐骑", rides, "btnAtlasAddRide", "ride", "坐骑系统-坐骑", `<button class="ghost sm" id="btnAtlasSaveRide">💾 保存坐骑</button><button class="ghost sm" id="btnAtlasResetRide">↩️ 恢复默认</button>`);
     html += `</div><div class="hint" style="margin-top:6px">武器增删即时生效；宝物/坐骑改动即时保存，只动各自范围；精灵卡改动点「保存图鉴」持久化</div>`;
     box.innerHTML = html;
     box.querySelectorAll("[data-atlas-tab]").forEach((b) => b.addEventListener("click", () => {
@@ -3132,6 +3244,37 @@ async function renderAtlas(curCfg){
     document.getElementById("btnAtlasAddWeapon")?.addEventListener("click", () => {
       const sel = document.getElementById("atlasPoolRar");
       poolUploadTo((sel && sel.value) || "SSR");
+    });
+    document.getElementById("btnAtlasSavePoolAttrs")?.addEventListener("click", () => savePoolAttrs());
+    document.getElementById("btnAtlasResetPoolAttrs")?.addEventListener("click", () => resetPoolAttrs());
+    document.getElementById("btnAtlasSaveTreasure")?.addEventListener("click", async () => {
+      try { await persistTreasure(); toast("宝物已保存", "ok"); }
+      catch (e) { toast("保存失败: " + e.message, "bad"); }
+      renderAtlas();
+    });
+    document.getElementById("btnAtlasResetTreasure")?.addEventListener("click", async () => {
+      if (!(await uiConfirm("直接恢复宝物为内置（酒神葫芦|四象护符）并清空自定义效果？旧数据不保留。", "恢复默认"))) return;
+      try {
+        window._TREAS_LIST = ["酒神葫芦", "四象护符"];
+        window._TREAS_EFF = {};
+        await persistTreasure();
+        toast("已恢复默认", "ok");
+      } catch (e) { toast("恢复失败: " + e.message, "bad"); }
+      renderAtlas();
+    });
+    document.getElementById("btnAtlasSaveRide")?.addEventListener("click", async () => {
+      try { await persistRideShop(); toast("坐骑已保存", "ok"); }
+      catch (e) { toast("保存失败: " + e.message, "bad"); }
+      renderAtlas();
+    });
+    document.getElementById("btnAtlasResetRide")?.addEventListener("click", async () => {
+      if (!(await uiConfirm("直接恢复坐骑商城为内置默认？旧数据不保留。", "恢复默认"))) return;
+      try {
+        SHOP_RIDE = JSON.parse(JSON.stringify(DEFAULT_RIDE_SHOP));
+        await persistRideShop();
+        toast("已恢复默认", "ok");
+      } catch (e) { toast("恢复失败: " + e.message, "bad"); }
+      renderAtlas();
     });
     document.getElementById("btnAtlasAddTreasure")?.addEventListener("click", async () => {
       let n = await uiPrompt("输入宝物名（奴隶系统-宝物）：", "", "添加宝物");
@@ -3852,17 +3995,12 @@ async function saveBackupCfg() {
       say("保存失败: " + res.error, false);
       return;
     }
-    // 优先校验后端直接回显的已持久化配置
+    // 优先校验后端直接回显的已持久化配置（密钥存独立文件，回显恒空，只核对非隐私键）
     const directCfg = (res && res["备份配置"]) ? res["备份配置"] : null;
     if (directCfg) {
       const savedSw = directCfg["WebDAV备份开关"] || "";
-      const savedUrl = directCfg["WebDAV服务器地址"] || "";
       if (savedSw && savedSw !== payload["备份配置"]["WebDAV备份开关"]) {
         say(`保存异常：备份开关保存未生效 (预期:${payload["备份配置"]["WebDAV备份开关"]}, 实际:${savedSw})`, false);
-        return;
-      }
-      if (payload["备份配置"]["WebDAV服务器地址"] && savedUrl !== payload["备份配置"]["WebDAV服务器地址"]) {
-        say(`保存异常：服务器地址保存未生效 (预期:${payload["备份配置"]["WebDAV服务器地址"]}, 实际:${savedUrl})`, false);
         return;
       }
     }

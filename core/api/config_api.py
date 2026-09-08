@@ -38,6 +38,19 @@ async def handle_commands(request, plugin_base=""):
 async def handle_cfg_get(request):
     try:
         cfg = getattr(ST, "_CONFIG", {}) or {}
+        # WebDAV 密钥回填显示（地址/用户名明文，密码恒空；密钥本体只在独立文件）
+        try:
+            if hasattr(ST, "wd_secret_load"):
+                _sec = dict(ST.wd_secret_load() or {})
+                if _sec and isinstance(cfg.get("备份配置"), dict):
+                    cfg = {**cfg, "备份配置": {**cfg["备份配置"]}}
+                    if _sec.get("WebDAV服务器地址"):
+                        cfg["备份配置"]["WebDAV服务器地址"] = _sec["WebDAV服务器地址"]
+                    if _sec.get("WebDAV用户名"):
+                        cfg["备份配置"]["WebDAV用户名"] = _sec["WebDAV用户名"]
+                    cfg["备份配置"]["WebDAV应用密码"] = ""
+        except Exception:
+            pass
         return no_cache_response(json_response(cfg))
     except Exception as e:
         return _err(f"get failed: {e}", 500)
@@ -49,6 +62,24 @@ async def handle_cfg_save(request, plugin_base=""):
         if not isinstance(p, dict) or not p:
             return _err("未能读取到有效配置数据(请求体为空或解析失败)，请重试", 400)
         norm = _cfg_layer._normalize_cfg(p)
+        # WebDAV 密钥分存：地址/用户名按 payload 落独立文件（含清空语义），密码仅非空更新；
+        # 内存/_CONFIG/镜像/快照/备份里一律留空，防泄露。
+        _secrets_changed = False
+        try:
+            _bsec = norm.get("备份配置")
+            if isinstance(_bsec, dict) and hasattr(ST, "wd_secret_set"):
+                for _k in ("WebDAV服务器地址", "WebDAV用户名"):
+                    if _k in _bsec:
+                        if ST.wd_secret_set(_k, str(_bsec.get(_k) or "")):
+                            _secrets_changed = True
+                        _bsec[_k] = ""
+                if "WebDAV应用密码" in _bsec:
+                    if str(_bsec.get("WebDAV应用密码") or "") != "":
+                        if ST.wd_secret_set("WebDAV应用密码", str(_bsec.get("WebDAV应用密码"))):
+                            _secrets_changed = True
+                    _bsec["WebDAV应用密码"] = ""
+        except Exception:
+            pass
         for sec, kv in norm.items():
             ST._CONFIG.setdefault(sec, {})
             ST._CONFIG[sec].update(kv)
@@ -81,7 +112,7 @@ async def handle_cfg_save(request, plugin_base=""):
             ST.sync_astrbot_config(ST._CONFIG)
         except Exception:
             pass
-        return no_cache_response(json_response({"saved": True, "备份配置": ST._CONFIG.get("备份配置", {})}))
+        return no_cache_response(json_response({"saved": True, "备份配置": ST._CONFIG.get("备份配置", {}), "webdav_secrets": "updated" if _secrets_changed else "kept"}))
     except Exception as e:
         return _err(f"save failed: {e}", 500)
 

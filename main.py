@@ -108,7 +108,7 @@ def _raw_file_response(data_bytes, filename):
 PLUGIN_ID = "astrbot_plugin_xbbot"
 PLUGIN_DESC = "小白(奴/签/银/娱/私/灵/骑/超管/帮派/冒险+主菜单+WebUI), 现代SQLite存储"
 PLUGIN_AUTHOR = "Light"
-PLUGIN_VERSION = "0.7.17"
+PLUGIN_VERSION = "0.7.18"
 PLUGIN_REPO = "https://github.com/imsuperone/xb"
 
 # 复用 router 的主菜单，保持单源
@@ -127,7 +127,7 @@ except Exception:
         "| ⚔️ 帮派系统 | 🗺️ 冒险系统 |\r\n"
         "----------------\r\n"
         "发送系统关键词打开菜单，如【签到系统】【精灵系统】\r\n"
-        "当前版本：v0.7.17"
+        "当前版本：v0.7.18"
     )
 
 
@@ -283,6 +283,8 @@ class XbBot(Star):
         context.register_web_api(f"/{PLUGIN_ID}/weapons/pool/delete", self.page_pool_delete, ["POST"], "抽奖武器删除")
         context.register_web_api(f"/{PLUGIN_ID}/weapons/pool/upload", self.page_pool_upload, ["POST"], "抽奖武器上传")
         context.register_web_api(f"/{PLUGIN_ID}/weapons/pool/img", self.page_pool_img, ["GET", "POST"], "抽奖武器单张预览")
+        context.register_web_api(f"/{PLUGIN_ID}/weapons/pool/attrs", self.page_pool_attrs, ["POST"], "抽奖武器属性保存")
+        context.register_web_api(f"/{PLUGIN_ID}/weapons/pool/replace_path", self.page_pool_replace_path, ["POST"], "抽奖武器内置选图")
         context.register_web_api(f"/{PLUGIN_ID}/backups/list", self.page_backups_list, ["GET"], "备份列表")
         context.register_web_api(f"/{PLUGIN_ID}/backups/restore", self.page_backups_restore, ["POST"], "恢复备份")
         context.register_web_api(f"/{PLUGIN_ID}/backups/delete", self.page_backups_delete, ["POST"], "删除备份")
@@ -899,6 +901,22 @@ class XbBot(Star):
             return await handle_pool_img(req)
         except Exception as e:
             return _err(f"pool img failed: {e}", 500)
+
+    async def page_pool_attrs(self, request=None, *args, **kwargs):
+        try:
+            req = request if request is not None else (args[0] if args else None)
+            from .core.api.game import handle_pool_attrs
+            return await handle_pool_attrs(req)
+        except Exception as e:
+            return _err(f"pool attrs failed: {e}", 500)
+
+    async def page_pool_replace_path(self, request=None, *args, **kwargs):
+        try:
+            req = request if request is not None else (args[0] if args else None)
+            from .core.api.game import handle_pool_replace_path
+            return await handle_pool_replace_path(req)
+        except Exception as e:
+            return _err(f"pool replace failed: {e}", 500)
 
     async def page_slave_users(self, request=None, *args, **kwargs):
         try:
