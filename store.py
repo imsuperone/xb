@@ -1499,28 +1499,33 @@ def backup_user_data(force=False, auto_upload=True):
     except Exception:
         pass
     now = time.time()
-    if _last_backup == 0:
+    # 跨进程/重载收敛：每次都用共享时钟（DB 镜像 + 目录最新）刷新 _last_backup，
+    # 多进程各持内存时钟会交错打出双倍备份，取最大后即收敛到单一节拍
+    try:
+        _shared = 0
         try:
             v = recall_get("last_backup_ts", "")
             if v and str(v).isdigit():
-                _last_backup = int(v)
-            else:
-                if BACKUP_DIR and os.path.isdir(BACKUP_DIR):
-                    latest = 0
-                    for root, _, files in os.walk(BACKUP_DIR):
-                        for fn in files:
-                            if fn.endswith(".db"):
-                                fp = os.path.join(root, fn)
-                                try:
-                                    mt = int(os.path.getmtime(fp))
-                                    if mt > latest:
-                                        latest = mt
-                                except Exception:
-                                    pass
-                    if latest:
-                        _last_backup = latest
+                _shared = int(v)
         except Exception:
             pass
+        try:
+            if BACKUP_DIR and os.path.isdir(BACKUP_DIR):
+                for root, _, files in os.walk(BACKUP_DIR):
+                    for fn in files:
+                        if fn.endswith(".db"):
+                            try:
+                                mt = int(os.path.getmtime(os.path.join(root, fn)))
+                                if mt > _shared:
+                                    _shared = mt
+                            except Exception:
+                                pass
+        except Exception:
+            pass
+        if _shared > _last_backup:
+            _last_backup = _shared
+    except Exception:
+        pass
     if not force and now - _last_backup < BACKUP_INTERVAL:
         return None
     if not BACKUP_DIR or not _DB:

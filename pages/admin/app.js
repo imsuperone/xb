@@ -715,7 +715,7 @@ const TAB_LOADERS = {
   config: async () => { return loadConfig(); },
   rank: async () => { const t = (document.getElementById("rankType") || {}).value || "money"; return loadRank(t); },
   cmds: async () => { return loadCommands(); },
-  spirits: async () => { try { await loadShops(); } catch(e){} return loadSpirits(); },
+  spirits: async () => { try { await loadShops(true); } catch(e){} return loadSpirits(); },
   shops: async () => { return loadShops(); },
   backups: async () => {
     if (typeof loadBackupCfg === "function") try { await loadBackupCfg(); } catch (e) {}
@@ -1603,7 +1603,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.7.27"
+        version: res.version || "0.7.28"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -1968,19 +1968,34 @@ function renderCmdNums(numCmd, isNew) {
   }
   let nums = CMD_NUMS[numCmd] || [];
   if (!nums.length && numCmd) {
-    // 通用兜底：按指令所属系统的全部数值节列出可调数值（int/float），保证每条指令都有变量可调
+    // 通用兜底：按指令名与键名/说明的关键词（二字重叠）精准匹配本系统数值，保证对得上、无关的不出现
     try {
+      const _cjk = (s) => (String(s || "").match(/[\u4e00-\u9fff]/g) || []);
+      const _bigrams = (s) => {
+        const cs = _cjk(s), out = {};
+        for (let i = 0; i + 1 < cs.length; i++) out[cs[i] + cs[i + 1]] = 1;
+        return out;
+      };
+      const _cb = _bigrams(numCmd);
       const eng = (typeof CMD_ENG !== "undefined" && CMD_ENG[numCmd]) || "";
       const secs = ENG_NUM_SECTIONS[eng] || [];
-      const out = [];
+      const scored = [];
+      const seen = {};
       secs.forEach((sec) => {
         const grp = (CFG.schema && CFG.schema.groups && CFG.schema.groups[sec]) || [];
         grp.forEach((it) => {
-          if (out.length >= 10) return;
-          if (it.type === "int" || it.type === "float") out.push([sec, it.key, it.key, it.type]);
+          if (it.type !== "int" && it.type !== "float") return;
+          const k = sec + "__" + it.key;
+          if (seen[k]) return;
+          seen[k] = 1;
+          const _kb = _bigrams(it.key + (it.desc || ""));
+          let hit = 0;
+          Object.keys(_cb).forEach((b) => { if (_kb[b]) hit++; });
+          if (hit > 0) scored.push([hit, sec, it]);
         });
       });
-      nums = out;
+      scored.sort((a, b) => b[0] - a[0]);
+      nums = scored.slice(0, 6).map(([s, sec, it]) => [sec, it.key, it.key, it.type]);
     } catch(e){}
   }
   if (!nums.length) {
@@ -2273,42 +2288,114 @@ function spiritMapCardsHTML(mapNames, maps, spirits, q) {
 
 // 地图卡片事件绑定（两处共用；输入即时写回 SPIRIT，结构操作刷新两处视图）
 function bindSpiritMapCards(root) {
+  // 事件委托：整块只绑 input+click 各一次，多次渲染不重复；覆盖地图卡与未上架区
   if (!root || !SPIRIT) return;
-  const maps = SPIRIT.maps || {};
-  const spirits = SPIRIT.spirits || {};
-  root.querySelectorAll("[data-map-toggle]").forEach((h) =>
-    h.addEventListener("click", () => {
-      const m = h.dataset.mapToggle;
-      SPIRIT_OPEN[m] = !SPIRIT_OPEN[m];
-      refreshSpiritViews();
-    }));
-  root.querySelectorAll("input[data-map-field]").forEach((inp) =>
-    inp.addEventListener("input", () => {
+  if (root.dataset.mapBound) return;
+  root.dataset.mapBound = "1";
+  const _maps = () => ((SPIRIT && SPIRIT.maps) || {});
+  const _spirits = () => ((SPIRIT && SPIRIT.spirits) || {});
+  const _setSpiritImg = (sn, path) => {
+    if (!sn || !path || !SPIRIT) return false;
+    const spirits = _spirits();
+    if (!spirits[sn]) spirits[sn] = {};
+    spirits[sn].img = path;
+    SPIRIT_DIRTY = true;
+    try {
+      const card = root.querySelector(`.sp-card[data-sp="${CSS.escape(sn)}"] input[data-s-field="img"]`);
+      if (card) card.value = path;
+    } catch (e) {}
+    return true;
+  };
+  const _spUpload = (sn) => {
+    if (!sn) return;
+    const inp = document.createElement("input"); inp.type = "file"; inp.accept = "image/*";
+    inp.onchange = async (e) => {
+      const file = e.target.files[0]; if (!file) return;
       try {
+        const r = await postFile("images/upload?dir=" + encodeURIComponent("data/img/spirits"), {}, file);
+        if (r && r.error) throw new Error(r.error);
+        const path = (r && (r.path || (r.data && r.data.path))) || ("data/img/spirits/" + file.name);
+        _setSpiritImg(sn, path);
+        refreshSpiritViews();
+        toast("形象图已绑定，点保存精灵生效", "ok");
+      } catch (err) { toast("上传失败:" + (err.message || err), "bad"); }
+    };
+    inp.click();
+  };
+  const _spBuiltin = async (sn) => {
+    if (!sn) return;
+    window.SHOP_PICK_TARGET = sn; window.SHOP_PICK_KIND = "spirit";
+    toast("已进入精灵图片目录，请单击选中图片后点“确定绑定”", "ok");
+    document.querySelectorAll(".tabs button").forEach(x => x.classList.remove("on"));
+    const rb = document.querySelector("[data-tab=\"imgs\"]"); if (rb) rb.classList.add("on");
+    document.querySelectorAll(".tab").forEach(x => x.classList.remove("on"));
+    const tab = document.getElementById("tab-imgs"); if (tab) tab.classList.add("on");
+    await loadImages("data/img/spirits");
+    const old = document.getElementById("shopPickTip"); if (old) old.remove();
+    const tip = document.createElement("div"); tip.id = "shopPickTip"; tip.style = "background:var(--accSoft);border:1px solid var(--acc);padding:8px 12px;border-radius:8px;margin-bottom:10px";
+    tip.innerHTML = `<b>为精灵 "${esc(sn)}" 选择内置形象图：</b> 精灵目录 data/img/spirits，可上下导航，然后 <button class="ghost sm" id="btnShopPickConfirm">确定绑定</button> <button class="ghost sm" id="btnShopPickCancel">取消</button>`;
+    const panel = document.querySelector("#tab-imgs .panel"); if (panel) panel.prepend(tip);
+    const backToSpirits = () => {
+      tip.remove(); window.SHOP_PICK_TARGET = null; window.SHOP_PICK_KIND = null;
+      document.querySelectorAll(".tabs button").forEach(x => x.classList.remove("on"));
+      const cb = document.querySelector("[data-tab=\"spirits\"]"); if (cb) cb.classList.add("on");
+      document.querySelectorAll(".tab").forEach(x => x.classList.remove("on"));
+      const stab = document.getElementById("tab-spirits"); if (stab) stab.classList.add("on");
+    };
+    document.getElementById("btnShopPickConfirm")?.addEventListener("click", () => {
+      const sel = IMG_SELECTED;
+      if (!sel) { toast("请先选中图片文件", "bad"); return; }
+      const ext = (sel.split(".").pop() || "").toLowerCase();
+      if (!["png", "jpg", "jpeg", "gif", "webp", "bmp", "ico"].includes(ext)) { toast("请选择图片文件", "bad"); return; }
+      if (window._imgIsDir && window._imgIsDir(sel)) { toast("不能选择文件夹", "bad"); return; }
+      _setSpiritImg(sn, sel);
+      backToSpirits();
+      refreshSpiritViews();
+      toast("形象图已绑定，点保存精灵生效", "ok");
+    });
+    document.getElementById("btnShopPickCancel")?.addEventListener("click", () => { backToSpirits(); });
+  };
+  root.addEventListener("input", (e) => {
+    const inp = e.target;
+    if (!inp || !inp.matches) return;
+    try {
+      if (inp.matches("input[data-map-field]")) {
         const card = inp.closest(".s-mapcard");
         const mname = card ? card.dataset.map : "";
+        const maps = _maps();
         if (!mname || mname === "__orphans__" || !maps[mname]) return;
         const mo = maps[mname];
         if (inp.dataset.mapField === "lv") mo.lv = Number(inp.value) || 1;
         else if (inp.dataset.mapField === "drops") mo.drops = String(inp.value).split(/[,，]/).map((s) => s.trim()).filter(Boolean);
         SPIRIT_DIRTY = true;
-      } catch (e) {}
-    }));
-  root.querySelectorAll("input[data-sp-spirit]").forEach((inp) =>
-    inp.addEventListener("input", () => {
-      try {
+      } else if (inp.matches("input[data-sp-spirit]")) {
         const card = inp.closest(".sp-card");
         const sn = card ? card.dataset.sp : "";
         if (!sn) return;
+        const spirits = _spirits();
         if (!spirits[sn]) spirits[sn] = {};
         const o = spirits[sn];
         const fk = inp.dataset.sField;
         o[fk] = ["hp", "atk", "def", "spa", "spd", "spe", "lv"].includes(fk) ? (Number(inp.value) || 0) : inp.value;
         SPIRIT_DIRTY = true;
-      } catch (e) {}
-    }));
-  root.querySelectorAll("[data-del-map]").forEach((b) =>
-    b.addEventListener("click", async () => {
+      }
+    } catch (err) {}
+  });
+  root.addEventListener("click", async (e) => {
+    const t = e.target && e.target.closest ? e.target : null;
+    if (!t) return;
+    const maps = _maps();
+    const spirits = _spirits();
+    const tgl = t.closest("[data-map-toggle]");
+    if (tgl && root.contains(tgl)) {
+      const m = tgl.dataset.mapToggle;
+      SPIRIT_OPEN[m] = !SPIRIT_OPEN[m];
+      refreshSpiritViews();
+      return;
+    }
+    const b = t.closest("button");
+    if (!b || !root.contains(b)) return;
+    if (b.hasAttribute("data-del-map")) {
       const k = b.dataset.delMap;
       const _last = Object.keys(maps).length <= 1;
       if (!(await uiConfirm("确认删除地图 \"" + k + "\"？（点保存精灵生效）" + (_last ? "\n\n注意：这是最后一张，删光后运行时自动使用内置地图。" : ""), "删除地图"))) return;
@@ -2316,21 +2403,17 @@ function bindSpiritMapCards(root) {
       SPIRIT_DIRTY = true;
       refreshSpiritViews();
       toast("已删除地图，点保存精灵生效", "ok");
-    }));
-  root.querySelectorAll("[data-del-spirit]").forEach((b) =>
-    b.addEventListener("click", async () => {
+    } else if (b.hasAttribute("data-del-spirit")) {
       const spName = b.dataset.delSpirit;
       if (!(await uiConfirm("确认移除精灵 \"" + spName + "\"？（点保存精灵生效）", "移除精灵"))) return;
       Object.keys(maps).forEach((mk) => {
         maps[mk].drops = (maps[mk].drops || []).map(String).filter((x) => x !== spName);
       });
-      try { if (spirits && spirits[spName]) delete spirits[spName]; } catch (e) {}
+      try { if (spirits && spirits[spName]) delete spirits[spName]; } catch (err) {}
       SPIRIT_DIRTY = true;
       refreshSpiritViews();
       toast("已移除精灵，点保存精灵生效", "ok");
-    }));
-  root.querySelectorAll("[data-assign-spirit]").forEach((b) =>
-    b.addEventListener("click", async () => {
+    } else if (b.hasAttribute("data-assign-spirit")) {
       const spName = b.dataset.assignSpirit;
       const card = b.closest(".sp-card");
       const sel = card ? card.querySelector("[data-assign-map]") : null;
@@ -2343,87 +2426,24 @@ function bindSpiritMapCards(root) {
       SPIRIT_DIRTY = true;
       refreshSpiritViews();
       toast(`已将「${spName}」分配进「${mk}」，点保存精灵生效`, "ok");
-    }));
-  root.querySelectorAll("[data-sp-view]").forEach((b) => b.addEventListener("click", async () => {
-    const p = b.dataset.spView;
-    if (!p) return;
-    try {
-      const r = await getBridge().apiPost("images/thumb", { path: p });
-      const thumb = r && (r.thumb || (r.data && r.data.thumb));
-      if (r && r.error) throw new Error(r.error);
-      if (thumb) showLightbox(thumb, String(p).split("/").pop());
-      else toast("无预览", "bad");
-    } catch (err) { toast("预览失败:" + (err.message || err), "bad"); }
-  }));
-  root.querySelectorAll("[data-add-spirit]").forEach((b) =>
-    b.addEventListener("click", async () => {
-      const mk = b.dataset.addSpirit;
-      openSpiritAddModal(mk);
-    }));
-  const _setSpiritImg = (sn, path) => {
-    if (!sn || !path) return false;
-    if (!spirits[sn]) spirits[sn] = {};
-    spirits[sn].img = path;
-    SPIRIT_DIRTY = true;
-    try {
-      const card = root.querySelector(`.sp-card[data-sp="${CSS.escape(sn)}"] input[data-s-field="img"]`);
-      if (card) card.value = path;
-    } catch (e) {}
-    return true;
-  };
-  root.querySelectorAll("[data-sp-pick-upload]").forEach((b) =>
-    b.addEventListener("click", () => {
-      const sn = b.dataset.spPickUpload;
-      if (!sn) return;
-      const inp = document.createElement("input"); inp.type = "file"; inp.accept = "image/*";
-      inp.onchange = async (e) => {
-        const file = e.target.files[0]; if (!file) return;
-        try {
-          const r = await postFile("images/upload?dir=" + encodeURIComponent("data/img/spirits"), {}, file);
-          if (r && r.error) throw new Error(r.error);
-          const path = (r && (r.path || (r.data && r.data.path))) || ("data/img/spirits/" + file.name);
-          _setSpiritImg(sn, path);
-          refreshSpiritViews();
-          toast("形象图已绑定，点保存精灵生效", "ok");
-        } catch (err) { toast("上传失败:" + (err.message || err), "bad"); }
-      };
-      inp.click();
-    }));
-  root.querySelectorAll("[data-sp-pick-builtin]").forEach((b) =>
-    b.addEventListener("click", async () => {
-      const sn = b.dataset.spPickBuiltin;
-      if (!sn) return;
-      window.SHOP_PICK_TARGET = sn; window.SHOP_PICK_KIND = "spirit";
-      toast("已进入精灵图片目录，请单击选中图片后点“确定绑定”", "ok");
-      document.querySelectorAll(".tabs button").forEach(x => x.classList.remove("on"));
-      const rb = document.querySelector("[data-tab=\"imgs\"]"); if (rb) rb.classList.add("on");
-      document.querySelectorAll(".tab").forEach(x => x.classList.remove("on"));
-      const tab = document.getElementById("tab-imgs"); if (tab) tab.classList.add("on");
-      await loadImages("data/img/spirits");
-      const old = document.getElementById("shopPickTip"); if (old) old.remove();
-      const tip = document.createElement("div"); tip.id = "shopPickTip"; tip.style = "background:var(--accSoft);border:1px solid var(--acc);padding:8px 12px;border-radius:8px;margin-bottom:10px";
-      tip.innerHTML = `<b>为精灵 "${esc(sn)}" 选择内置形象图：</b> 精灵目录 data/img/spirits，可上下导航，然后 <button class="ghost sm" id="btnShopPickConfirm">确定绑定</button> <button class="ghost sm" id="btnShopPickCancel">取消</button>`;
-      const panel = document.querySelector("#tab-imgs .panel"); if (panel) panel.prepend(tip);
-      const backToSpirits = () => {
-        tip.remove(); window.SHOP_PICK_TARGET = null; window.SHOP_PICK_KIND = null;
-        document.querySelectorAll(".tabs button").forEach(x => x.classList.remove("on"));
-        const cb = document.querySelector("[data-tab=\"spirits\"]"); if (cb) cb.classList.add("on");
-        document.querySelectorAll(".tab").forEach(x => x.classList.remove("on"));
-        const stab = document.getElementById("tab-spirits"); if (stab) stab.classList.add("on");
-      };
-      document.getElementById("btnShopPickConfirm")?.addEventListener("click", () => {
-        const sel = IMG_SELECTED;
-        if (!sel) { toast("请先选中图片文件", "bad"); return; }
-        const ext = (sel.split(".").pop() || "").toLowerCase();
-        if (!["png", "jpg", "jpeg", "gif", "webp", "bmp", "ico"].includes(ext)) { toast("请选择图片文件", "bad"); return; }
-        if (window._imgIsDir && window._imgIsDir(sel)) { toast("不能选择文件夹", "bad"); return; }
-        _setSpiritImg(sn, sel);
-        backToSpirits();
-        refreshSpiritViews();
-        toast("形象图已绑定，点保存精灵生效", "ok");
-      });
-      document.getElementById("btnShopPickCancel")?.addEventListener("click", () => { backToSpirits(); });
-    }));
+    } else if (b.hasAttribute("data-sp-view")) {
+      const p = b.dataset.spView;
+      if (!p) return;
+      try {
+        const r = await getBridge().apiPost("images/thumb", { path: p });
+        const thumb = r && (r.thumb || (r.data && r.data.thumb));
+        if (r && r.error) throw new Error(r.error);
+        if (thumb) showLightbox(thumb, String(p).split("/").pop());
+        else toast("无预览", "bad");
+      } catch (err) { toast("预览失败:" + (err.message || err), "bad"); }
+    } else if (b.hasAttribute("data-add-spirit")) {
+      openSpiritAddModal(b.dataset.addSpirit);
+    } else if (b.hasAttribute("data-sp-pick-upload")) {
+      _spUpload(b.dataset.spPickUpload);
+    } else if (b.hasAttribute("data-sp-pick-builtin")) {
+      _spBuiltin(b.dataset.spPickBuiltin);
+    }
+  });
 }
 let _SP_ADD_FILE = null;
 let _SP_ADD_SRC = "";
@@ -2554,6 +2574,7 @@ function renderShop(q = "", forceOpen = false) {
   const wasOpen = curDetails ? curDetails.open : forceOpen;
   let html = `<details class="panel" style="margin:0"${wasOpen ? " open" : ""}><summary style="cursor:pointer;font-weight:600">🎒 精灵道具商城 (spirit_shop) — ${names.length} 件（点击折叠/展开）${(!SPIRIT_CUSTOM.shop && !SPIRIT_DIRTY && !q) ? " · <span style='color:var(--muted);font-weight:400'>内置默认·未自定义</span>" : ""}</summary>`;
   html += `<div class="hint" style="margin-top:8px">类型决定效果：精灵球=收服率%（大师球100必中）/ 等级=奇异甜食+Lv / HP·攻击·防御·特攻·特防=+对应点数 / 进化=进化液。改完点保存道具，只写精灵道具。</div>`;
+  html += `<div style="margin-top:8px"><button id="shopAddItemTop" class="ghost sm">＋ 添加精灵道具</button></div>`;
   if (!Object.keys(shop).length && !q) {
     html += `<div class="hint" style="margin:8px 0">当前无自定义道具，运行中使用内置 ${_spiritBuiltinCount("shop")} 件`
       + ` <button class="ghost sm" id="btnSpiritUseBuiltinShop">载入内置为起点</button></div>`;
@@ -2573,7 +2594,7 @@ function renderShop(q = "", forceOpen = false) {
         `<button class="s-del" data-del-key="${esc(key)}" style="margin-left:auto">删除</button></div>`;
     });
   }
-  html += `<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button id="shopAddItem" class="ghost sm">＋ 添加精灵道具</button><button id="btnShopSpiritSave" class="ghost sm">💾 保存道具</button><button id="btnShopSpiritReset" class="ghost sm">↩️ 恢复默认</button></div></details>`;
+  html += `<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button id="btnShopSpiritSave" class="ghost sm">💾 保存道具</button><button id="btnShopSpiritReset" class="ghost sm">↩️ 恢复默认</button></div></details>`;
   body.innerHTML = html;
   document.getElementById("btnSpiritUseBuiltinShop")?.addEventListener("click", () => {
     if (_spiritLoadBuiltin("shop")) { renderShop(q, true); toast("已载入内置道具，点保存道具生效", "ok"); }
@@ -2605,7 +2626,7 @@ function renderShop(q = "", forceOpen = false) {
       renderShop(q, true);
       toast("已删除，点保存道具生效", "ok");
     }));
-  const add = body.querySelector("#shopAddItem");
+  const add = body.querySelector("#shopAddItemTop");
   if (add) add.addEventListener("click", async () => { openShopItemAddModal(q); });
 }
 function openShopItemAddModal(q) {
@@ -2951,7 +2972,6 @@ const DEFAULT_RIDE_SHOP = {
 let SHOP_RIDE = {};
 let SHOP_DIRTY = false;
 let SHOP_RIDE_CUSTOM = true;   // false=当前展示的是内置默认（未自定义），保存后即转为自定义
-let GACHA_WEAPONS = { SSR: [], SR: [], R: [] };  // 抽奖武器名对照（只读）
 let POOL_WEAPONS = { SSR: [], SR: [], R: [] };   // 抽奖武器池文件（可编辑：改名/改稀有度/删除/上传）
 
 function _parseShopInput(raw, normalize) {
@@ -2986,7 +3006,7 @@ function _normRideObj(d) {
   return out;
 }
 
-async function loadPool() {
+async function loadPool(skipAtlas = false) {
   // 抽奖武器池文件列表（生效目录，操作即时生效，无需保存）
   try {
     const d = await getBridge().apiGet("weapons/pool").catch(() => null);
@@ -3001,7 +3021,7 @@ async function loadPool() {
     POOL_ATTRS_DIRTY = false;
   } catch (e) {}
   try { renderPoolBox(); } catch (e) {}
-  try { if (ATLAS_CUR === "weapon") renderAtlas(); } catch (e) {}
+  try { if (!skipAtlas && ATLAS_CUR === "weapon") renderAtlas(); } catch (e) {}
 }
 function poolCount() {
   try { return ["SSR", "SR", "R"].reduce((n, r) => n + ((POOL_WEAPONS && POOL_WEAPONS[r]) || []).length, 0); } catch (e) { return 0; }
@@ -3017,6 +3037,7 @@ function renderPoolBox(forceOpen=false){
   try { box.querySelectorAll("details[data-pool-group]").forEach((d) => { openGroups[d.dataset.poolGroup] = d.open; }); } catch (e) {}
   let html=`<details class="panel" style="margin:0"${wasOpen?" open":""}><summary style="cursor:pointer;font-weight:600">🎰 抽奖武器池 — ${poolCount()} 件（文件即池，改名/稀有度/删/传即时生效，属性需保存）</summary>`;
   html+=`<div class="hint" style="margin-top:8px">武器=图片文件本身：改名改文件名，稀有度改所在目录；攻击加成参战、描述进详情，改完点保存武器属性</div>`;
+  html+=`<div style="margin-top:8px"><button class="ghost sm" id="btnPoolUploadTop">＋ 添加武器</button></div>`;
   ["SSR","SR","R"].forEach((rar)=>{
     const items=(POOL_WEAPONS&&POOL_WEAPONS[rar])||[];
     const open = openGroups[rar] !== undefined ? openGroups[rar] : false;
@@ -3044,7 +3065,7 @@ function renderPoolBox(forceOpen=false){
     });
     html+=`</details>`;
   });
-  html+=`<div style="margin-top:10px;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="ghost sm" id="btnPoolUpload">＋ 添加武器</button><button class="ghost sm" id="btnPoolAttrsSave">💾 保存武器属性</button><button class="ghost sm" id="btnPoolAttrsReset">↩️ 恢复默认</button></div></details>`;
+  html+=`<div style="margin-top:10px;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="ghost sm" id="btnPoolAttrsSave">💾 保存武器属性</button><button class="ghost sm" id="btnPoolAttrsReset">↩️ 恢复默认</button></div></details>`;
   box.innerHTML=html;
   // 分区展开时懒加载图片预览（自动匹配，展开才取，不卡首屏）
   box.querySelectorAll("details[data-pool-group]").forEach((d) => {
@@ -3187,7 +3208,7 @@ function renderPoolBox(forceOpen=false){
   }));
   document.getElementById("btnPoolAttrsSave")?.addEventListener("click", () => savePoolAttrs());
   document.getElementById("btnPoolAttrsReset")?.addEventListener("click", () => resetPoolAttrs());
-  document.getElementById("btnPoolUpload")?.addEventListener("click", ()=>openPoolAddModal("SSR"));
+  document.getElementById("btnPoolUploadTop")?.addEventListener("click", ()=>openPoolAddModal("SSR"));
 }
 async function savePoolAttrs() {
   try {
@@ -3350,6 +3371,7 @@ function renderShopRideBox(forceOpen = false) {
   const wasOpen = curDetails ? curDetails.open : forceOpen;
   let html = `<details class="panel" style="margin:0"${wasOpen ? " open" : ""}><summary style="cursor:pointer;font-weight:600">🐴 坐骑商城 (ride_shop) — ${entries.length} 件（点击折叠/展开）${(SHOP_RIDE_CUSTOM || SHOP_DIRTY) ? "" : " · <span style='color:var(--muted);font-weight:400'>内置默认·未自定义</span>"}</summary>`;
   html += `<div class="hint" style="margin-top:8px">每行一个坐骑，支持改名、改价、删、绑图（图片路径如 data/img/rides/企鹅.jpg，留空自动匹配）</div>`;
+  html += `<div style="margin-top:8px"><button class="ghost sm" id="btnRideAddTop">＋ 添加坐骑</button></div>`;
   if (!entries.length) {
     html += `<div class="hint" style="margin:8px 0">当前为空，运行时使用内置坐骑（${Object.keys(DEFAULT_RIDE_SHOP).length} 种）；可添加或恢复默认</div>`;
   }
@@ -3368,7 +3390,7 @@ function renderShopRideBox(forceOpen = false) {
       `<div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${showImg ? `<button class="ghost sm" data-ride-view="${esc(showImg)}">浏览图片</button>` : `<span style="color:var(--muted);font-size:11px">无图</span>`}<button class="ghost sm" data-ride-pick="${esc(name)}">外置选图</button><button class="ghost sm" data-ride-pick-builtin="${esc(name)}">内置选图</button><button class="s-del" data-ride-del="${esc(name)}">删除</button></div>` +
       `</div>`;
   });
-  html += `<div style="margin-top:8px"><button class="ghost sm" id="btnRideAdd">＋ 添加坐骑</button> <button class="ghost sm" id="btnRideReset">↩️ 恢复默认</button></div></details>`;
+  html += `<div style="margin-top:8px"><button class="ghost sm" id="btnRideReset">↩️ 恢复默认</button></div></details>`;
   box.innerHTML = html;
   box.querySelectorAll("[data-ride-name]").forEach(inp => inp.addEventListener("change", (e) => {
     const old = e.target.closest("[data-ride-item]").dataset.rideItem;
@@ -3461,7 +3483,7 @@ function renderShopRideBox(forceOpen = false) {
       else toast("无预览", "bad");
     } catch (err) { toast("预览失败:" + (err.message || err), "bad"); }
   }));
-  const addBtn = document.getElementById("btnRideAdd");
+  const addBtn = document.getElementById("btnRideAddTop");
   if (addBtn) addBtn.addEventListener("click", () => openRideAddModal());
   const resetBtn = document.getElementById("btnRideReset");
   if (resetBtn) resetBtn.addEventListener("click", async () => {
@@ -3731,8 +3753,8 @@ async function renderAtlas(curCfg){
       renderAtlas();
     }));
     try {
-      const _sc = document.getElementById("atlasSpiritCards");
-      if (_sc) bindSpiritMapCards(_sc);
+      // 委托绑在 atlasBox 上（一次，多次渲染不重复），覆盖地图卡与未上架区
+      bindSpiritMapCards(box);
     } catch (e) {}
     box.querySelectorAll("[data-atlas-edit-treasure]").forEach(el => el.addEventListener("click", async () => {
       const n = el.dataset.atlasEditTreasure;
@@ -3810,7 +3832,7 @@ async function renderAtlas(curCfg){
   } catch (e) { box.innerHTML = `<span style="color:var(--muted)">图鉴加载失败: ${esc(e.message)}</span>`; }
 }
 
-async function loadShops() {
+async function loadShops(skipAtlas = false) {
   const msg = document.getElementById("shopMsg");
   try {
     const [cur, spiritData] = await Promise.all([
@@ -3818,10 +3840,6 @@ async function loadShops() {
       SPIRIT ? Promise.resolve(SPIRIT) : getBridge().apiGet("spirits").catch(() => null)
     ]);
     if (spiritData) SPIRIT = spiritData;
-    try {
-      const gachaData = await getBridge().apiGet("gacha/weapons").catch(() => null);
-      if (gachaData && (gachaData.ok || gachaData.pool)) GACHA_WEAPONS = gachaData.pool || gachaData;
-    } catch (e) {}
     const sec = (cur || {})["商城图鉴"] || {};
     const _rr = _parseShopInput(sec["ride_shop"], _normRideObj);
     if (Object.keys(_rr.data).length) { SHOP_RIDE = _rr.data; SHOP_RIDE_CUSTOM = true; }
@@ -3838,8 +3856,8 @@ async function loadShops() {
     syncShopRaw();
     renderShopRideBox();
     try { renderShop(); } catch (e) {}
-    try { await loadPool(); } catch (e) {}
-    try { renderAtlas(cur); } catch (e) {}
+    try { await loadPool(true); } catch (e) {}
+    if (!skipAtlas) { try { renderAtlas(cur); } catch (e) {} }
     if (msg) { msg.textContent = ""; msg.classList.remove("ok", "bad"); }
   } catch (e) {
     if (msg) { msg.textContent = "加载失败: " + e.message; msg.classList.add("bad"); }
@@ -4031,7 +4049,6 @@ function renderBackups(d, _q) {
       <button class="ghost sm" style="pointer-events:none">进入 ➔</button>
     </div>`;
   });
-  const _sc = (d && d.sidecar && d.sidecar.ok) ? d.sidecar : null;
   (d.files || []).forEach((x) => {
     if (q && !x.name.toLowerCase().includes(q)) return;
     const selCls = window.BACKUP_SELECTED === x.path ? ' selected' : '';
@@ -4039,7 +4056,7 @@ function renderBackups(d, _q) {
       <div class="bk-icon">💾</div>
       <div class="bk-info">
         <div class="bk-name">${esc(x.name)}</div>
-        <div class="bk-meta"><span>📦 大小: ${esc(x.size || "0KB")}</span><span>🕒 备份时间: ${esc(x.mtime || "")}${_sc ? ` <span title=".xb_last_backup.json 为防重文件，无需删除：文件锁配合防多进程/热重载打出双份备份${_sc.time ? "（最近：" + esc(_sc.time) + "）" : ""}" style="color:var(--ok)">🔒 防重保护中</span>` : ""}</span></div>
+        <div class="bk-meta"><span>📦 大小: ${esc(x.size || "0KB")}</span><span>🕒 备份时间: ${esc(x.mtime || "")}</span></div>
       </div>
       <span style="font-size:12px;color:var(--muted)">${selCls ? '✓ 已选中' : '单击选中'}</span>
     </div>`;
