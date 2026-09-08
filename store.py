@@ -934,14 +934,21 @@ def _auto_migrate_and_heal(cand, base):
                     shutil.copy2(src_f, dst_f)
                 except Exception:
                     pass
-        # 内置武器图库自愈迁移
-        src_gacha = os.path.join(base, "data", "gacha_img")
-        dst_gacha = os.path.join(cand, "gacha_img")
-        if os.path.isdir(src_gacha):
-            try:
-                shutil.copytree(src_gacha, dst_gacha, dirs_exist_ok=True)
-            except Exception:
-                pass
+        # 内置武器图库自愈迁移（仅全新时播种一次；已存在则不动，避免覆盖用户改池/删图；
+        # 旧 data/gacha_img 布局继续兼容读取，不强制搬迁）
+        try:
+            _dst_new = os.path.join(cand, "img", "gacha")
+            _dst_old = os.path.join(cand, "gacha_img")
+            _has_new = os.path.isdir(_dst_new) and bool(os.listdir(_dst_new))
+            _has_old = os.path.isdir(_dst_old) and bool(os.listdir(_dst_old))
+            if not _has_new and not _has_old:
+                _src_new = os.path.join(base, "data", "img", "gacha")
+                _src_old = os.path.join(base, "data", "gacha_img")
+                _src = _src_new if os.path.isdir(_src_new) else _src_old
+                if os.path.isdir(_src):
+                    shutil.copytree(_src, _dst_new, dirs_exist_ok=True)
+        except Exception:
+            pass
         # 兼容旧 groups/wallet 目录自愈
         for sub in ("groups", "wallet"):
             src_sub = os.path.join(base, "data", sub)
@@ -1255,7 +1262,8 @@ def _write_backup_sidecar(ts, path):
         _p = _backup_sidecar_path()
         if _p:
             with open(_p, "w", encoding="utf-8") as _f:
-                json.dump({"ts": float(ts), "path": str(path)}, _f)
+                json.dump({"ts": float(ts), "path": str(path),
+                           "note": "此文件为防重文件，无需删除（文件锁配合防多进程/热重载打出双份备份）"}, _f, ensure_ascii=False)
     except Exception:
         pass
 
@@ -1727,6 +1735,55 @@ def wd_cfg_restore():
         _wd_secret_migrate()
     except Exception:
         pass
+    try:
+        _vote_backup_cfg()
+    except Exception:
+        pass
+
+
+_VOTE_KEYS = ("WebDAV备份开关", "自动备份开关", "备份间隔小时", "保留备份数量", "WebDAV远端目录")
+
+def _vote_backup_cfg():
+    """备份配置三源投票：持久文件与 DB 镜像一致且非空、与内存不一致时，以持久侧为准。
+    专治启动参数/外部重置把已保存值（如保留 30）滚回旧值；文件与镜像在每次保存时同步更新，
+    二者一致即代表最后一次成功保存，内存更新必落盘，不会误伤正常改动。返回修正键。"""
+    fixed = []
+    try:
+        fsec = {}
+        try:
+            p = CONFIG_FILE
+            if p and os.path.isfile(p):
+                with open(p, encoding="utf-8") as f:
+                    raw = json.load(f)
+                if isinstance(raw, dict):
+                    for k, v in raw.items():
+                        if "__" in str(k):
+                            sec, key = str(k).split("__", 1)
+                            if sec == "备份配置":
+                                fsec[key] = v if isinstance(v, dict) else str(v)
+                    if isinstance(raw.get("备份配置"), dict):
+                        for k, v in raw["备份配置"].items():
+                            fsec[str(k)] = v if isinstance(v, dict) else str(v)
+        except Exception:
+            fsec = {}
+        mem = _CONFIG.get("备份配置") if isinstance(_CONFIG, dict) else None
+        if not isinstance(mem, dict):
+            return fixed
+        for k in _VOTE_KEYS:
+            try:
+                mv = mem.get(k, "")
+                mv_s = "" if isinstance(mv, dict) else str(mv or "")
+                fv = fsec.get(k, "")
+                fv_s = "" if isinstance(fv, dict) else str(fv or "")
+                dv = str(recall_get("wdcfg__" + k, "") or "")
+                if fv_s != "" and fv_s == dv and mv_s != fv_s:
+                    mem[k] = fsec[k] if isinstance(fsec[k], dict) else fv_s
+                    fixed.append(k)
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return fixed
 
 
 _WD_SECRET_KEYS = ("WebDAV服务器地址", "WebDAV用户名", "WebDAV应用密码")

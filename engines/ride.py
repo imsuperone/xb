@@ -22,15 +22,40 @@ RIDES = {
 }
 RIDE_TYPE = "坐骑"
 
-_IMG_BASE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                         "data", "img", "坐骑图标")
-# 兼容 Linux 部署的多种数据目录布局
+_PLUGIN_BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_IMG_BASE = os.path.join(_PLUGIN_BASE, "data", "img", "rides")
+# 兼容 Linux 部署的多种数据目录布局 + 旧中文目录
 _ALT_IMG_BASES = [
     _IMG_BASE,
-    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "gacha_img"),
+    os.path.join(_PLUGIN_BASE, "data", "img", "坐骑图标"),
+    os.path.join(_PLUGIN_BASE, "data", "img", "gacha"),
+    "/AstrBot/data/plugins/astrbot_plugin_xbbot/data/img/rides",
+    "/AstrBot/data/plugin_data/astrbot_plugin_xbbot/data/img/rides",
     "/AstrBot/data/plugins/astrbot_plugin_xbbot/data/img/坐骑图标",
     "/AstrBot/data/plugin_data/astrbot_plugin_xbbot/data/img/坐骑图标",
 ]
+
+
+def _alias_img_path(p):
+    """旧路径别名：坐骑图标/gacha_img ↔ rides/img/gacha，双向兼容已存配置"""
+    try:
+        s = str(p or "")
+        if not s:
+            return []
+        out = [s]
+        pairs = (("坐骑图标", "rides"), ("rides", "坐骑图标"),
+                 ("data/gacha_img", "data/img/gacha"), ("data\\gacha_img", "data\\img\\gacha"),
+                 ("data/img/gacha", "data/gacha_img"), ("data\\img\\gacha", "data\\gacha_img"))
+        for a, b in pairs:
+            if a in s and b not in s:
+                out.append(s.replace(a, b))
+        seen = []
+        for x in out:
+            if x not in seen:
+                seen.append(x)
+        return seen
+    except Exception:
+        return [p]
 
 
 def _mount_img(name):
@@ -218,16 +243,16 @@ def cmd_my(gid, qq):
 
 
 DEFAULT_RIDE_SHOP_EXT = {
-    "企鹅": {"price": 213250, "img": "data/img/坐骑图标/企鹅.jpg"},
-    "伞兵": {"price": 500000, "img": "data/img/坐骑图标/伞兵.jpg"},
-    "宝驴": {"price": 1000000, "img": "data/img/坐骑图标/宝驴.jpg"},
-    "保时捷": {"price": 1500000, "img": "data/img/坐骑图标/保时捷.jpg"},
-    "法拉利": {"price": 1500000, "img": "data/img/坐骑图标/法拉利.jpg"},
-    "玛莎拉蒂": {"price": 1500000, "img": "data/img/坐骑图标/玛莎拉蒂.jpg"},
-    "劳斯莱斯": {"price": 1500000, "img": "data/img/坐骑图标/劳斯莱斯.jpg"},
-    "布加迪威龙": {"price": 1500000, "img": "data/img/坐骑图标/布加迪威龙.jpg"},
-    "私人航空": {"price": 5000000, "img": "data/img/坐骑图标/私人航空.jpg"},
-    "老八": {"price": 500000, "img": "data/img/坐骑图标/老八.jpg"},
+    "企鹅": {"price": 213250, "img": "data/img/rides/企鹅.jpg"},
+    "伞兵": {"price": 500000, "img": "data/img/rides/伞兵.jpg"},
+    "宝驴": {"price": 1000000, "img": "data/img/rides/宝驴.jpg"},
+    "保时捷": {"price": 1500000, "img": "data/img/rides/保时捷.jpg"},
+    "法拉利": {"price": 1500000, "img": "data/img/rides/法拉利.jpg"},
+    "玛莎拉蒂": {"price": 1500000, "img": "data/img/rides/玛莎拉蒂.jpg"},
+    "劳斯莱斯": {"price": 1500000, "img": "data/img/rides/劳斯莱斯.jpg"},
+    "布加迪威龙": {"price": 1500000, "img": "data/img/rides/布加迪威龙.jpg"},
+    "私人航空": {"price": 5000000, "img": "data/img/rides/私人航空.jpg"},
+    "老八": {"price": 500000, "img": "data/img/rides/老八.jpg"},
 }
 
 
@@ -277,24 +302,28 @@ def _ride_shop():
     return out
 
 def _ride_img_path(name):
-    """取坐骑绑定图片路径(优先配置的 img)，否则默认坐骑图标"""
+    """取坐骑绑定图片路径(优先配置的 img，新旧目录双向兼容)，否则默认坐骑图标"""
     raw = _ride_shop_raw()
     if raw and isinstance(raw, dict):
         v = raw.get(name)
         if isinstance(v, dict) and v.get("img"):
             p = str(v.get("img")).strip()
             if p:
-                # 支持相对 data/... 与绝对路径
+                cands = []
                 if os.path.isabs(p):
-                    return [p] if os.path.isfile(p) else []
-                # 相对插件 data 目录
-                base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                cand = os.path.join(base, p)
-                if os.path.isfile(cand):
-                    return [cand]
-                # 也尝试直接作为文件系统路径
-                if os.path.isfile(p):
-                    return [p]
+                    cands.append(p)
+                else:
+                    # 相对插件 data 目录 + 旧路径别名
+                    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                    for _ap in _alias_img_path(p):
+                        cands.append(os.path.join(base, _ap))
+                    cands.append(p)
+                for cand in cands:
+                    try:
+                        if cand and os.path.isfile(cand):
+                            return [cand]
+                    except Exception:
+                        continue
     return _mount_img(name)
 
 

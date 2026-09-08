@@ -89,7 +89,21 @@ async def handle_images_upload(request, plugin_base=""):
     else:
         if hasattr(form, "filename") or hasattr(form, "read"):
             f = form
+    # base64 直传（iframe 桥 postMessage 无法克隆 FormData 时用）
+    b64_name, b64_data = "", b""
     if not f:
+        try:
+            pj = await get_req_json(request, default={})
+            if isinstance(pj, dict):
+                b64_name = str(pj.get("filename", "") or "").strip()
+                _b64s = str(pj.get("file_base64", "") or pj.get("data", "") or "")
+                if "," in _b64s:
+                    _b64s = _b64s.split(",", 1)[1]
+                if _b64s.strip():
+                    b64_data = base64.b64decode(_b64s.strip())
+        except Exception:
+            b64_data = b""
+    if not f and not b64_data:
         return _err("no file", 400)
     # 目标目录
     target_dir = get_req_query(request, "dir", "") or get_req_query(request, "path", "")
@@ -101,42 +115,46 @@ async def handle_images_upload(request, plugin_base=""):
         except Exception:
             pass
     base = _img_base(plugin_base)
-    # 默认上传到 data/gacha_img
+    # 默认上传到 data/img/gacha
     if not target_dir:
-        target_dir = "data/gacha_img"
+        target_dir = "data/img/gacha"
     dst_dir = _safe_path(target_dir, base)
     if not dst_dir:
         return _err("bad dir", 400)
     os.makedirs(dst_dir, exist_ok=True)
-    filename = str(getattr(f, "filename", None) or getattr(f, "name", None) or "upload.bin").strip()
-    filename = os.path.basename(filename)
-    data = b""
-    try:
-        val = f.read() if hasattr(f, "read") else None
-        if val is not None:
-            import inspect
-            if inspect.isawaitable(val):
-                data = await val
-            elif callable(getattr(f, "read", None)):
-                data = val
-            else:
-                data = val
-        if not data and hasattr(f, "file"):
-            try:
-                ff = getattr(f, "file")
-                if hasattr(ff, "read"):
-                    data = ff.read()
-            except Exception:
-                pass
-    except Exception:
+    if b64_data:
+        filename = os.path.basename(b64_name or "upload.bin")
+        data = bytes(b64_data)
+    else:
+        filename = str(getattr(f, "filename", None) or getattr(f, "name", None) or "upload.bin").strip()
+        filename = os.path.basename(filename)
         data = b""
-    if isinstance(data, str):
-        data = data.encode("utf-8", errors="ignore")
-    if not isinstance(data, (bytes, bytearray)):
         try:
-            data = bytes(data)
+            val = f.read() if hasattr(f, "read") else None
+            if val is not None:
+                import inspect
+                if inspect.isawaitable(val):
+                    data = await val
+                elif callable(getattr(f, "read", None)):
+                    data = val
+                else:
+                    data = val
+            if not data and hasattr(f, "file"):
+                try:
+                    ff = getattr(f, "file")
+                    if hasattr(ff, "read"):
+                        data = ff.read()
+                except Exception:
+                    pass
         except Exception:
             data = b""
+        if isinstance(data, str):
+            data = data.encode("utf-8", errors="ignore")
+        if not isinstance(data, (bytes, bytearray)):
+            try:
+                data = bytes(data)
+            except Exception:
+                data = b""
     dst = os.path.join(dst_dir, filename)
     try:
         with open(dst, "wb") as w:

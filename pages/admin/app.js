@@ -871,23 +871,30 @@ function closeLightbox() {
   if (lb) { lb.classList.remove("show"); lb.innerHTML = ""; }
 }
 
+function fileToBase64(file) {
+  return new Promise((res, rej) => {
+    try {
+      const fr = new FileReader();
+      fr.onload = () => {
+        const s = String(fr.result || "");
+        res(s.includes(",") ? s.split(",", 2)[1] : s);
+      };
+      fr.onerror = () => rej(new Error("文件读取失败"));
+      fr.readAsDataURL(file);
+    } catch (e) { rej(e); }
+  });
+}
+async function postFile(api, extra, file) {
+  // base64 JSON 直传：iframe 桥 postMessage 无法克隆 FormData，后端同样受理
+  const b64 = await fileToBase64(file);
+  if (!b64) throw new Error("文件读取失败");
+  return getBridge().apiPost(api, { ...(extra || {}), filename: file.name, file_base64: b64 });
+}
 async function uploadImage(file) {
   if (!file) return;
   toast("上传中…", "");
   try {
-    // 上传到当前根目录路径
-    const fd = new FormData();
-    fd.append("file", file);
-    // 优先用 bridge.upload 带 dir 参数，回退到普通上传
-    try {
-      if (IMG_DIR) {
-        await getBridge().apiPost("images/upload?dir=" + encodeURIComponent(IMG_DIR), fd);
-      } else {
-        await getBridge().upload("images/upload", file);
-      }
-    } catch (e2) {
-      await getBridge().upload("images/upload", file);
-    }
+    await postFile("images/upload?dir=" + encodeURIComponent(IMG_DIR || "data/img"), {}, file);
     toast("已上传", "ok");
     await loadImages(IMG_DIR);
   } catch (e) {
@@ -1552,7 +1559,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.7.20"
+        version: res.version || "0.7.21"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -2294,10 +2301,9 @@ function bindSpiritMapCards(root) {
       inp.onchange = async (e) => {
         const file = e.target.files[0]; if (!file) return;
         try {
-          const fd = new FormData(); fd.append("file", file);
-          const r = await getBridge().apiPost("images/upload?dir=" + encodeURIComponent("data/img/精灵"), fd);
+          const r = await postFile("images/upload?dir=" + encodeURIComponent("data/img/spirits"), {}, file);
           if (r && r.error) throw new Error(r.error);
-          const path = (r && (r.path || (r.data && r.data.path))) || ("data/img/精灵/" + file.name);
+          const path = (r && (r.path || (r.data && r.data.path))) || ("data/img/spirits/" + file.name);
           _setSpiritImg(sn, path);
           toast("形象图已绑定，点保存属性生效", "ok");
         } catch (err) { toast("上传失败:" + (err.message || err), "bad"); }
@@ -2669,16 +2675,16 @@ document.querySelectorAll(".harrow[data-scat]").forEach((btn) =>
 
 // 商城图鉴 (每商城独立栏 自由增删重命名+图片绑定)
 const DEFAULT_RIDE_SHOP = {
-  "企鹅": { price: 213250, img: "data/img/坐骑图标/企鹅.jpg" },
-  "伞兵": { price: 500000, img: "data/img/坐骑图标/伞兵.jpg" },
-  "宝驴": { price: 1000000, img: "data/img/坐骑图标/宝驴.jpg" },
-  "保时捷": { price: 1500000, img: "data/img/坐骑图标/保时捷.jpg" },
-  "法拉利": { price: 1500000, img: "data/img/坐骑图标/法拉利.jpg" },
-  "玛莎拉蒂": { price: 1500000, img: "data/img/坐骑图标/玛莎拉蒂.jpg" },
-  "劳斯莱斯": { price: 1500000, img: "data/img/坐骑图标/劳斯莱斯.jpg" },
-  "布加迪威龙": { price: 1500000, img: "data/img/坐骑图标/布加迪威龙.jpg" },
-  "私人航空": { price: 5000000, img: "data/img/坐骑图标/私人航空.jpg" },
-  "老八": { price: 500000, img: "data/img/坐骑图标/老八.jpg" },
+  "企鹅": { price: 213250, img: "data/img/rides/企鹅.jpg" },
+  "伞兵": { price: 500000, img: "data/img/rides/伞兵.jpg" },
+  "宝驴": { price: 1000000, img: "data/img/rides/宝驴.jpg" },
+  "保时捷": { price: 1500000, img: "data/img/rides/保时捷.jpg" },
+  "法拉利": { price: 1500000, img: "data/img/rides/法拉利.jpg" },
+  "玛莎拉蒂": { price: 1500000, img: "data/img/rides/玛莎拉蒂.jpg" },
+  "劳斯莱斯": { price: 1500000, img: "data/img/rides/劳斯莱斯.jpg" },
+  "布加迪威龙": { price: 1500000, img: "data/img/rides/布加迪威龙.jpg" },
+  "私人航空": { price: 5000000, img: "data/img/rides/私人航空.jpg" },
+  "老八": { price: 500000, img: "data/img/rides/老八.jpg" },
 };
 let SHOP_RIDE = {};
 let SHOP_DIRTY = false;
@@ -2875,8 +2881,7 @@ function renderPoolBox(forceOpen=false){
     inp.onchange = async (e) => {
       const file = e.target.files[0]; if (!file) return;
       try {
-        const fd = new FormData(); fd.append("file", file);
-        const r = await getBridge().apiPost("weapons/pool/upload?rar=" + encodeURIComponent(rar || "SSR") + "&replace=1&name=" + encodeURIComponent(name), fd);
+        const r = await postFile("weapons/pool/upload?rar=" + encodeURIComponent(rar || "SSR") + "&replace=1&name=" + encodeURIComponent(name), {}, file);
         if (r && r.error) throw new Error(r.error);
         toast("已换图", "ok"); await loadPool();
       } catch (err) { toast("换图失败: " + err.message, "bad"); }
@@ -3040,8 +3045,7 @@ function openPoolAddModal(defRar) {
       if (!n) { toast("请填写武器名称", "bad"); return; }
       try {
         if (_POOL_ADD_FILE) {
-          const fd = new FormData(); fd.append("file", _POOL_ADD_FILE);
-          const r = await getBridge().apiPost("weapons/pool/upload?rar=" + encodeURIComponent(rar) + "&name=" + encodeURIComponent(n), fd);
+          const r = await postFile("weapons/pool/upload?rar=" + encodeURIComponent(rar) + "&name=" + encodeURIComponent(n), {}, _POOL_ADD_FILE);
           if (r && r.error) throw new Error(r.error);
         } else if (_POOL_ADD_SRC) {
           const r = await getBridge().apiPost("weapons/pool/replace_path", { rar, name: n, src: _POOL_ADD_SRC });
@@ -3077,7 +3081,7 @@ function renderShopRideBox(forceOpen = false) {
   const curDetails = box.querySelector("details");
   const wasOpen = curDetails ? curDetails.open : forceOpen;
   let html = `<details class="panel" style="margin:0"${wasOpen ? " open" : ""}><summary style="cursor:pointer;font-weight:600">🐴 坐骑商城 (ride_shop) — ${entries.length} 件（点击折叠/展开）${(SHOP_RIDE_CUSTOM || SHOP_DIRTY) ? "" : " · <span style='color:var(--muted);font-weight:400'>内置默认·未自定义</span>"}</summary>`;
-  html += `<div class="hint" style="margin-top:8px">每行一个坐骑，支持改名、改价、删、绑图（图片路径如 data/img/坐骑图标/企鹅.jpg，留空用默认图）</div>`;
+  html += `<div class="hint" style="margin-top:8px">每行一个坐骑，支持改名、改价、删、绑图（图片路径如 data/img/rides/企鹅.jpg，留空自动匹配）</div>`;
   if (!entries.length) {
     html += `<div class="hint" style="margin:8px 0">当前为空，运行时使用内置坐骑（${Object.keys(DEFAULT_RIDE_SHOP).length} 种）；可添加或恢复默认</div>`;
   }
@@ -3085,17 +3089,15 @@ function renderShopRideBox(forceOpen = false) {
     let price = 0, img = "";
     if (val && typeof val === "object" && !Array.isArray(val)) { price = val.price ?? 0; img = val.img ?? ""; }
     else price = Number(val) || 0;
-    // 自动匹配坐骑图片：自定义优先，否则按名称匹配坐骑图标目录
+    // 自动匹配坐骑图片：自定义优先，否则按名称匹配 rides 目录
     let autoImg = "";
-    if (!img) { try { autoImg = `data/img/坐骑图标/${name}.jpg`; } catch (e) { autoImg = ""; } }
+    if (!img) { try { autoImg = `data/img/rides/${name}.jpg`; } catch (e) { autoImg = ""; } }
     const showImg = img || autoImg;
-    const imgPreview = showImg ? `<span data-ride-thumb="${esc(showImg)}" style="display:inline-flex;align-items:center;cursor:zoom-in" title="点击放大"><span class="badge" style="font-size:11px">图</span></span>` : `<span style="color:var(--muted);font-size:11px">无图</span>`;
-    const imgTag = img ? "自定义" : (autoImg ? "自动匹配" : "");
     html += `<div class="s-fields" data-ride-item="${esc(name)}" style="margin-top:8px">` +
       `<div class="s-row"><small>坐骑名</small><input data-ride-name value="${esc(name)}"></div>` +
       `<div class="s-row"><small>价格</small><input type="number" data-ride-price value="${esc(price)}" style="width:90px"></div>` +
       `<div class="s-row" style="flex:1"><small>图片路径</small><input data-ride-img value="${esc(img)}" placeholder="data/img/..."></div>` +
-      `<div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${imgPreview}${imgTag ? `<span style="font-size:11px;color:var(--muted)">${imgTag}</span>` : ""}<button class="ghost sm" data-ride-pick="${esc(name)}">外置选图</button><button class="ghost sm" data-ride-pick-builtin="${esc(name)}">内置选图</button><button class="s-del" data-ride-del="${esc(name)}">删除</button></div>` +
+      `<div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${showImg ? `<button class="ghost sm" data-ride-view="${esc(showImg)}">浏览</button>` : `<span style="color:var(--muted);font-size:11px">无图</span>`}<button class="ghost sm" data-ride-pick="${esc(name)}">外置选图</button><button class="ghost sm" data-ride-pick-builtin="${esc(name)}">内置选图</button><button class="s-del" data-ride-del="${esc(name)}">删除</button></div>` +
       `</div>`;
   });
   html += `<div style="margin-top:8px"><button class="ghost sm" id="btnRideAdd">＋ 添加坐骑</button> <button class="ghost sm" id="btnRideReset">恢复默认</button></div></details>`;
@@ -3172,48 +3174,25 @@ function renderShopRideBox(forceOpen = false) {
     inp.onchange = async (e) => {
       const file = e.target.files[0]; if (!file) return;
       try {
-        const fd = new FormData(); fd.append("file", file);
-        const r = await getBridge().apiPost("images/upload?dir=" + encodeURIComponent("data/img/坐骑图标"), fd);
+        const r = await postFile("images/upload?dir=" + encodeURIComponent("data/img/rides"), {}, file);
         if (r && r.error) throw new Error(r.error);
-        const path = (r && (r.path || (r.data && r.data.path))) || ("data/img/坐骑图标/" + file.name);
+        const path = (r && (r.path || (r.data && r.data.path))) || ("data/img/rides/" + file.name);
         SHOP_RIDE[k] = (typeof SHOP_RIDE[k]==="object"? {...SHOP_RIDE[k], img: path} : {price: Number(SHOP_RIDE[k])||0, img: path}); SHOP_DIRTY=true; syncShopRaw(); renderShopRideBox(true); toast("图片已上传并绑定，需保存","ok");
       } catch(err){ toast("上传失败:"+(err.message||err),"bad");}
     };
     inp.click();
   }));
-  // 缩略图懒加载 + 点击放大（只在展开时取，不卡首屏）
-  try {
-    const _details = box.querySelector("details");
-    if (_details && _details.open && !box.dataset.thumbsLoaded) {
-      box.dataset.thumbsLoaded = "1";
-      box.querySelectorAll("[data-ride-thumb]").forEach((slot) => {
-        const p = slot.dataset.rideThumb;
-        if (!p) return;
-        getBridge().apiPost("images/thumb", { path: p }).then((r) => {
-          const thumb = r && (r.thumb || (r.data && r.data.thumb));
-          if (!thumb || (r && r.error)) return;
-          slot.innerHTML = `<img src="${esc(thumb)}" style="width:40px;height:40px;object-fit:cover;border:1px solid var(--line);border-radius:6px" onerror="this.style.display='none'">`;
-          slot.addEventListener("click", () => showLightbox(thumb, p.split("/").pop()));
-        }).catch(() => {});
-      });
-    }
-    if (!box.dataset.thumbBound) {
-      box.dataset.thumbBound = "1";
-      box.addEventListener("click", async (e) => {
-        const slot = e.target.closest("[data-ride-thumb]");
-        if (!slot || slot.querySelector("img")) return;
-        const p = slot.dataset.rideThumb;
-        if (!p) return;
-        try {
-          const r = await getBridge().apiPost("images/thumb", { path: p });
-          const thumb = r && (r.thumb || (r.data && r.data.thumb));
-          if (r && r.error) throw new Error(r.error);
-          if (thumb) showLightbox(thumb, p.split("/").pop());
-          else toast("无预览", "bad");
-        } catch (err) { toast("预览失败:" + (err.message || err), "bad"); }
-      });
-    }
-  } catch (e) {}
+  box.querySelectorAll("[data-ride-view]").forEach((b) => b.addEventListener("click", async () => {
+    const p = b.dataset.rideView;
+    if (!p) return;
+    try {
+      const r = await getBridge().apiPost("images/thumb", { path: p });
+      const thumb = r && (r.thumb || (r.data && r.data.thumb));
+      if (r && r.error) throw new Error(r.error);
+      if (thumb) showLightbox(thumb, p.split("/").pop());
+      else toast("无预览", "bad");
+    } catch (err) { toast("预览失败:" + (err.message || err), "bad"); }
+  }));
   const addBtn = document.getElementById("btnRideAdd");
   if (addBtn) addBtn.addEventListener("click", () => openRideAddModal());
   const resetBtn = document.getElementById("btnRideReset");
@@ -3242,7 +3221,7 @@ function openRideAddModal() {
       <div><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">价格：</label>
         <input id="rideAddPrice" type="number" value="500000" style="width:100%;padding:6px 10px;border-radius:8px"></div>
       <div><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">图片路径（可选，留空自动匹配）：</label>
-        <input id="rideAddImg" style="width:100%;padding:6px 10px;border-radius:8px" placeholder="data/img/坐骑图标/xxx.jpg">
+        <input id="rideAddImg" style="width:100%;padding:6px 10px;border-radius:8px" placeholder="data/img/rides/xxx.jpg">
         <div style="margin-top:6px"><button class="ghost sm" id="rideAddPickBuiltin">内置选图（服务器文件）</button></div></div>
       <div class="hint">保存后记得点商城页「保存」持久化；图片也可在列表中用“外置选图/内置选图”绑定</div>
     </div>`;
@@ -3764,7 +3743,7 @@ function renderBackups(d, _q) {
       <div class="bk-icon">💾</div>
       <div class="bk-info">
         <div class="bk-name">${esc(x.name)}</div>
-        <div class="bk-meta"><span>📦 大小: ${esc(x.size || "0KB")}</span><span>🕒 备份时间: ${esc(x.mtime || "")}${_sc ? ` <span title="文件锁配合防多进程/热重载打出双份备份（.xb_last_backup.json${_sc.time ? "，最近：" + esc(_sc.time) : ""}）" style="color:var(--ok)">🔒 防重保护中</span>` : ""}</span></div>
+        <div class="bk-meta"><span>📦 大小: ${esc(x.size || "0KB")}</span><span>🕒 备份时间: ${esc(x.mtime || "")}${_sc ? ` <span title=".xb_last_backup.json 为防重文件，无需删除：文件锁配合防多进程/热重载打出双份备份${_sc.time ? "（最近：" + esc(_sc.time) + "）" : ""}" style="color:var(--ok)">🔒 防重保护中</span>` : ""}</span></div>
       </div>
       <span style="font-size:12px;color:var(--muted)">${selCls ? '✓ 已选中' : '单击选中'}</span>
     </div>`;

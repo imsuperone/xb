@@ -412,7 +412,7 @@ async def handle_spirits_save(request):
 
 
 async def handle_gacha_weapons(request):
-    """抽奖武器池（gacha_img SSR/SR/R 文件名去扩展名；附精确图片路径供自动匹配预览）"""
+    """抽奖武器池（img/gacha SSR/SR/R 文件名去扩展名；附精确图片路径供自动匹配预览）"""
     try:
         try:
             from ...engines import slave as _sl
@@ -481,7 +481,7 @@ def _pool_dir(rar):
         pers = ST.get_persistent_data_dir(base) if hasattr(ST, "get_persistent_data_dir") else ""
     except Exception:
         pers = ""
-    d = _os.path.join(pers or _os.path.join(base, "data"), "gacha_img", rar)
+    d = _os.path.join(pers or _os.path.join(base, "data"), "img", "gacha", rar)
     try:
         _os.makedirs(d, exist_ok=True)
     except Exception:
@@ -858,34 +858,59 @@ async def handle_pool_upload(request):
                             break
         elif hasattr(form, "filename") or hasattr(form, "read"):
             f = form
+        # base64 直传（iframe 桥 postMessage 无法克隆 FormData 时用）
+        b64_name, b64_data = "", b""
         if not f:
+            try:
+                pj = await get_req_json(request, default={})
+                if isinstance(pj, dict):
+                    b64_name = str(pj.get("filename", "") or "").strip()
+                    _b64s = str(pj.get("file_base64", "") or pj.get("data", "") or "")
+                    if "," in _b64s:
+                        _b64s = _b64s.split(",", 1)[1]
+                    if _b64s.strip():
+                        b64_data = base64.b64decode(_b64s.strip())
+            except Exception:
+                b64_data = b""
+        if not f and not b64_data:
             return _err("no file", 400)
-        filename = str(getattr(f, "filename", None) or getattr(f, "name", None) or "").strip()
-        filename = _os.path.basename(filename)
-        stem, ext = _os.path.splitext(filename)
-        stem = _pool_clean_stem(stem)
-        ext = ext.lower()
-        if not stem or ext not in _POOL_IMG_EXTS:
-            return _err("仅支持图片文件", 400)
-        data = b""
-        try:
-            val = f.read() if hasattr(f, "read") else None
-            if val is not None:
-                import inspect
-                data = await val if inspect.isawaitable(val) else val
-            if not data and hasattr(f, "file"):
-                try:
-                    ff = getattr(f, "file")
-                    if hasattr(ff, "read"):
-                        data = ff.read()
-                except Exception:
-                    pass
-        except Exception:
+        if b64_data:
+            filename = _os.path.basename(b64_name or "upload.bin")
+            stem, ext = _os.path.splitext(filename)
+            stem = _pool_clean_stem(stem)
+            ext = ext.lower()
+            if not stem or ext not in _POOL_IMG_EXTS:
+                return _err("仅支持图片文件", 400)
+            data = bytes(b64_data)
+            if not data:
+                return _err("empty file", 400)
+        else:
+            filename = str(getattr(f, "filename", None) or getattr(f, "name", None) or "").strip()
+            filename = _os.path.basename(filename)
+            stem, ext = _os.path.splitext(filename)
+            stem = _pool_clean_stem(stem)
+            ext = ext.lower()
+            if not stem or ext not in _POOL_IMG_EXTS:
+                return _err("仅支持图片文件", 400)
             data = b""
-        if isinstance(data, str):
-            data = data.encode("utf-8", errors="ignore")
-        if not data:
-            return _err("empty file", 400)
+            try:
+                val = f.read() if hasattr(f, "read") else None
+                if val is not None:
+                    import inspect
+                    data = await val if inspect.isawaitable(val) else val
+                if not data and hasattr(f, "file"):
+                    try:
+                        ff = getattr(f, "file")
+                        if hasattr(ff, "read"):
+                            data = ff.read()
+                    except Exception:
+                        pass
+            except Exception:
+                data = b""
+            if isinstance(data, str):
+                data = data.encode("utf-8", errors="ignore")
+            if not data:
+                return _err("empty file", 400)
         if fixname:
             stem = _pool_clean_stem(fixname) or stem
         if not stem:

@@ -67,7 +67,7 @@ GROUPS_DIR = _os.path.join(DATA_DIR, "groups")                     # 兼容旧�
 WALLET_DIR = _os.path.join(DATA_DIR, "wallet")                     # 兼容旧目录(迁移用)
 DB_PATH = _os.path.join(DATA_DIR, "xb.db")                         # 现代存储(SQLite)
 CONFIG_JSON = _os.path.join(DATA_DIR, "config.json")               # 现代配置(JSON)
-GACHA_DIR = _os.path.join(DATA_DIR, "gacha_img")
+GACHA_DIR = _os.path.join(DATA_DIR, "img", "gacha")
 EVENTS_JSON = _os.path.join(DATA_DIR, "events.json")
 
 def cfg(sec, key, default=""):
@@ -1326,18 +1326,43 @@ _GACHA_CACHE = {}
 _GACHA_CACHE_TS = {}  # 分 rar 独立 TTL，避免 SSR 刷新污染 R
 _GACHA_TTL = 60.0  # 60s 刷新，千群每消息 listdir 1507次→0次
 
+def _gacha_dirs(rar):
+    """抽奖池候选目录（新 data/img/gacha 优先，旧 data/gacha_img 兼容），持久化与内置各一对"""
+    cands = []
+    try:
+        cands.append(_os.path.join(DATA_DIR, "img", "gacha", rar))
+        cands.append(_os.path.join(DATA_DIR, "gacha_img", rar))
+        cands.append(_os.path.join(_BASE, "data", "img", "gacha", rar))
+        cands.append(_os.path.join(_BASE, "data", "gacha_img", rar))
+    except Exception:
+        pass
+    out = []
+    for d in cands:
+        try:
+            if d and d not in out:
+                out.append(d)
+        except Exception:
+            pass
+    return out
+
+
 def _gacha_pool(rar):
     now = _time.time()
     hit = _GACHA_CACHE.get(rar)
     ts = _GACHA_CACHE_TS.get(rar, 0)
     if hit is not None and now - ts < _GACHA_TTL and len(hit) > 0:
         return hit
-    # 优先使用持久化数据目录，若无则回退至插件内置图库
-    dd = _os.path.join(DATA_DIR, "gacha_img", rar)
-    if not _os.path.isdir(dd) or not _os.listdir(dd):
-        dd = _os.path.join(_BASE, "data", "gacha_img", rar)
+    # 优先使用持久化数据目录，若无则回退至插件内置图库；新旧目录都认
+    lst = []
     try:
-        lst = [_os.path.join(dd, f) for f in sorted(_os.listdir(dd)) if f.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp"))]
+        for dd in _gacha_dirs(rar):
+            try:
+                if _os.path.isdir(dd) and _os.listdir(dd):
+                    lst = [_os.path.join(dd, f) for f in sorted(_os.listdir(dd)) if f.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp"))]
+                    if lst:
+                        break
+            except Exception:
+                continue
     except Exception:
         lst = []
     _GACHA_CACHE[rar] = lst
@@ -2132,7 +2157,7 @@ def _route_locked(gid, qq, raw):
         if _lst:
             _pp = _lst[0]
         else:
-            imgp = ssr_img_map.get(q, _os.path.join(DATA_DIR, "gacha_img", "SSR", q + ".png"))
+            imgp = ssr_img_map.get(q, _os.path.join(DATA_DIR, "img", "gacha", "SSR", q + ".png"))
             _pp = _img_path(imgp)
         _bonus = _weapon_atk_bonus(q)
         _desc = _weapon_desc(q)
@@ -2149,7 +2174,7 @@ def _route_locked(gid, qq, raw):
 
 
 
-_IMG_BASE = _os.path.join(DATA_DIR, "gacha_img")
+_IMG_BASE = _os.path.join(DATA_DIR, "img", "gacha")
 
 def _img_path(path):
     """元组图片路径: 返回绝对路径供 (text, [path]) 元组直传（图2路径，生产验证有效）"""
@@ -2183,7 +2208,7 @@ def init_slave(bot_uin="", note_names=None, import_wallet_dir=""):
     WALLET_DIR = _os.path.join(DATA_DIR, "wallet")
     DB_PATH = _os.path.join(DATA_DIR, "xb.db")
     CONFIG_JSON = _os.path.join(DATA_DIR, "config.json")
-    GACHA_DIR = _os.path.join(DATA_DIR, "gacha_img")
+    GACHA_DIR = _os.path.join(DATA_DIR, "img", "gacha")
     EVENTS_JSON = _os.path.join(DATA_DIR, "events.json")
     BOT_UIN = str(bot_uin or "")
     if note_names:

@@ -449,10 +449,10 @@ def _version():
                 except Exception:
                     pass
         if not ver:
-            ver = "0.7.20"
+            ver = "0.7.21"
         return f"小白版本：{ver}"
     except Exception:
-        return "小白版本：0.7.20"
+        return "小白版本：0.7.21"
 
 # ---- 统一入口（测试指令仅超管，WebUI可配但不显示于MENU，已删 个人信息） ----
 # 注意：凡 handle() 响应的别名必须同步进本表；非超管命中一律静默 None（BY DESIGN，见 AIINFO）
@@ -480,8 +480,9 @@ def _cmd_imgtest():
     cands = []
     try:
         base = os.path.dirname(os.path.abspath(__file__))
-        roots = [os.path.join(base, "..", "data", "gacha_img", "SSR"),
-                 os.path.join(base, "..", "data", "img", "坐骑图标"),
+        roots = [os.path.join(base, "..", "data", "img", "gacha", "SSR"),
+                 os.path.join(base, "..", "data", "gacha_img", "SSR"),
+                 os.path.join(base, "..", "data", "img", "rides"),
                  os.path.join(base, "..", "data", "img")]
         for r in roots:
             try:
@@ -504,7 +505,7 @@ def _cmd_imgtest():
             seen.append(p)
     cands = seen[:2]
     if not cands:
-        return "\r\n".join(lines + ["❌ 未找到任何可用图片文件", "请检查 data/gacha_img/SSR 与 data/img/坐骑图标 目录是否存在图片"])
+        return "\r\n".join(lines + ["❌ 未找到任何可用图片文件", "请检查 data/img/gacha/SSR 与 data/img/rides 目录是否存在图片"])
     for i, p in enumerate(cands, 1):
         try:
             sz = os.path.getsize(p)

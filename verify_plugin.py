@@ -104,12 +104,16 @@ else:
         ok = die("_conf_schema.json", "JSON 异常: %s" % e)
 
 # 5) 图鉴
-gdir = os.path.join(BASE, "data", "gacha_img")
-if os.path.isdir(gdir):
-    n = sum(len(fs) for _, _, fs in os.walk(gdir))
-    print("[OK] gacha_img %d 个文件" % n)
+gdir = os.path.join(BASE, "data", "img", "gacha")
+legacy = os.path.join(BASE, "data", "gacha_img")
+n = 0
+for _gd in (gdir, legacy):
+    if os.path.isdir(_gd):
+        n += sum(len(fs) for _, _, fs in os.walk(_gd))
+if n:
+    print("[OK] 抽奖武器池 %d 个文件" % n)
 else:
-    print("[WARN] data/gacha_img 不存在(抽卡不可用,其他功能正常)")
+    print("[WARN] data/img/gacha 不存在(抽卡不可用,其他功能正常)")
 
 print("==================")
 print("RESULT:", "ALL OK" if ok else "有 FAIL, 请按上方红色项处理")
