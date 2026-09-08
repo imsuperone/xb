@@ -246,27 +246,29 @@ def _ride_shop_raw():
     return DEFAULT_RIDE_SHOP_EXT
 
 def _ride_shop():
-    """坐骑商城数据: 优先 商城图鉴.ride_shop(JSON name->price 或 {price,img}), 回退 坐骑配置 价格_XX"""
+    """坐骑商城数据: 优先 商城图鉴.ride_shop(JSON name->price 或 {price,img})；空=未自定义，回退 RIDES 内置"""
     v = ST.cfg("商城图鉴", "ride_shop", "")
-    if isinstance(v, dict):
+    if isinstance(v, dict) and v:
         out = {}
         for k, val in v.items():
             if isinstance(val, dict):
                 out[str(k)] = int(float(val.get("price", 0) or 0))
             else:
                 out[str(k)] = int(float(val))
-        return out
+        if out:
+            return out
     if v:
         try:
             d = json.loads(v)
-            if isinstance(d, dict):
+            if isinstance(d, dict) and d:
                 out = {}
                 for k, val in d.items():
                     if isinstance(val, dict):
                         out[str(k)] = int(float(val.get("price", 0) or 0))
                     else:
                         out[str(k)] = int(float(val))
-                return out
+                if out:
+                    return out
         except Exception:
             pass
     out = {}

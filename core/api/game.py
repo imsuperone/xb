@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """游戏画像 API — 奴隶 / 精灵 用户画像 + 精灵图鉴 + 身价校准"""
 import json
+import re
 from astrbot.api.web import json_response
 
 from .helpers import _err, get_req_query, get_req_json
@@ -258,6 +259,28 @@ async def handle_spirit_users(request):
         return _err(f"spirit users failed: {e}", 500)
 
 
+def _raw_spirit_cfg(key):
+    """读精灵图鉴原始配置（未配置/非法返回 {}，不回退内置；回退由引擎 _SPIRITS/_MAPS/_SHOP 负责）"""
+    try:
+        try:
+            from ...engines import spirit  # noqa
+        except ImportError:
+            pass
+        v = ST.cfg("精灵图鉴", key, "")
+    except Exception:
+        return {}
+    if isinstance(v, dict):
+        return v
+    if v:
+        try:
+            d = json.loads(v)
+            if isinstance(d, dict):
+                return d
+        except Exception:
+            pass
+    return {}
+
+
 def _load_spirit_data():
     try:
         try:
@@ -280,7 +303,31 @@ def _load_spirit_data():
 
 
 async def handle_spirits_get(request):
-    return json_response(_load_spirit_data())
+    data = _load_spirit_data()
+    # 下发原始配置 + 内置基线：前端如实展示“未自定义/已自定义”，空即内置回退
+    try:
+        raw = {k: _raw_spirit_cfg(k) for k in ("spirits", "maps", "shop")}
+        data = dict(data)
+        data["_raw"] = raw
+        try:
+            try:
+                from ...engines import spirit_data as _SDB  # type: ignore
+            except ImportError:
+                import spirit_data as _SDB  # type: ignore
+            data["_builtin"] = {
+                "spirits": dict(getattr(_SDB, "SPIRITS", {}) or {}),
+                "maps": dict(getattr(_SDB, "MAPS", {}) or {}),
+                "shop": dict(getattr(_SDB, "SHOP", {}) or {}),
+            }
+        except Exception:
+            data["_builtin"] = {"spirits": {}, "maps": {}, "shop": {}}
+        data["_meta"] = {
+            "configured": {k: bool(raw.get(k)) for k in ("spirits", "maps", "shop")},
+            "builtin": {k: len((data.get("_builtin") or {}).get(k) or {}) for k in ("spirits", "maps", "shop")},
+        }
+    except Exception:
+        pass
+    return json_response(data)
 
 
 async def handle_spirits_save(request):
@@ -294,6 +341,59 @@ async def handle_spirits_save(request):
         val = payload[key]
         if not isinstance(val, dict):
             return _err(f"{key} must be dict", 400)
+        # 入库整形：只保留结构合法的条目，脏数据就地清洗，保证自助添加不炸运行时
+        try:
+            if key == "spirits":
+                _num_fields = ("hp", "atk", "def", "spa", "spd", "spe", "lv")
+                _clean = {}
+                for _n, _it in val.items():
+                    if not isinstance(_it, dict):
+                        continue
+                    _o = {"type": str(_it.get("type", "") or "")}
+                    for _f in _num_fields:
+                        try:
+                            _o[_f] = int(float(_it.get(_f, 0) or 0))
+                        except Exception:
+                            _o[_f] = 0
+                    _o["evolve"] = str(_it.get("evolve", "") or "")
+                    _clean[str(_n)] = _o
+                val = _clean
+            elif key == "maps":
+                _clean = {}
+                for _n, _m in val.items():
+                    if not isinstance(_m, dict):
+                        continue
+                    try:
+                        _lv = int(float(_m.get("lv", 1) or 1))
+                    except Exception:
+                        _lv = 1
+                    _drops = _m.get("drops", [])
+                    if isinstance(_drops, str):
+                        _drops = [s.strip() for s in re.split(r"[,，]", _drops) if s.strip()]
+                    if not isinstance(_drops, list):
+                        _drops = []
+                    _clean[str(_n)] = {"lv": _lv if _lv >= 1 else 1,
+                                       "drops": [str(x) for x in _drops if str(x).strip()]}
+                val = _clean
+            elif key == "shop":
+                _clean = {}
+                for _n, _it in val.items():
+                    if not isinstance(_it, dict):
+                        continue
+                    try:
+                        _price = int(float(_it.get("price", 0) or 0))
+                    except Exception:
+                        _price = 0
+                    try:
+                        _effect = int(float(_it.get("effect", 0) or 0))
+                    except Exception:
+                        _effect = 0
+                    _clean[str(_n)] = {"price": _price if _price >= 0 else 0,
+                                       "attr": str(_it.get("attr", "") or ""),
+                                       "effect": _effect if _effect >= 0 else 0}
+                val = _clean
+        except Exception:
+            pass
         ST.set_ini("精灵图鉴", key, json.dumps(val, ensure_ascii=False))
         saved.append(key)
     if not saved:

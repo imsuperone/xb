@@ -1544,7 +1544,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.7.6"
+        version: res.version || "0.7.7"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -2037,7 +2037,16 @@ const SHOP_FIELDS = [["price", "价格"], ["attr", "类型"], ["effect", "效果
 
 async function loadSpirits() {
   try {
-    SPIRIT = await getBridge().apiGet("spirits");
+    const res = await getBridge().apiGet("spirits");
+    SPIRIT = res || {};
+    // 编辑区只展示用户真实配置（_raw），空=未自定义，运行时自动用内置
+    try {
+      if (res && res._raw) {
+        SPIRIT.maps = res._raw.maps || {};
+        SPIRIT.spirits = res._raw.spirits || {};
+        SPIRIT.shop = res._raw.shop || {};
+      }
+    } catch (e) {}
     SPIRIT_DIRTY = false;
     SPIRIT_OPEN = {};
     const msg = document.getElementById("spiritMsg");
@@ -2047,6 +2056,23 @@ async function loadSpirits() {
   } catch (e) {
     err("spirits: " + e.message);
   }
+}
+
+function _spiritBuiltinCount(kind) {
+  try {
+    const b = (SPIRIT && SPIRIT._builtin && SPIRIT._builtin[kind]) || {};
+    return Object.keys(b).length;
+  } catch (e) { return 0; }
+}
+
+function _spiritLoadBuiltin(kind) {
+  try {
+    const b = (SPIRIT && SPIRIT._builtin && SPIRIT._builtin[kind]) || null;
+    if (!b || !Object.keys(b).length) { toast("无内置数据可载入", "bad"); return false; }
+    SPIRIT[kind] = JSON.parse(JSON.stringify(b));
+    SPIRIT_DIRTY = true;
+    return true;
+  } catch (e) { toast("载入失败: " + e.message, "bad"); return false; }
 }
 
 function renderSpiritCat() {
@@ -2097,7 +2123,30 @@ function renderMaps(q) {
     return (maps[k].drops || []).some((s) => String(s).toLowerCase().includes(q));
   });
   if (!mapNames.length) {
-    body.innerHTML = `<div class="hint">无匹配地图</div>`;
+    if (q) {
+      body.innerHTML = `<div class="hint">无匹配地图</div>`;
+      return;
+    }
+    const _bc = _spiritBuiltinCount("maps");
+    body.innerHTML = `<div class="hint">当前无自定义地图，运行中使用内置 ${_bc} 张地图`
+      + (_bc ? ` <button class="ghost sm" id="btnSpiritUseBuiltinMaps">载入内置为起点</button>` : ``) + `</div>`
+      + `<button id="mapAddItem" class="ghost" style="margin-top:10px">＋ 添加地图</button>`;
+    document.getElementById("btnSpiritUseBuiltinMaps")?.addEventListener("click", () => {
+      if (_spiritLoadBuiltin("maps")) { renderMaps(q); toast("已载入内置地图，需保存", "ok"); }
+    });
+    const addMap0 = document.getElementById("mapAddItem");
+    if (addMap0) addMap0.addEventListener("click", async () => {
+      let n = await uiPrompt("输入新地图名称：", "", "添加地图");
+      if (!n) return;
+      n = n.trim();
+      if (!n) return;
+      const _mps = SPIRIT.maps || (SPIRIT.maps = {});
+      if (!_mps[n]) _mps[n] = { lv: 1, drops: [] };
+      SPIRIT_OPEN[n] = true;
+      SPIRIT_DIRTY = true;
+      renderMaps(q);
+      toast("已添加新地图，请点击上方「保存图鉴」持久化", "ok");
+    });
     return;
   }
   body.innerHTML = mapNames.map((mname) => {
@@ -2135,7 +2184,8 @@ function renderMaps(q) {
   body.querySelectorAll("[data-del-map]").forEach((b) =>
     b.addEventListener("click", async () => {
       const k = b.dataset.delMap;
-      if (!(await uiConfirm("确认删除地图 \"" + k + "\"？（需点击上方「保存图鉴」生效）", "删除地图"))) return;
+      const _last = Object.keys(maps).length <= 1;
+      if (!(await uiConfirm("确认删除地图 \"" + k + "\"？（需点击上方「保存图鉴」生效）" + (_last ? "\n\n注意：这是最后一张，删光后运行时自动使用内置地图。" : ""), "删除地图"))) return;
       delete maps[k];
       SPIRIT_DIRTY = true;
       renderMaps(q);
@@ -2148,6 +2198,7 @@ function renderMaps(q) {
       Object.keys(maps).forEach((mk) => {
         maps[mk].drops = (maps[mk].drops || []).map(String).filter((x) => x !== spName);
       });
+      try { if (spirits && spirits[spName]) delete spirits[spName]; } catch (e) {}
       SPIRIT_DIRTY = true;
       renderMaps(q);
       toast("已移除精灵，请点击上方「保存图鉴」持久化", "ok");
@@ -2191,6 +2242,10 @@ function renderShop(q = "", forceOpen = false) {
   const wasOpen = curDetails ? curDetails.open : forceOpen;
   let html = `<details class="panel" style="margin:0"${wasOpen ? " open" : ""}><summary style="cursor:pointer;font-weight:600">🎒 精灵道具商城 (spirit_shop) — ${names.length} 件（点击折叠/展开）</summary>`;
   html += `<div class="hint" style="margin-top:8px">编辑精灵球、药品等道具价格与效果（保存时将与精灵配置一并持久化）</div>`;
+  if (!Object.keys(shop).length && !q) {
+    html += `<div class="hint" style="margin:8px 0">当前无自定义道具，运行中使用内置 ${_spiritBuiltinCount("shop")} 件`
+      + ` <button class="ghost sm" id="btnSpiritUseBuiltinShop">载入内置为起点</button></div>`;
+  }
   if (!names.length) {
     html += `<div class="hint" style="margin:10px 0">无匹配物品</div>`;
   } else {
@@ -2207,6 +2262,9 @@ function renderShop(q = "", forceOpen = false) {
   }
   html += `<div style="margin-top:8px"><button id="shopAddItem" class="ghost sm">＋ 添加精灵道具</button></div></details>`;
   body.innerHTML = html;
+  document.getElementById("btnSpiritUseBuiltinShop")?.addEventListener("click", () => {
+    if (_spiritLoadBuiltin("shop")) { renderShop(q, true); toast("已载入内置道具，需保存", "ok"); }
+  });
 
   body.querySelectorAll("input[data-s-field]").forEach((inp) => {
     inp.addEventListener("change", () => {
@@ -2223,7 +2281,8 @@ function renderShop(q = "", forceOpen = false) {
   body.querySelectorAll("[data-del-key]").forEach((b) =>
     b.addEventListener("click", async () => {
       const k = b.dataset.delKey;
-      if (!(await uiConfirm("确认删除 \"" + k + "\"？（需点击上方「保存商城图鉴」生效）", "删除物品"))) return;
+      const _last = Object.keys(shop).length <= 1;
+      if (!(await uiConfirm("确认删除 \"" + k + "\"？（需点击上方「保存商城图鉴」生效）" + (_last ? "\n\n注意：这是最后一件，删光后运行时自动使用内置道具。" : ""), "删除物品"))) return;
       delete shop[k];
       SPIRIT_DIRTY = true;
       renderShop(q, true);
@@ -2528,23 +2587,28 @@ const DEFAULT_RIDE_SHOP = {
 let SHOP_RIDE = {};
 let SHOP_WEAPON = {};
 let SHOP_DIRTY = false;
+// 内置默认（仅用于“恢复默认”按钮与空态提示计数，不掺入编辑区）
+const WEAPON_DEFAULTS = {
+  "木剑": { price: 1000 }, "铁剑": { price: 3000 }, "苍雪剑": { price: 8000 },
+  "烈焰刀": { price: 20000 }, "青龙偃月刀": { price: 60000 }, "雷鸣剑": { price: 150000 },
+  "鬼泪村正": { price: 300000 }, "神使沧溟": { price: 800000 }, "炎宿朱雀": { price: 1500000 },
+};
 
 function parseShopWeapon(raw) {
-  const defaults = { "鬼泪村正": {price: 50000}, "雷鸣剑": {price: 50000}, "神使沧溟": {price: 50000}, "炎宿朱雀": {price: 50000}, "祝融": {price: 50000}, "老八脑!": {price: 50000}, "钻石剑": {price: 50000} };
-  if (!raw) return { ...defaults };
+  // 只解析用户真实配置，不掺内置默认（空=未自定义，运行时用抽奖武器池；删光有提示）
+  if (!raw) return {};
   try {
     const d = JSON.parse(raw);
     if (typeof d === "object" && d && !Array.isArray(d)) {
-      const merged = { ...defaults };
+      const out = {};
       Object.keys(d).forEach((k)=>{
-        if (typeof d[k]==="object" && d[k]!==null) merged[k]=d[k];
-        else merged[k]={price: Number(d[k])||0};
+        if (typeof d[k]==="object" && d[k]!==null) out[k]={price: Number(d[k].price)||0, atk: Number(d[k].atk)||0, desc: String(d[k].desc||"")};
+        else out[k]={price: Number(d[k])||0, atk: 0, desc: ""};
       });
-      // 同步抽奖新增武器
-      return merged;
+      return out;
     }
   } catch(e) {}
-  return { ...defaults };
+  return {};
 }
 function syncShopWeaponRaw(){ try{ const el=document.getElementById("shopWeapon"); if(el) el.value=JSON.stringify(SHOP_WEAPON,null,2);}catch(e){} }
 function renderShopWeaponBox(forceOpen=false){
@@ -2555,6 +2619,9 @@ function renderShopWeaponBox(forceOpen=false){
   const wasOpen=curDetails?curDetails.open:forceOpen;
   let html=`<details class="panel" style="margin:0"${wasOpen?" open":""}><summary style="cursor:pointer;font-weight:600">⚔️ 武器商城 (weapon_shop) — ${entries.length} 件（抽奖武器自动同步，可改价）</summary>`;
   html+=`<div class="hint" style="margin-top:8px">每行一个武器，支持改名、改价、删（价格用于商城购买，抽奖武器自动加入）</div>`;
+  if (!entries.length) {
+    html += `<div class="hint" style="margin:8px 0">当前为空，运行时武器菜单仅显示抽奖武器池；可添加或恢复默认（${Object.keys(WEAPON_DEFAULTS).length} 件）</div>`;
+  }
   entries.forEach(([name,val])=>{
     let price=0; if(val && typeof val==="object") price=val.price??0; else price=Number(val)||0;
     let img=""; try{ const p=`data/gacha_img/SSR/${name}.png`; if(window._shopImgMap && window._shopImgMap[name]) img=window._shopImgMap[name]; }catch(e){}
@@ -2582,7 +2649,8 @@ function renderShopWeaponBox(forceOpen=false){
   }));
   box.querySelectorAll("[data-weapon-del]").forEach(b=>b.addEventListener("click",async()=>{
     const k=b.dataset.weaponDel;
-    if(!(await uiConfirm("确认删除武器 \""+k+"\"？（需保存生效）","删除武器"))) return;
+    const _last = Object.keys(SHOP_WEAPON).length <= 1;
+    if(!(await uiConfirm("确认删除武器 \""+k+"\"？（需保存生效）" + (_last ? "\n\n注意：这是最后一件，删光后运行时仅显示抽奖武器池。" : ""),"删除武器"))) return;
     delete SHOP_WEAPON[k]; SHOP_DIRTY=true; syncShopWeaponRaw(); renderShopWeaponBox(true); toast("已删除，需保存","ok");
   }));
   const addBtn=document.getElementById("btnWeaponAdd");
@@ -2590,35 +2658,32 @@ function renderShopWeaponBox(forceOpen=false){
     let n=await uiPrompt("输入新武器名称：","","添加武器");
     if(!n) return; n=n.trim(); if(!n) return;
     if(SHOP_WEAPON[n]!==undefined){toast("已存在同名","bad"); return;}
-    SHOP_WEAPON[n]={price:50000}; SHOP_DIRTY=true; syncShopWeaponRaw(); renderShopWeaponBox(true); toast("已添加，需保存","ok");
+    SHOP_WEAPON[n]={price:50000, atk:0, desc:""}; SHOP_DIRTY=true; syncShopWeaponRaw(); renderShopWeaponBox(true); toast("已添加，需保存","ok");
   });
   const resetBtn=document.getElementById("btnWeaponReset");
   if(resetBtn) resetBtn.addEventListener("click", async()=>{
-    SHOP_WEAPON=parseShopWeapon(""); SHOP_DIRTY=true; syncShopWeaponRaw(); renderShopWeaponBox(true); toast("已恢复默认，需保存","ok");
+    SHOP_WEAPON=JSON.parse(JSON.stringify(WEAPON_DEFAULTS)); SHOP_DIRTY=true; syncShopWeaponRaw(); renderShopWeaponBox(true); toast("已恢复默认，需保存","ok");
   });
 }
 
 function parseShopRide(raw) {
-  if (!raw) return { ...DEFAULT_RIDE_SHOP };
+  // 只解析用户真实配置，不掺内置默认（空=未自定义，运行时用 RIDES 内置；删光有提示）
+  if (!raw) return {};
   try {
     const d = JSON.parse(raw);
     if (typeof d === "object" && d && !Array.isArray(d)) {
-      // 补齐默认图片
-      const merged = { ...DEFAULT_RIDE_SHOP };
+      const out = {};
       Object.keys(d).forEach((k) => {
         if (typeof d[k] === "object" && d[k] !== null) {
-          merged[k] = d[k];
-          if (!merged[k].img && DEFAULT_RIDE_SHOP[k]?.img) {
-            merged[k].img = DEFAULT_RIDE_SHOP[k].img;
-          }
+          out[k] = { price: Number(d[k].price) || 0, img: String(d[k].img || "") };
         } else {
-          merged[k] = { price: Number(d[k]) || 0, img: DEFAULT_RIDE_SHOP[k]?.img || "" };
+          out[k] = { price: Number(d[k]) || 0, img: "" };
         }
       });
-      return merged;
+      return out;
     }
   } catch (e) {}
-  return { ...DEFAULT_RIDE_SHOP };
+  return {};
 }
 function syncShopRaw() {
   try {
@@ -2635,6 +2700,9 @@ function renderShopRideBox(forceOpen = false) {
   const wasOpen = curDetails ? curDetails.open : forceOpen;
   let html = `<details class="panel" style="margin:0"${wasOpen ? " open" : ""}><summary style="cursor:pointer;font-weight:600">🐴 坐骑商城 (ride_shop) — ${entries.length} 件（点击折叠/展开）</summary>`;
   html += `<div class="hint" style="margin-top:8px">每行一个坐骑，支持改名、改价、删、绑图（图片路径如 data/img/坐骑图标/企鹅.jpg，留空用默认图）</div>`;
+  if (!entries.length) {
+    html += `<div class="hint" style="margin:8px 0">当前为空，运行时使用内置坐骑（${Object.keys(DEFAULT_RIDE_SHOP).length} 种）；可添加或恢复默认</div>`;
+  }
   entries.forEach(([name, val]) => {
     let price = 0, img = "";
     if (val && typeof val === "object" && !Array.isArray(val)) { price = val.price ?? 0; img = val.img ?? ""; }
@@ -2675,7 +2743,8 @@ function renderShopRideBox(forceOpen = false) {
   }));
   box.querySelectorAll("[data-ride-del]").forEach(b => b.addEventListener("click", async () => {
     const k = b.dataset.rideDel;
-    if (!(await uiConfirm("确认删除坐骑 \"" + k + "\"？（需点击上方「保存商城图鉴」生效）", "删除坐骑"))) return;
+    const _last = Object.keys(SHOP_RIDE).length <= 1;
+    if (!(await uiConfirm("确认删除坐骑 \"" + k + "\"？（需点击上方「保存商城图鉴」生效）" + (_last ? "\n\n注意：这是最后一只，删光后运行时自动使用内置坐骑。" : ""), "删除坐骑"))) return;
     delete SHOP_RIDE[k];
     SHOP_DIRTY = true;
     syncShopRaw();
@@ -2732,7 +2801,7 @@ function renderShopRideBox(forceOpen = false) {
     n = n.trim();
     if (!n) return;
     if (SHOP_RIDE[n] !== undefined) { toast("已存在同名坐骑", "bad"); return; }
-    SHOP_RIDE[n] = 0;
+    SHOP_RIDE[n] = { price: 0, img: "" };
     SHOP_DIRTY = true;
     syncShopRaw();
     renderShopRideBox(true);
@@ -2770,7 +2839,9 @@ async function renderAtlas(curCfg){
     box.innerHTML = html;
     box.querySelectorAll("[data-atlas-del]").forEach(el => el.addEventListener("click", async () => {
       const [sys, name] = el.dataset.atlasDel.split("|");
-      if (!(await uiConfirm(`确认删除 ${sys} "${name}"？`, "删除图鉴"))) return;
+      const _lastW = sys.includes("武器") && Object.keys(SHOP_WEAPON).length <= 1;
+      const _lastR = sys.includes("坐骑") && Object.keys(SHOP_RIDE).length <= 1;
+      if (!(await uiConfirm(`确认删除 ${sys} "${name}"？` + ((_lastW || _lastR) ? "\n\n注意：这是最后一件，删光后运行时自动使用内置默认。" : ""), "删除图鉴"))) return;
       if (sys.includes("武器")) { delete SHOP_WEAPON[name]; SHOP_DIRTY = true; syncShopWeaponRaw(); renderShopWeaponBox(true); }
       else if (sys.includes("宝物")) {
         let cur = Treas.filter(x => x !== name).join("|");
@@ -2783,7 +2854,7 @@ async function renderAtlas(curCfg){
     document.getElementById("btnAtlasAddWeapon")?.addEventListener("click", async () => {
       let n = await uiPrompt("输入武器名（奴隶系统-武器）：", "", "添加武器");
       if (!n) return; n = n.trim(); if (!n) return;
-      SHOP_WEAPON[n] = { price: 50000 }; SHOP_DIRTY = true; syncShopWeaponRaw(); renderShopWeaponBox(true); renderAtlas(); toast("已添加武器，需保存", "ok");
+      SHOP_WEAPON[n] = { price: 50000, atk: 0, desc: "" }; SHOP_DIRTY = true; syncShopWeaponRaw(); renderShopWeaponBox(true); renderAtlas(); toast("已添加武器，需保存", "ok");
     });
     document.getElementById("btnAtlasAddTreasure")?.addEventListener("click", async () => {
       let n = await uiPrompt("输入宝物名（奴隶系统-宝物）：", "", "添加宝物");
@@ -2798,7 +2869,7 @@ async function renderAtlas(curCfg){
     document.getElementById("btnAtlasAddRide")?.addEventListener("click", async () => {
       let n = await uiPrompt("输入坐骑名（坐骑系统-坐骑）：", "", "添加坐骑");
       if (!n) return; n = n.trim(); if (!n) return;
-      SHOP_RIDE[n] = 500000; SHOP_DIRTY = true; syncShopRaw(); renderShopRideBox(true); renderAtlas(); toast("已添加坐骑，需保存", "ok");
+      SHOP_RIDE[n] = { price: 500000, img: "" }; SHOP_DIRTY = true; syncShopRaw(); renderShopRideBox(true); renderAtlas(); toast("已添加坐骑，需保存", "ok");
     });
   } catch (e) { box.innerHTML = `<span style="color:var(--muted)">图鉴加载失败: ${esc(e.message)}</span>`; }
 }

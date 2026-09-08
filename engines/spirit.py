@@ -48,15 +48,15 @@ def _cfgi(key, default=0):
         return int(default)
 
 
-# ---- 精灵图鉴(可在 WebUI 精灵图鉴编辑器修改, 存 精灵图鉴:spirits/maps; 空则回退 spirit_data.py) ----
+# ---- 精灵图鉴(可在 WebUI 精灵图鉴编辑器修改, 存 精灵图鉴:spirits/maps/shop; 空=未自定义，回退 spirit_data.py 内置) ----
 def _SPIRITS():
     v = ST.cfg("精灵图鉴", "spirits", "")
-    if isinstance(v, dict):
+    if isinstance(v, dict) and v:
         return v
     if v:
         try:
             d = json.loads(v)
-            if isinstance(d, dict):
+            if isinstance(d, dict) and d:
                 return d
         except Exception:
             pass
@@ -65,12 +65,12 @@ def _SPIRITS():
 
 def _MAPS():
     v = ST.cfg("精灵图鉴", "maps", "")
-    if isinstance(v, dict):
+    if isinstance(v, dict) and v:
         return v
     if v:
         try:
             d = json.loads(v)
-            if isinstance(d, dict):
+            if isinstance(d, dict) and d:
                 return d
         except Exception:
             pass
@@ -79,12 +79,12 @@ def _MAPS():
 
 def _SHOP():
     v = ST.cfg("精灵图鉴", "shop", "")
-    if isinstance(v, dict):
+    if isinstance(v, dict) and v:
         return v
     if v:
         try:
             d = json.loads(v)
-            if isinstance(d, dict):
+            if isinstance(d, dict) and d:
                 return d
         except Exception:
             pass

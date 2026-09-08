@@ -224,7 +224,14 @@ def cfg(sec, key, default=""):
     sec = str(sec).strip()
     v = _CONFIG.get(sec) if isinstance(_CONFIG.get(sec), dict) else None
     if v is not None and key in v:
-        return str(v[key])
+        _vv = v[key]
+        # dict/list 用 JSON 序列化（repr 单引号会导致引擎 json.loads 全失败静默回退内置）
+        if isinstance(_vv, (dict, list)):
+            try:
+                return json.dumps(_vv, ensure_ascii=False)
+            except Exception:
+                pass
+        return str(_vv)
     return str(default)
 
 def cfgi(sec, key, default=0):
