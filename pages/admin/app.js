@@ -140,10 +140,10 @@ let CFG = {};
 // 各配置节归属系统（用于分类）+ 必要/玩法分层
 const NECESSARY_SECTIONS = ["总开关配置", "群组开关配置", "网络", "私聊配置", "维护配置"];
 // 备份配置（含 WebDAV）已迁移至「备份管理」Tab 专属卡片，不在配置页重复渲染
-const GAMEPLAY_SECTIONS = ["签到配置","抽奖配置","新手配置","点赞配置","银行配置","娱乐配置","精灵配置","坐骑配置","帮派配置","冒险配置","祈福配置","起名配置","概率配置","唤醒词配置"];
+const GAMEPLAY_SECTIONS = ["签到配置","抽奖配置","新手配置","点赞配置","银行配置","娱乐配置","精灵配置","坐骑配置","帮派配置","冒险配置","祈福配置","概率配置","唤醒词配置"];
 const SYSTEM_MAP = {
   "设置": "奴隶系统", "费用配置": "奴隶系统", "间隔配置": "奴隶系统",
-  "概率配置": "奴隶系统", "祈福配置": "奴隶系统", "起名配置": "奴隶系统",
+  "概率配置": "奴隶系统", "祈福配置": "奴隶系统",
   "签到配置": "签到系统", "抽奖配置": "签到系统",
   "新手配置": "签到系统", "点赞配置": "签到系统",
   "银行配置": "银行系统", "娱乐配置": "娱乐系统",
@@ -1544,7 +1544,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.7.5"
+        version: res.version || "0.7.6"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -1673,7 +1673,6 @@ const CMD_NUMS = {
   "五十连抽": [["设置", "五十连抽花费", "五十连抽花费", "int"]],
   "买下": [["间隔配置", "购买间隔", "购买间隔(分)", "int"]],
   "折磨": [["间隔配置", "折磨间隔", "折磨间隔(分)", "int"]],
-  "起名": [["起名配置", "起名费用", "起名费用", "int"]],
   "买奴隶位": [["设置", "奴隶位价格", "奴隶位价格", "int"]],
   "我要自由": [["费用配置", "初始身价", "初始身价", "int"]],
   "打架": [["间隔配置", "打架间隔", "打架间隔(分)", "int"]],
@@ -1893,7 +1892,7 @@ function renderCmdNums(numCmd, isNew) {
   if (!nums.length && numCmd) {
     // 兜底：若未配置，尝试按系统主配置节自动列出相关数值键（避免“明明有花钱却无可改”）
     try {
-      const secMap = {"买下":"间隔配置","折磨":"间隔配置","打赏":"费用配置","补偿":"费用配置","保护":"设置","起名":"起名配置","买奴隶位":"设置","打架":"间隔配置","我要打工":"间隔配置","奴隶打工":"间隔配置","打工":"间隔配置","学习":"间隔配置","祈福":"祈福配置","我要祈福":"祈福配置","升星":"设置","升阶":"设置","签到":"签到配置","抽奖":"抽奖配置","存款":"银行配置","取款":"银行配置","转账":"银行配置","打劫":"银行配置","打劫银行":"银行配置","赌博":"银行配置","保释":"银行配置","我要越狱":"银行配置","精灵冒险":"精灵配置","丢弃精灵":"精灵配置"};
+      const secMap = {"买下":"间隔配置","折磨":"间隔配置","打赏":"费用配置","补偿":"费用配置","保护":"设置","买奴隶位":"设置","打架":"间隔配置","我要打工":"间隔配置","奴隶打工":"间隔配置","打工":"间隔配置","学习":"间隔配置","祈福":"祈福配置","我要祈福":"祈福配置","升星":"设置","升阶":"设置","签到":"签到配置","抽奖":"抽奖配置","存款":"银行配置","取款":"银行配置","转账":"银行配置","打劫":"银行配置","打劫银行":"银行配置","赌博":"银行配置","保释":"银行配置","我要越狱":"银行配置","精灵冒险":"精灵配置","丢弃精灵":"精灵配置"};
       const sec = secMap[numCmd];
       if (sec && CFG.schema && CFG.schema.groups && CFG.schema.groups[sec]) {
         nums = CFG.schema.groups[sec].filter(it => /金|钱|费|价格|奖|罚|消耗|魅力|体力/.test(it.key+it.desc)).slice(0,6).map(it => [sec, it.key, it.key, it.type]);
@@ -2879,12 +2878,12 @@ async function importShops() {
     const file = e.target.files[0]; if (!file) return;
     try {
       const txt = await file.text(); const data = JSON.parse(txt);
-      // 兼容旧格式 {ride_shop, guild_weapon} 或 {商城图鉴: {...}} 或直接 {ride_shop: "..."}
+      // 兼容旧格式 {商城图鉴: {...}} 或直接 {ride_shop: "..."}
       let sec = {};
       if (data["商城图鉴"]) sec = data["商城图鉴"];
       else if (data["ride_shop"] !== undefined) sec = { ride_shop: data["ride_shop"] };
       else sec = data;
-      // 仅保留 ride_shop，忽略 guild_weapon（已废弃）
+      // 仅保留 ride_shop，其余未知键忽略
       const payload = {};
       if (sec["ride_shop"] !== undefined) payload["ride_shop"] = sec["ride_shop"];
       else if (typeof sec === "object" && sec !== null) {

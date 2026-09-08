@@ -130,7 +130,7 @@ MENU = (
     "📨 帮派邀请 对方QQ　👥 成员列表\r\n"
     "💸 帮派贡献 金额　📈 我的贡献　🧱 我的修筑\r\n"
     "🎁 领取帮派福利　🚪 退出帮派\r\n"
-    "⚔️ 购买武器 数量（走奴隶武器）　🧱 修筑城墙 数量\r\n"
+    "🧱 修筑城墙 数量\r\n"
     "⚔️ 发起帮战 帮派名\r\n"
     "🔧 管理帮派(帮主/护法)：修改宣言/添加护法/取消护法/移出帮派/出让帮派/帮派升级/解散帮派\r\n"
     "━━━━━━━━━━━━━━\r\n"
@@ -372,16 +372,6 @@ def cmd_mine(gid, qq):
     if not g.get("name"):
         return "亲，您还没有加入任何帮派！"
     return f"我的贡献:{g.get('gong',0)}　我的修筑:{g.get('build',0)}"
-
-
-def _guild_weapon_cfg():
-    """帮派武器已并入奴隶武器（保留兼容，仅读旧配置）"""
-    return _cfgi("武器价格", 20000), _cfgi("购买上限", 20)
-
-
-def cmd_weapon(gid, qq, amt):
-    """购买武器: 已并入奴隶武器系统，请使用奴隶武器"""
-    return "帮派武器已并入【奴隶武器】，请发送【武器菜单】或【抽武器】获取武器，提升战力后参与帮战！\r\n当前帮派战力已按成员奴隶武器自动计算。"
 
 
 def cmd_build(gid, qq, amt):
@@ -633,10 +623,6 @@ def handle(gid, qq, raw):
         import re as _re2
         m = _re2.search(r"(\d+)", text)
         return cmd_contribute(gid, qq, int(m.group(1)) if m else 0)
-    if text.startswith("购买武器"):
-        import re as _re3
-        m = _re3.search(r"(\d+)", text)
-        return cmd_weapon(gid, qq, int(m.group(1)) if m else 1)
     if text.startswith("修筑城墙"):
         import re as _re4
         m = _re4.search(r"(\d+)", text)

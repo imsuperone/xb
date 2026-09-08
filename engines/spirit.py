@@ -721,8 +721,8 @@ def _handle_inner(gid, qq, raw):
     if m.startswith("查看精灵"):
         return cmd_view(gid, qq, m[4:].strip())
     if m.startswith("购买"):
-        # 帮派系统的 购买武器 / 坐骑系统的 购买坐骑 由各自引擎接管, 此处放行
-        if m.startswith("购买武器") or m.startswith("购买坐骑"):
+        # 坐骑系统的 购买坐骑 由坐骑引擎接管, 此处放行
+        if m.startswith("购买坐骑"):
             return None
         return cmd_buy(gid, qq, m[2:].strip())
     if m.startswith("精灵冒险"):

@@ -384,10 +384,6 @@
       }
     }
   },
-  "起名配置": {
-    "type": "object",
-    "items": {}
-  },
   "签到配置": {
     "type": "object",
     "items": {
@@ -1174,11 +1170,6 @@
         "type": "int",
         "description": "坐骑-私人航空价格",
         "default": 4000000
-      },
-      "价格_女仆": {
-        "type": "int",
-        "description": "女仆坐骑价格",
-        "default": 15000000
       }
     }
   },
@@ -2401,11 +2392,6 @@
         "default": "真",
         "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
       },
-      "购买武器": {
-        "type": "string",
-        "default": "真",
-        "description": "【精灵】指令启用开关(真/假；假=不再响应)"
-      },
       "购买魅力": {
         "type": "string",
         "default": "真",
@@ -2417,11 +2403,6 @@
         "description": "【银行】指令启用开关(真/假；假=不再响应)"
       },
       "赎身": {
-        "type": "string",
-        "default": "真",
-        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
-      },
-      "起名": {
         "type": "string",
         "default": "真",
         "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
@@ -3612,20 +3593,10 @@
         "default": "",
         "description": "【奴隶】购买奴隶位回复模板(留空=默认；多个用 | 分隔随机取一)"
       },
-      "购买武器": {
-        "type": "text",
-        "default": "",
-        "description": "【精灵】购买武器回复模板(留空=默认；多个用 | 分隔随机取一)"
-      },
       "赎身": {
         "type": "text",
         "default": "",
         "description": "【奴隶】赎身回复模板(留空=默认；多个用 | 分隔随机取一)"
-      },
-      "起名": {
-        "type": "text",
-        "default": "",
-        "description": "【奴隶】起名回复模板(留空=默认；多个用 | 分隔随机取一)"
       },
       "超管列表": {
         "type": "text",
@@ -3766,7 +3737,7 @@
   },
   "商城图鉴": {
     "type": "object",
-    "description": "各商城数据图鉴(精灵图鉴式): ride_shop=坐骑价格JSON, weapon_shop=武器价格/数值JSON, guild_weapon=帮派武器价/上限JSON",
+    "description": "各商城数据图鉴(精灵图鉴式): ride_shop=坐骑价格JSON, weapon_shop=武器价格/数值JSON",
     "items": {
       "ride_shop": {
         "type": "text",
@@ -3777,11 +3748,6 @@
         "type": "text",
         "description": "武器商城价格/数值(JSON: {武器名:{price,atk,desc}})，抽奖武器自动同步至此可改价改数值",
         "default": "{\"木剑\": 500, \"铁剑\": 1500, \"苍雪剑\": 4000, \"烈焰刀\": 10000, \"青龙偃月刀\": 30000, \"雷鸣剑\": 80000, \"鬼泪村正\": 150000, \"神使沧溟\": 400000, \"炎宿朱雀\": 800000}"
-      },
-      "guild_weapon": {
-        "type": "text",
-        "description": "帮派武器(JSON: {price,capture})",
-        "default": ""
       }
     }
   },

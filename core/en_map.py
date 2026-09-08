@@ -98,7 +98,6 @@ PROP_CN_TO_EN = {
     "劳斯莱斯": "laosisilaisi",
     "布加迪威龙": "bugadiweilong",
     "私人航空": "sirenhangkong",
-    "女仆": "nupu",
     "老八": "laoba",
     "摩托车": "motuoche",
     # 精灵商店道具

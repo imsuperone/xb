@@ -920,10 +920,6 @@ def cmd_freedom(gid, qq, st):
     return T.FREE_KIND.format(cost=price) + "\r\n换取自由！"
 
 
-def cmd_rename(gid, qq, target, newname, st):
-    return "起名功能已下线，请使用系统默认昵称。"
-
-
 def cmd_buyslot(gid, qq, st):
     u = U(st, qq)
     cur = _safe_int(uget(u, "slave_slots", str(cfgi("设置", "奴隶个数", 5))), cfgi("设置", "奴隶个数", 5))
@@ -1779,7 +1775,7 @@ def _route_locked(gid, qq, raw):
         # 兼容纯 QQ 号（无 @）的写法：文案仅 @QQ，但解析支持 QQ 号
         if not target:
             # 仅对需要目标的指令尝试提取，避免金额被误判
-            _need = ("查询","补偿","买下","折磨","保护","释放","赎身","起名","打架","购买奴隶位")
+            _need = ("查询","补偿","买下","折磨","保护","释放","赎身","打架","购买奴隶位")
             for _pref in _need:
                 if text.startswith(_pref):
                     m = _re.search(r"\b(\d{5,12})\b", text)
@@ -1790,7 +1786,7 @@ def _route_locked(gid, qq, raw):
             # 通用兜底：若仍无 target 且文本含 @QQ 之外的独立 QQ 号（如 买下 123），也尝试首个数字
             if not target:
                 # 对于买下/查询等，即使前缀不完全匹配也尝试
-                if any(kw in text for kw in ("买下","查询","补偿","保护","释放","赎身","起名","打架")):
+                if any(kw in text for kw in ("买下","查询","补偿","保护","释放","赎身","打架")):
                     m = _re.search(r"\b(\d{5,12})\b", text)
                     if m:
                         target = m.group(1)
@@ -1915,8 +1911,6 @@ def _route_locked(gid, qq, raw):
         return cmd_ransom(gid, qq, target, st)
     if text == "我要自由":
         return cmd_freedom(gid, qq, st)
-    if text.startswith("起名"):
-        return "起名功能已下线，请使用系统默认昵称。"
     if text.startswith("买奴隶位") or text.startswith("购买奴隶位"):
         return cmd_buyslot(gid, qq, st)
     if text.startswith("打架"):
