@@ -84,7 +84,13 @@ def _setup_user(v_gid, v_qq, label, cmd):
         ST.acct_save(v_gid, v_qq)
         try:
             slave.mark_known(v_gid, v_qq)
-            slave.NOTE_NAMES[v_qq] = f"测试{v_qq[-2:]}"
+            try:
+                if hasattr(slave, "set_note_name"):
+                    slave.set_note_name(v_gid, v_qq, f"测试{v_qq[-2:]}")
+                else:
+                    slave.NOTE_NAMES[v_qq] = f"测试{v_qq[-2:]}"
+            except Exception:
+                slave.NOTE_NAMES[v_qq] = f"测试{v_qq[-2:]}"
         except Exception:
             pass
         if "没钱" in label:
@@ -588,7 +594,12 @@ async def handle_admin_list(raw, gid, qq, is_admin, event):
         lines = ["🔧 超管列表（AstrBot 管理员）"]
         for q in admins:
             try:
-                nm = slave.NOTE_NAMES.get(q, "") or ""
+                try:
+                    nm = slave.get_note_name(gid, q) if hasattr(slave, "get_note_name") else ""
+                except Exception:
+                    nm = ""
+                if not nm:
+                    nm = slave.NOTE_NAMES.get(q, "") or ""
                 if not nm:
                     try:
                         nm = slave.fetch_card(gid, q) or ""

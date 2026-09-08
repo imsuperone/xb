@@ -608,19 +608,26 @@ def cmd_rank(gid, kind):
     for i, (v, q, nm) in enumerate(lst[:10], 1):
         # 加 emoji/单位 隔开，避免 QQ 与战力数值粘连
         if label == "总战力":
-            lines.append(f"{i}. {nm}　{lstr(q)}　💥 {v} 战力")
+            lines.append(f"{i}. {nm}　{lstr(q, gid)}　💥 {v} 战力")
         elif label == "等级":
-            lines.append(f"{i}. {nm}　{lstr(q)}　⭐ Lv.{v}")
+            lines.append(f"{i}. {nm}　{lstr(q, gid)}　⭐ Lv.{v}")
         else:
-            lines.append(f"{i}. {nm}　{lstr(q)}　✨ {v}")
+            lines.append(f"{i}. {nm}　{lstr(q, gid)}　✨ {v}")
     lines.append("温馨提示：精灵总战力是结合精灵等级、血量、攻击、防御、特攻、特防计算出来的总属性！")
     return "\r\n".join(lines)
 
 
-def lstr(q):
+def lstr(q, gid=None):
     try:
         from . import slave as S
-        return S.NOTE_NAMES.get(q, q) if hasattr(S, "NOTE_NAMES") else q
+        if gid:
+            try:
+                nm = S.get_note_name(gid, q) or S.fetch_card(gid, q)
+                if nm:
+                    return nm
+            except Exception:
+                pass
+        return S.NOTE_NAMES.get(q, q) if (not gid or gid == "dm") and hasattr(S, "NOTE_NAMES") else q
     except Exception:
         return q
 

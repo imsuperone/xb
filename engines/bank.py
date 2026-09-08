@@ -16,12 +16,25 @@ except ImportError:
 
 
 def _disp_name(qq, gid=None):
-    """取群昵称显示(优先 NOTE_NAMES，其次档案 name)，失败回退 QQ"""
+    """取群昵称显示(优先本群分群昵称，其次本群档案 name)，失败回退 QQ（绝不串别群）"""
     qq = str(qq)
-    # NOTE_NAMES
+    # 本群分群昵称
     try:
         from . import slave as SL
-        nm = SL.NOTE_NAMES.get(qq, "")
+        try:
+            nm = SL.get_note_name(gid, qq) if gid and hasattr(SL, "get_note_name") else ""
+        except Exception:
+            nm = ""
+        if nm and nm.strip():
+            return nm
+        if gid:
+            try:
+                nm2 = SL.fetch_card(str(gid), qq) or ""
+                if nm2 and nm2.strip():
+                    return nm2
+            except Exception:
+                pass
+        nm = SL.NOTE_NAMES.get(qq, "") if not gid or gid == "dm" else ""
         if nm and nm.strip():
             return nm
         if gid:
@@ -37,9 +50,16 @@ def _disp_name(qq, gid=None):
         pass
     try:
         import slave as SL2
-        nm = SL2.NOTE_NAMES.get(qq, "")
+        try:
+            nm = SL2.get_note_name(gid, qq) if gid and hasattr(SL2, "get_note_name") else ""
+        except Exception:
+            nm = ""
         if nm and nm.strip():
             return nm
+        if not gid or gid == "dm":
+            nm = SL2.NOTE_NAMES.get(qq, "")
+            if nm and nm.strip():
+                return nm
         if gid:
             try:
                 st = SL2.state(str(gid))
@@ -160,11 +180,21 @@ def _show_jail(a):
 
 
 # ---- 转账目标解析辅助 ----
-def _resolve_qq_from_name(name):
-    """通过 slave.NOTE_NAMES 反查 qq (name -> qq)"""
+def _resolve_qq_from_name(name, gid=None):
+    """通过分群昵称反查 qq (name -> qq)，优先本群（防跨群串扰）"""
     name = str(name).strip()
     if not name:
         return None
+    # 优先本群分群昵称
+    if gid:
+        try:
+            from . import slave as SL0
+            byg = getattr(SL0, "NOTE_NAMES_BY_GROUP", {}) or {}
+            for (_g, _q), _n in byg.items():
+                if str(_g) == str(gid) and str(_n).strip() == name:
+                    return str(_q)
+        except Exception:
+            pass
     # via ST._AT_NAMES
     try:
         qq = ST._AT_NAMES.get(name)
@@ -190,7 +220,7 @@ def _resolve_qq_from_name(name):
     return None
 
 
-def _extract_transfer_target(raw):
+def _extract_transfer_target(raw, gid=None):
     """鲁棒解析 @目标: 顺序: ST.parse_at -> CQ码 -> @QQ数字 -> @名字查 slave.NOTE_NAMES -> 纯QQ字符串
     返回 (target_qq_or_None, remaining_text)
     """
@@ -216,7 +246,7 @@ def _extract_transfer_target(raw):
     m = re.search(r"@\s*([^@\s，,]+)", raw)
     if m:
         name = m.group(1).strip()
-        qq = _resolve_qq_from_name(name)
+        qq = _resolve_qq_from_name(name, gid)
         if qq:
             rem = re.sub(r"@\s*[^@\s，,]+", "", raw, count=1).strip()
             return str(qq), rem
@@ -230,7 +260,7 @@ def _extract_transfer_target(raw):
     return None, raw.strip()
 
 
-def _ensure_target_qq(target):
+def _ensure_target_qq(target, gid=None):
     """cmd_transfer 内部兜底: 将各种形式的 target 转为纯QQ号"""
     if target is None:
         return None
@@ -255,16 +285,16 @@ def _ensure_target_qq(target):
     # @name
     m = re.search(r"@\s*([^@\s，,]+)", s)
     if m:
-        qq = _resolve_qq_from_name(m.group(1).strip())
+        qq = _resolve_qq_from_name(m.group(1).strip(), gid)
         if qq:
             return qq
         # also try direct name without @
-        qq = _resolve_qq_from_name(s.lstrip("@").strip())
+        qq = _resolve_qq_from_name(s.lstrip("@").strip(), gid)
         if qq:
             return qq
     else:
         # 直接名字 (无@)
-        qq = _resolve_qq_from_name(s)
+        qq = _resolve_qq_from_name(s, gid)
         if qq:
             return qq
         # 纯QQ字符串
@@ -383,7 +413,7 @@ def cmd_force_withdraw(gid, qq, amount):
 
 def cmd_transfer(gid, qq, target, amount):
     # 增强: 兼容 @昵称 / CQ / @QQ / 纯昵称 / 纯QQ 字符串 原子体力+钱包
-    target = _ensure_target_qq(target)
+    target = _ensure_target_qq(target, gid)
     if amount <= 0 or not target:
         return "亲，您的格式有误，转账格式为：【转账 @QQ 金额】！"
     if str(target) == str(qq):
@@ -446,7 +476,10 @@ def cmd_transfer(gid, qq, target, amount):
             pass
     try:
         from . import slave as SL
-        tn = SL.NOTE_NAMES.get(str(target), str(target))
+        try:
+            tn = SL.get_note_name(gid, str(target)) or SL.fetch_card(gid, str(target)) or str(target)
+        except Exception:
+            tn = SL.NOTE_NAMES.get(str(target), str(target))
     except Exception:
         tn = str(target)
     return f"转账成功！您已向 {tn} 转入{amount}{ST.coin_name()}！"
@@ -750,10 +783,17 @@ def cmd_recv_red(gid, qq, pwd):
     return f"恭喜！你抢到了 {got}{ST.coin_name()}，魅力+{gain_meili + base_meili}！"
 
 
-def _bail_name(tid):
+def _bail_name(tid, gid=None):
     try:
         from . import slave as SL
-        return SL.NOTE_NAMES.get(str(tid), str(tid))
+        if gid:
+            try:
+                nm = SL.get_note_name(gid, str(tid)) or SL.fetch_card(gid, str(tid))
+                if nm:
+                    return nm
+            except Exception:
+                pass
+        return SL.NOTE_NAMES.get(str(tid), str(tid)) if not gid or gid == "dm" else str(tid)
     except Exception:
         return str(tid)
 
@@ -770,7 +810,7 @@ def cmd_bail(gid, qq, target, self_bail=False, kind="保释"):
     a = _acct(gid, qq)
     ta = _acct(gid, tid)
     if not _check_jail(ta):
-        return f"对方({_bail_name(tid)})没有入狱，不需要{kind}！"
+        return f"对方({_bail_name(tid, gid)})没有入狱，不需要{kind}！"
     if not self_bail and _check_jail(a):
         return "你自己都蹲在监狱里了，拿什么解救别人？？发送【我要出狱】试试！"
     # 劫狱免费，仅需少量体力；保释收费
@@ -808,9 +848,9 @@ def cmd_bail(gid, qq, target, self_bail=False, kind="保释"):
         cost_txt = f"花费{fee}{ST.coin_name()}、{tili}体力" if fee or tili else "无消耗"
         meli_txt = f"魅力-{meli}" if meli else ""
         return (f"劫狱成功！{cost_txt} {meli_txt}\r\n"
-                f"成功救出 <{_bail_name(tid)}>！侠义之举，令人敬佩！")
+                f"成功救出 <{_bail_name(tid, gid)}>！侠义之举，令人敬佩！")
     return (f"保释成功！花费{fee}{ST.coin_name()}、{tili}体力，魅力-{meli}。\r\n"
-            f"<{_bail_name(tid)}> 现在可以出狱了！")
+            f"<{_bail_name(tid, gid)}> 现在可以出狱了！")
 
 
 def cmd_out_jail(gid, qq):
@@ -978,7 +1018,7 @@ def handle(gid, qq, raw):
         return _MENU
     # 鲁棒转账目标解析: 依次尝试 ST.parse_at -> CQ -> @QQ数字 -> @名字 -> 纯QQ
     target = None
-    t1, r1 = _extract_transfer_target(text)
+    t1, r1 = _extract_transfer_target(text, gid)
     if t1:
         target = t1
         text = r1

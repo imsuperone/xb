@@ -17,7 +17,7 @@ except ImportError:
     except ImportError:
         import slave  # type: ignore
 
-PLUGIN_VERSION = "0.7.1"
+PLUGIN_VERSION = "0.7.2"
 
 
 def _extract_param(request, key, default=""):
@@ -544,6 +544,17 @@ async def handle_user_clear(request):
     """清除指定单用户的全部数据（钱包、账户、奴隶、精灵、新手礼包资格）"""
     gid = _extract_param(request, "gid", "").strip()
     qq = _extract_param(request, "qq", "").strip()
+    # 兼容 Bridge GET query（get_req_query 跨框架）与 POST JSON Body
+    if not gid:
+        try:
+            gid = str(get_req_query(request, "gid", "") or "").strip()
+        except Exception:
+            pass
+    if not qq:
+        try:
+            qq = str(get_req_query(request, "qq", "") or "").strip()
+        except Exception:
+            pass
     if not gid or not qq:
         try:
             p = await get_req_json(request, default={})
@@ -587,6 +598,18 @@ async def handle_user_clear(request):
                         u["purchase_price"] = "0"
                         u["purchase_time"] = ""
                 slave.save(gid)
+        except Exception:
+            pass
+
+        # 2b. 清除分群昵称内存（防清除后列表仍显示幽灵名）
+        try:
+            if hasattr(slave, "clear_note_name"):
+                slave.clear_note_name(gid, qq)
+            else:
+                try:
+                    slave.NOTE_NAMES_BY_GROUP.pop((str(gid), str(qq)), None)
+                except Exception:
+                    pass
         except Exception:
             pass
 

@@ -182,8 +182,53 @@ def uset(u, k, v):
 _name_fail_until = [0.0]
 _card_cache = {}
 _CARD_TTL = 300.0
-NOTE_NAMES = {}   # qq -> card/nickname (由适配层注入)
+NOTE_NAMES = {}   # qq -> card/nickname (由适配层注入，跨群最新兜底，仅兼容展示)
+# 分群昵称表：(gid, qq) -> card/nickname，根治多群同人串昵称（A群卡片覆盖B群）
+NOTE_NAMES_BY_GROUP = {}
 _KNOWN = {}       # gid -> set(qq) 记录本群出现过的成员(@目标/发送者/已开户), 用于判断"是否存在人"
+
+
+def set_note_name(gid, qq, name):
+    """写入分群昵称 + 全局最新兜底（写路径唯一入口，O(1)）"""
+    try:
+        g = str(gid or "").strip()
+        q = str(qq or "").strip()
+        n = str(name or "").strip()
+        if not q.isdigit() or not n:
+            return
+        if g:
+            NOTE_NAMES_BY_GROUP[(g, q)] = n
+        # 保留全局最新，供无 gid 的旧展示路径兜底
+        NOTE_NAMES[q] = n
+    except Exception:
+        pass
+
+
+def get_note_name(gid, qq, fallback_global=False):
+    """读取分群昵称。默认不跨群串扰；gid 为空/dm 或显式要求时才回退全局。"""
+    try:
+        g = str(gid or "").strip()
+        q = str(qq or "").strip()
+        if g and g != "dm":
+            n = NOTE_NAMES_BY_GROUP.get((g, q), "")
+            if n:
+                return n
+            if not fallback_global:
+                return ""
+        return NOTE_NAMES.get(q, "") or ""
+    except Exception:
+        return ""
+
+
+def clear_note_name(gid, qq):
+    """清除单用户分群昵称（WebUI 删除用户/退群清理后调用，防幽灵名）"""
+    try:
+        g = str(gid or "").strip()
+        q = str(qq or "").strip()
+        if g and q:
+            NOTE_NAMES_BY_GROUP.pop((g, q), None)
+    except Exception:
+        pass
 
 
 def mark_known(gid, qq):
@@ -208,7 +253,10 @@ def exists_user(gid, qq):
         return True
     if _KNOWN.get(gid) and qq in _KNOWN[gid]:
         return True
-    if qq in NOTE_NAMES:
+    # 分群昵称优先：同 QQ 在别群发言不得算作本群存在（防跨群串扰）
+    if (gid, qq) in NOTE_NAMES_BY_GROUP:
+        return True
+    if gid == "dm" and qq in NOTE_NAMES:
         return True
     try:
         st = state(gid)
@@ -246,8 +294,23 @@ def exists_user(gid, qq):
 
 
 def fetch_card(gid, qq):
-    """仅使用 NOTE_NAMES 缓存（AstrBot 事件注入），已移除 NapCat 直连"""
+    """分群优先的昵称读取（AstrBot 事件注入），已移除 NapCat 直连"""
     qq = str(qq)
+    gid = str(gid or "")
+    # 1. 分群昵称（本群最新卡片，绝不串到别群）
+    if gid and gid != "dm":
+        n = NOTE_NAMES_BY_GROUP.get((gid, qq), "")
+        if n:
+            return n
+        now = _time.time()
+        ck = f"{gid}:{qq}"
+        hit = _card_cache.get(ck)
+        if hit and now - hit[0] < _CARD_TTL:
+            return hit[1]
+        if now < _name_fail_until[0]:
+            return ""
+        # 本群无记录时返回空（不得回退别群卡片），由 uname 回退本群档案
+        return ""
     n = NOTE_NAMES.get(qq)
     if n:
         return n
@@ -264,9 +327,10 @@ def fetch_card(gid, qq):
 
 def uname(st, qq):
     u = U(st, qq)
-    # 优先 NOTE_NAMES(由 _dispatch 实时同步的最新群昵称)，并回写到档案以持久化
+    # 优先本群分群昵称(由 _dispatch 实时同步)，并回写到本群档案以持久化（绝不写别群）
     try:
-        nm = NOTE_NAMES.get(str(qq), "")
+        gid0 = str(getattr(st, "_gid", "") or "")
+        nm = get_note_name(gid0, str(qq)) if gid0 and gid0 != "dm" else NOTE_NAMES.get(str(qq), "")
         if nm and _re.sub(r"[\u3000\u3164\u200b\ufeff\u2800-\u28ff\s]", "", nm):
             if u.get("name", "") != nm:
                 uset(u, "name", nm)
@@ -1625,8 +1689,17 @@ def _route_locked(gid, qq, raw):
         if m:
             nm = m.group(1).strip()
             clean_nm = _re.sub(r"[\[\]【】\(\)\s]", "", nm)
-            # 1. 查实时 NOTE_NAMES
-            if NOTE_NAMES:
+            # 1. 查本群分群昵称（优先，防跨群串扰）
+            for (_g, _q), _n in NOTE_NAMES_BY_GROUP.items():
+                if str(_g) != str(gid):
+                    continue
+                clean_n = _re.sub(r"[\[\]【】\(\)\s]", "", str(_n or ""))
+                if clean_n and (clean_n == clean_nm or clean_nm in clean_n or clean_n in clean_nm):
+                    target = str(_q)
+                    text = text.replace(m.group(0), "", 1).strip()
+                    break
+            # 1b. 查全局 NOTE_NAMES 兜底（dm/旧数据）
+            if not target and NOTE_NAMES:
                 for _q, _n in NOTE_NAMES.items():
                     clean_n = _re.sub(r"[\[\]【】\(\)\s]", "", str(_n or ""))
                     if clean_n and (clean_n == clean_nm or clean_nm in clean_n or clean_n in clean_nm):
@@ -1743,12 +1816,21 @@ def _route_locked(gid, qq, raw):
                         t = m_num.group(1)
                     else:
                         clean_rest = _re.sub(r"[\[\]【】\(\)\s]", "", rest)
-                        # 1. 查 NOTE_NAMES
-                        for _q, _n in NOTE_NAMES.items():
+                        # 1. 查本群分群昵称（优先，防跨群串扰）
+                        for (_g, _q), _n in NOTE_NAMES_BY_GROUP.items():
+                            if str(_g) != str(gid):
+                                continue
                             clean_n = _re.sub(r"[\[\]【】\(\)\s]", "", str(_n or ""))
                             if clean_n and (clean_n == clean_rest or clean_rest in clean_n or clean_n in clean_rest):
                                 t = str(_q)
                                 break
+                        # 1b. 查全局 NOTE_NAMES 兜底
+                        if not t:
+                            for _q, _n in NOTE_NAMES.items():
+                                clean_n = _re.sub(r"[\[\]【】\(\)\s]", "", str(_n or ""))
+                                if clean_n and (clean_n == clean_rest or clean_rest in clean_n or clean_n in clean_rest):
+                                    t = str(_q)
+                                    break
                         # 2. 查 store._AT_NAMES
                         if not t and hasattr(store, "_AT_NAMES") and store._AT_NAMES:
                             for _an, _aq in store._AT_NAMES.items():
@@ -1958,6 +2040,7 @@ def clear_user_slave(gid, qq):
     qq = str(qq).strip()
     if not (gid.isdigit() and qq.isdigit()):
         return
+    clear_note_name(gid, qq)
     with _cmd_lock(gid):
         st = state(gid)
         # 1. 移除该用户自己的奴隶档案（重置为完全未建立档案状态）

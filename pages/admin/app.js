@@ -1410,71 +1410,71 @@ function renderUserTable() {
       </tr>`;
     })
     .join("");
-  // 绑定单用户导出与清除 (保存已通过 userBody 事件委托绑定)
-  body.querySelectorAll("[data-export]").forEach((b) => {
-    b.addEventListener("click", async () => {
-      try {
-        const res = await getBridge().apiGet("user/export", { gid: b.dataset.gid, qq: b.dataset.qq });
-        if (res && res.data) {
-          downloadBase64File(res.data, res.filename || `xbbot_user_${b.dataset.qq}_${b.dataset.gid}.json`);
-        } else if (res) {
-          downloadJson(res, `xbbot_user_${b.dataset.qq}_${b.dataset.gid}.json`);
-        }
-      } catch (e) { toast("导出失败: " + e.message, "bad"); }
-    });
-  });
-  body.querySelectorAll("[data-clear='user']").forEach((b) => {
-    b.addEventListener("click", () => {
-      clearUserSingle(b.dataset.qq, b.dataset.gid);
-    });
-  });
+  // 单用户导出/清除/保存统一走 #userBody 事件委托（见下方绑定），此处不再逐行直绑，
+  // 避免搜索过滤/排序重渲染后绑定丢失与重复绑定导致“按钮无效/点两次”。
 }
 
+let _CLEARING_USERS = new Set();
 async function clearUserSingle(qq, gid) {
   qq = String(qq || "").trim();
   gid = String(gid || "").trim();
   if (!qq || !gid) return;
-  const ok = confirm(
-    `⚠️ 危险操作确认\n\n` +
+  const ckey = gid + ":" + qq;
+  if (_CLEARING_USERS.has(ckey)) return;
+  // iframe 沙箱下原生 confirm 会被拦截导致按钮“无效”，统一用自研 uiConfirm（规则六二次确认）
+  const ok = await uiConfirm(
     `确定要彻底清除用户【${qq}】（群: ${gid}）的所有数据吗？\n\n` +
     `将一并清除以下内容：\n` +
     `1. 钱包金币、银行存款、体力、魅力、奖券与签到记录\n` +
     `2. 奴隶系统：解除奴隶身份，且其名下持有的奴隶将全部释放自由\n` +
     `3. 精灵系统：拥有的所有精灵、出战骑乘状态与背包道具全部清除\n` +
     `4. 重置新手礼包与精灵领养状态（该用户可重新领取新手礼包）\n\n` +
-    `此操作立即生效且不可逆，是否确定清除？`
+    `此操作立即生效且不可逆，是否确定清除？`,
+    "危险操作确认"
   );
   if (!ok) return;
 
+  _CLEARING_USERS.add(ckey);
   try {
     toast("正在清理用户数据...", "info");
-    const res = await getBridge().apiPost("user/clear", { gid, qq });
-    if (res && res.ok) {
+    let res = null;
+    try {
+      res = await getBridge().apiPost("user/clear", { gid, qq });
+    } catch (e) {
+      // Bridge POST 异常时回退 GET（后端 user/clear 同时支持 GET/POST）
+      try { res = await getBridge().apiGet("user/clear", { gid, qq }); } catch (e2) { throw e; }
+    }
+    if (res && (res.ok || res.saved || res.cleared)) {
       toast(res.msg || `用户 ${qq} 数据已彻底清除`, "ok");
       await loadUsers();
-      if (typeof loadSlaveUsers === "function") try { loadSlaveUsers(); } catch(e) {}
-      if (typeof loadSpiritUsers === "function") try { loadSpiritUsers(); } catch(e) {}
+      if (typeof loadSlaveUsers === "function") try { await loadSlaveUsers(); } catch(e) {}
+      if (typeof loadSpiritUsers === "function") try { await loadSpiritUsers(); } catch(e) {}
     } else {
       toast((res && (res.msg || res.error)) || "清除失败", "bad");
     }
   } catch (e) {
     toast("清除失败: " + e.message, "bad");
+  } finally {
+    _CLEARING_USERS.delete(ckey);
   }
 }
 
 async function clearUserManual() {
-  const curGid = (document.getElementById("userGidFilter")?.value || USER_GID_FILTER || "").trim();
-  const qq = prompt("请输入要彻底清除数据的用户 QQ 号：");
-  if (!qq || !qq.trim()) return;
-  const targetQq = qq.trim();
+  const curGid = (document.getElementById("userGidFilter")?.value || (typeof USER_GID_FILTER !== "undefined" ? USER_GID_FILTER : "") || "").trim();
+  // iframe 下原生 prompt 会被拦截，统一用 uiPrompt
+  const qq = await uiPrompt("请输入要彻底清除数据的用户 QQ 号：", "", "清除单用户");
+  if (qq === null || qq === undefined) return;
+  if (!String(qq).trim() || !/^\d{5,12}$/.test(String(qq).trim())) { if (String(qq).trim()) toast("QQ 号格式不正确", "bad"); return; }
+  const targetQq = String(qq).trim();
   let targetGid = curGid;
   if (!targetGid) {
-    const gInput = prompt(`请输入用户【${targetQq}】所在的群号：`, "");
-    if (!gInput || !gInput.trim()) {
+    const gInput = await uiPrompt(`请输入用户【${targetQq}】所在的群号：`, "", "清除单用户");
+    if (gInput === null || gInput === undefined) return;
+    if (!String(gInput).trim()) {
       toast("已取消操作：必须提供群号", "bad");
       return;
     }
-    targetGid = gInput.trim();
+    targetGid = String(gInput).trim();
   }
   await clearUserSingle(targetQq, targetGid);
 }
@@ -1554,7 +1554,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.7.1"
+        version: res.version || "0.7.2"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -2355,9 +2355,23 @@ document.getElementById("userGidFilter")?.addEventListener("change", async () =>
     await loadUsers();
   }
 });
-document.getElementById("userBody")?.addEventListener("click", (e) => {
-  const b = e.target.closest("button[data-save]");
-  if (b) saveUserEdit(b.dataset.qq, b.dataset.gid, b);
+document.getElementById("userBody")?.addEventListener("click", async (e) => {
+  const bSave = e.target.closest("button[data-save]");
+  if (bSave) { saveUserEdit(bSave.dataset.qq, bSave.dataset.gid, bSave); return; }
+  const bExp = e.target.closest("button[data-export]");
+  if (bExp) {
+    try {
+      const res = await getBridge().apiGet("user/export", { gid: bExp.dataset.gid, qq: bExp.dataset.qq });
+      if (res && res.data) {
+        downloadBase64File(res.data, res.filename || `xbbot_user_${bExp.dataset.qq}_${bExp.dataset.gid}.json`);
+      } else if (res) {
+        downloadJson(res, `xbbot_user_${bExp.dataset.qq}_${bExp.dataset.gid}.json`);
+      }
+    } catch (err) { toast("导出失败: " + err.message, "bad"); }
+    return;
+  }
+  const bClr = e.target.closest("button[data-clear='user']");
+  if (bClr) { clearUserSingle(bClr.dataset.qq, bClr.dataset.gid); return; }
 });
 document.querySelectorAll(".harrow[data-cat]").forEach((btn) =>
   btn.addEventListener("click", () => {

@@ -166,7 +166,10 @@ def cmd_personal(gid, qq):
     disp = str(qq)
     try:
         from . import slave as _sl_name
-        disp = _sl_name.NOTE_NAMES.get(str(qq), str(qq)) or str(qq)
+        try:
+            disp = _sl_name.get_note_name(gid, str(qq)) or _sl_name.fetch_card(gid, str(qq)) or str(qq)
+        except Exception:
+            disp = _sl_name.NOTE_NAMES.get(str(qq), str(qq)) or str(qq)
     except Exception:
         pass
     lines = [
@@ -366,7 +369,10 @@ def _rank_by(gid, fn, name, topn=10):
                 nm = ""
                 if SL is not None:
                     try:
-                        nm = SL.NOTE_NAMES.get(q, "") or ""
+                        try:
+                            nm = SL.get_note_name(gid, q) or "" if hasattr(SL, "get_note_name") else ""
+                        except Exception:
+                            nm = ""
                         if not nm:
                             nm = SL.fetch_card(gid, q) or ""
                         if not nm:
@@ -462,7 +468,10 @@ def _rank_by(gid, fn, name, topn=10):
         nm = ""
         if SL is not None:
             try:
-                nm = SL.NOTE_NAMES.get(q, "") or ""
+                try:
+                    nm = SL.get_note_name(gid, q) or "" if hasattr(SL, "get_note_name") else ""
+                except Exception:
+                    nm = ""
                 if not nm:
                     nm = SL.fetch_card(gid, q) or ""
                 if not nm:

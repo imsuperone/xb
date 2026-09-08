@@ -422,11 +422,14 @@ def check_welcome(gid, qq):
         if last and now - int(last) < 3 * 3600:
             return None
         ST.recall_set(key, str(now))
-        # 群昵称优先
+        # 群昵称优先（本群分群昵称，防跨群串扰）
         disp = str(qq)
         try:
             from . import slave as SL
-            disp = SL.NOTE_NAMES.get(str(qq), str(qq)) or str(qq)
+            try:
+                disp = SL.get_note_name(gid, str(qq)) or SL.fetch_card(gid, str(qq)) or str(qq)
+            except Exception:
+                disp = SL.NOTE_NAMES.get(str(qq), str(qq)) or str(qq)
             # 若为 QQ 本身，尝试档案 name
             if disp == str(qq):
                 try:
@@ -440,7 +443,10 @@ def check_welcome(gid, qq):
         except Exception:
             try:
                 import slave as SL2
-                disp = SL2.NOTE_NAMES.get(str(qq), str(qq)) or str(qq)
+                try:
+                    disp = SL2.get_note_name(gid, str(qq)) or SL2.fetch_card(gid, str(qq)) or str(qq)
+                except Exception:
+                    disp = SL2.NOTE_NAMES.get(str(qq), str(qq)) or str(qq)
             except Exception:
                 pass
         # 微量金币奖励：坐骑价值/5000（最低 10，最高 500）

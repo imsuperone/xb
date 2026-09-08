@@ -273,7 +273,10 @@ def cmd_rank(gid, qq):
         disp = str(q)
         try:
             from . import slave as SL
-            disp = SL.NOTE_NAMES.get(str(q), str(q))
+            try:
+                disp = SL.get_note_name(gid, str(q)) or SL.fetch_card(gid, str(q)) or str(q)
+            except Exception:
+                disp = SL.NOTE_NAMES.get(str(q), str(q))
         except Exception:
             pass
         lines.append("%d. %s　%d个" % (i, disp, rv))

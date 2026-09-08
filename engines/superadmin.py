@@ -39,14 +39,21 @@ def _target_name(gid, t):
     t_str = str(t)
     try:
         from . import slave as S
+        if gid:
+            try:
+                n = S.get_note_name(gid, t_str) or S.fetch_card(gid, t_str)
+                if n:
+                    return n
+            except Exception:
+                pass
         if hasattr(S, "uname"):
             try:
-                n = S.uname(S.U(S.ST, t_str), t_str)
+                n = S.uname(S.state(gid), t_str)
                 if n and n != t_str:
                     return n
             except Exception:
                 pass
-        if hasattr(S, "NOTE_NAMES"):
+        if hasattr(S, "NOTE_NAMES") and (not gid or gid == "dm"):
             n = S.NOTE_NAMES.get(t_str)
             if n:
                 return n
@@ -436,10 +443,10 @@ def _version():
                 except Exception:
                     pass
         if not ver:
-            ver = "0.7.1"
+            ver = "0.7.2"
         return f"小白版本：{ver}"
     except Exception:
-        return "小白版本：0.7.1"
+        return "小白版本：0.7.2"
 
 # ---- 统一入口（测试指令仅超管，WebUI可配但不显示于MENU，已删 个人信息） ----
 _ADMIN_CMDS = ("群列表", "应用统计", "扣钱", "充钱", "清空", "重置", "禁言", "踢人", "备份xb", "备份", "测试webdav", "webdav测试", "开启维护", "关闭维护", "维护信息", "测试testxb", "测试testxb1", "测试testxb2", "测试testxb3", "测试testxb4", "测试testxb5", "测试testxb6", "测试testxb7", "测试testxb8", "超管列表")

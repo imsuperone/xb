@@ -302,7 +302,13 @@ def cmd_exit(gid, qq):
 def _gname(gid, qq):
     try:
         from . import slave as SL
-        return SL.NOTE_NAMES.get(str(qq), str(qq)) if hasattr(SL, "NOTE_NAMES") else str(qq)
+        try:
+            nm = SL.get_note_name(gid, str(qq)) or SL.fetch_card(gid, str(qq))
+            if nm:
+                return nm
+        except Exception:
+            pass
+        return SL.NOTE_NAMES.get(str(qq), str(qq)) if (not gid or gid == "dm") and hasattr(SL, "NOTE_NAMES") else str(qq)
     except Exception:
         return str(qq)
 

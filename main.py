@@ -108,7 +108,7 @@ def _raw_file_response(data_bytes, filename):
 PLUGIN_ID = "astrbot_plugin_xbbot"
 PLUGIN_DESC = "小白(奴/签/银/娱/私/灵/骑/超管/帮派/冒险+主菜单+WebUI), 现代SQLite存储"
 PLUGIN_AUTHOR = "Light"
-PLUGIN_VERSION = "0.7.1"
+PLUGIN_VERSION = "0.7.2"
 PLUGIN_REPO = "https://github.com/imsuperone/xb"
 
 # 复用 router 的主菜单，保持单源
@@ -127,7 +127,7 @@ except Exception:
         "| 👮 超管系统 | ⚙️ 快捷配置 |\r\n"
         "----------------\r\n"
         "输入【系统名】如【签到系统】即可查看各系统对应指令！\r\n"
-        "当前版本：v0.7.1"
+        "当前版本：v0.7.2"
     )
 
 
@@ -378,9 +378,15 @@ class XbBot(Star):
             except Exception:
                 card = ""
             if card:
-                old = slave.NOTE_NAMES.get(qq, "")
+                old = slave.get_note_name(gid, qq) if hasattr(slave, "get_note_name") else slave.NOTE_NAMES.get(qq, "")
                 if old != card:
-                    slave.NOTE_NAMES[qq] = card
+                    try:
+                        if hasattr(slave, "set_note_name"):
+                            slave.set_note_name(gid, qq, card)
+                        else:
+                            slave.NOTE_NAMES[qq] = card
+                    except Exception:
+                        slave.NOTE_NAMES[qq] = card
                     def _bg_update_user_name(g, q, c, o):
                         try:
                             ST.register_name(q, c)
@@ -528,7 +534,12 @@ class XbBot(Star):
                     lines = ["🔧 超管列表（AstrBot 管理员）"]
                     for q in admins:
                         try:
-                            nm = slave.NOTE_NAMES.get(q, "") or ""
+                            try:
+                                nm = slave.get_note_name(gid, q) if hasattr(slave, "get_note_name") else slave.NOTE_NAMES.get(q, "")
+                            except Exception:
+                                nm = ""
+                            if not nm:
+                                nm = slave.NOTE_NAMES.get(q, "") or ""
                             if not nm:
                                 try:
                                     nm = slave.fetch_card(gid, q) or ""

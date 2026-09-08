@@ -1,5 +1,14 @@
 # 更新日志
 
+## v0.7.2
+- 🧩 **根治多群同人昵称串群**：
+  - `engines/slave.py` 新增分群昵称表 `NOTE_NAMES_BY_GROUP[(gid, qq)]` 与 `set/get/clear_note_name` 三件套，`fetch_card/uname/exists_user/@反查` 全系优先本群，本群无记录不再回退别群卡片；
+  - `main.py` 写路径切分群写入，`bank/sign/ride/guild/adventure/spirit/superadmin` 全引擎展示收敛到分群优先，档案回写只写本群，彻底告别 A 群卡片覆盖 B 群。
+- 🗑️ **修复 WebUI 删除用户按钮无效**：
+  - `pages/admin/app.js` 弃用 iframe 沙箱下会被拦截的原生 `confirm/prompt`，改用自研 `uiConfirm/uiPrompt` 二次确认（合规则六），加忙态防抖与 POST 失败回退 GET；
+  - `userBody` 单一事件委托统一处理保存/导出/清除，杜绝搜索过滤与排序重渲染后绑定丢失；
+  - `core/api/users.py:handle_user_clear` 兼容 GET query 取参，清除后同步清理分群昵称内存防幽灵名。
+
 ## v0.7.1
 - 🕒 **WebDAV 远端归档支持中文日期与上海时区 (UTC+8)**：
   - 在 `core/webdav.py` 中新增 `format_shanghai_time`，将 WebDAV 标准返回的 RFC 1123 HTTP-date（如 `Sun, 06 Sep 2026 05:25:30 GMT`）或 ISO 8601 时间准确换算为中国标准时间（UTC+8 / 上海时区），以标准中文形式展示（如 `2026年09月06日 13:25:30`）；
