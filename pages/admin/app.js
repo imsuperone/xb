@@ -1,4 +1,4 @@
-const PLUGIN_ID = "astrbot_plugin_xbbot";
+﻿const PLUGIN_ID = "astrbot_plugin_xbbot";
 
 let _WORKING_API_PREFIX = null;
 
@@ -1607,7 +1607,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.7.22"
+        version: res.version || "0.7.23"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -2099,6 +2099,8 @@ const SPIRIT_FIELDS = [
   ["evolve", "进化成"], ["img", "形象图"],
 ];
 const SHOP_FIELDS = [["price", "价格"], ["attr", "类型"], ["effect", "效果"]];
+const SHOP_ATTR_OPTS = ["精灵球", "等级", "HP", "攻击", "防御", "特攻", "特防", "进化"];
+const SHOP_ATTR_HELP = { "精灵球": "收服率%（大师球100必中）", "等级": "奇异甜食+Lv数", "HP": "吐司类+生命", "攻击": "+攻击", "防御": "+防御", "特攻": "+特攻", "特防": "+特防", "进化": "进化液=1" };
 
 async function loadSpirits() {
   try {
@@ -2195,6 +2197,7 @@ function spiritAttrCards(spirits, dropNames, assignMaps) {
     ? assignMaps.map((m) => `<option value="${esc(m)}">${esc(m)}</option>`).join("") : "";
   return dropNames.map((sn) => {
     const it = spirits[sn] || { type: "", hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0, lv: 0, evolve: "否" };
+    const _img = String(it.img || "").trim();
     const cells = SPIRIT_FIELDS.map(([fk, label]) => {
       const _list = fk === "evolve" ? ` list="spEvolveList"` : "";
       return `<div class="s-row"><small>${label}</small>` +
@@ -2204,7 +2207,7 @@ function spiritAttrCards(spirits, dropNames, assignMaps) {
       <div class="sp-name">✦ ${esc(sn)}</div>
       <div class="s-fields">${cells.join("")}
         <button class="s-del" data-del-spirit="${esc(sn)}">移除精灵</button></div>
-      <div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap"><button class="ghost sm" data-sp-pick-upload="${esc(sn)}">外置选图</button><button class="ghost sm" data-sp-pick-builtin="${esc(sn)}">内置选图</button></div>
+      <div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap">${_img ? `<button class="ghost sm" data-sp-view="${esc(_img)}">浏览图片</button>` : ""}<button class="ghost sm" data-sp-pick-upload="${esc(sn)}">外置选图</button><button class="ghost sm" data-sp-pick-builtin="${esc(sn)}">内置选图</button></div>
         ${_assignOpts ? `<div style="display:flex;gap:4px;margin-top:4px;align-items:center"><select data-assign-map="${esc(sn)}" style="flex:1;padding:4px 6px;border-radius:6px">${_assignOpts}</select><button class="ghost sm" data-assign-spirit="${esc(sn)}">分配进图</button></div>` : ""}
       </div>`;
   }).join("") + _dl;
@@ -2282,23 +2285,23 @@ function bindSpiritMapCards(root) {
     b.addEventListener("click", async () => {
       const k = b.dataset.delMap;
       const _last = Object.keys(maps).length <= 1;
-      if (!(await uiConfirm("确认删除地图 \"" + k + "\"？（点保存地图生效）" + (_last ? "\n\n注意：这是最后一张，删光后运行时自动使用内置地图。" : ""), "删除地图"))) return;
+      if (!(await uiConfirm("确认删除地图 \"" + k + "\"？（点保存精灵生效）" + (_last ? "\n\n注意：这是最后一张，删光后运行时自动使用内置地图。" : ""), "删除地图"))) return;
       delete maps[k];
       SPIRIT_DIRTY = true;
       refreshSpiritViews();
-      toast("已删除地图，点保存地图生效", "ok");
+      toast("已删除地图，点保存精灵生效", "ok");
     }));
   root.querySelectorAll("[data-del-spirit]").forEach((b) =>
     b.addEventListener("click", async () => {
       const spName = b.dataset.delSpirit;
-      if (!(await uiConfirm("确认移除精灵 \"" + spName + "\"？（点保存属性生效）", "移除精灵"))) return;
+      if (!(await uiConfirm("确认移除精灵 \"" + spName + "\"？（点保存精灵生效）", "移除精灵"))) return;
       Object.keys(maps).forEach((mk) => {
         maps[mk].drops = (maps[mk].drops || []).map(String).filter((x) => x !== spName);
       });
       try { if (spirits && spirits[spName]) delete spirits[spName]; } catch (e) {}
       SPIRIT_DIRTY = true;
       refreshSpiritViews();
-      toast("已移除精灵，点保存属性生效", "ok");
+      toast("已移除精灵，点保存精灵生效", "ok");
     }));
   root.querySelectorAll("[data-assign-spirit]").forEach((b) =>
     b.addEventListener("click", async () => {
@@ -2313,23 +2316,23 @@ function bindSpiritMapCards(root) {
       SPIRIT_OPEN[mk] = true;
       SPIRIT_DIRTY = true;
       refreshSpiritViews();
-      toast(`已将「${spName}」分配进「${mk}」，点保存地图生效`, "ok");
+      toast(`已将「${spName}」分配进「${mk}」，点保存精灵生效`, "ok");
     }));
+  root.querySelectorAll("[data-sp-view]").forEach((b) => b.addEventListener("click", async () => {
+    const p = b.dataset.spView;
+    if (!p) return;
+    try {
+      const r = await getBridge().apiPost("images/thumb", { path: p });
+      const thumb = r && (r.thumb || (r.data && r.data.thumb));
+      if (r && r.error) throw new Error(r.error);
+      if (thumb) showLightbox(thumb, String(p).split("/").pop());
+      else toast("无预览", "bad");
+    } catch (err) { toast("预览失败:" + (err.message || err), "bad"); }
+  }));
   root.querySelectorAll("[data-add-spirit]").forEach((b) =>
     b.addEventListener("click", async () => {
-      let n = await uiPrompt("输入要添加的精灵名称：", "", "添加精灵");
-      if (!n) return;
-      n = n.trim();
-      if (!n) return;
       const mk = b.dataset.addSpirit;
-      const dd = maps[mk] || (maps[mk] = { lv: 1, drops: [] });
-      if (!Array.isArray(dd.drops)) dd.drops = [];
-      if (!dd.drops.map(String).includes(n)) dd.drops.push(n);
-      if (!spirits[n]) spirits[n] = { type: "", hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0, lv: 0, evolve: "否" };
-      SPIRIT_OPEN[mk] = true;
-      SPIRIT_DIRTY = true;
-      refreshSpiritViews();
-      toast("已添加精灵，点保存地图/保存属性生效", "ok");
+      openSpiritAddModal(mk);
     }));
   const _setSpiritImg = (sn, path) => {
     if (!sn || !path) return false;
@@ -2354,7 +2357,8 @@ function bindSpiritMapCards(root) {
           if (r && r.error) throw new Error(r.error);
           const path = (r && (r.path || (r.data && r.data.path))) || ("data/img/spirits/" + file.name);
           _setSpiritImg(sn, path);
-          toast("形象图已绑定，点保存属性生效", "ok");
+          refreshSpiritViews();
+          toast("形象图已绑定，点保存精灵生效", "ok");
         } catch (err) { toast("上传失败:" + (err.message || err), "bad"); }
       };
       inp.click();
@@ -2364,15 +2368,15 @@ function bindSpiritMapCards(root) {
       const sn = b.dataset.spPickBuiltin;
       if (!sn) return;
       window.SHOP_PICK_TARGET = sn; window.SHOP_PICK_KIND = "spirit";
-      toast("已进入根目录，请单击选中图片后点“确定绑定”", "ok");
+      toast("已进入精灵图片目录，请单击选中图片后点“确定绑定”", "ok");
       document.querySelectorAll(".tabs button").forEach(x => x.classList.remove("on"));
       const rb = document.querySelector("[data-tab=\"imgs\"]"); if (rb) rb.classList.add("on");
       document.querySelectorAll(".tab").forEach(x => x.classList.remove("on"));
       const tab = document.getElementById("tab-imgs"); if (tab) tab.classList.add("on");
-      await loadImages("");
+      await loadImages("data/img/spirits");
       const old = document.getElementById("shopPickTip"); if (old) old.remove();
       const tip = document.createElement("div"); tip.id = "shopPickTip"; tip.style = "background:var(--accSoft);border:1px solid var(--acc);padding:8px 12px;border-radius:8px;margin-bottom:10px";
-      tip.innerHTML = `<b>为精灵 "${esc(sn)}" 选择内置形象图：</b> 请在下方根目录单击选中图片文件，然后 <button class="ghost sm" id="btnShopPickConfirm">确定绑定</button> <button class="ghost sm" id="btnShopPickCancel">取消</button>`;
+      tip.innerHTML = `<b>为精灵 "${esc(sn)}" 选择内置形象图：</b> 精灵目录 data/img/spirits，可上下导航，然后 <button class="ghost sm" id="btnShopPickConfirm">确定绑定</button> <button class="ghost sm" id="btnShopPickCancel">取消</button>`;
       const panel = document.querySelector("#tab-imgs .panel"); if (panel) panel.prepend(tip);
       const backToSpirits = () => {
         tip.remove(); window.SHOP_PICK_TARGET = null; window.SHOP_PICK_KIND = null;
@@ -2389,10 +2393,130 @@ function bindSpiritMapCards(root) {
         if (window._imgIsDir && window._imgIsDir(sel)) { toast("不能选择文件夹", "bad"); return; }
         _setSpiritImg(sn, sel);
         backToSpirits();
-        toast("形象图已绑定，点保存属性生效", "ok");
+        refreshSpiritViews();
+        toast("形象图已绑定，点保存精灵生效", "ok");
       });
       document.getElementById("btnShopPickCancel")?.addEventListener("click", () => { backToSpirits(); });
     }));
+}
+let _SP_ADD_FILE = null;
+let _SP_ADD_SRC = "";
+function openSpiritAddModal(defMap) {
+  const modal = document.getElementById("appModal");
+  if (!modal || !SPIRIT) { toast("请先加载图鉴", "bad"); return; }
+  _SP_ADD_FILE = null; _SP_ADD_SRC = "";
+  const icon = document.getElementById("appModalIcon");
+  const title = document.getElementById("appModalTitle");
+  const content = document.getElementById("appModalContent");
+  const inputWrap = document.getElementById("appModalInputWrap");
+  const cancelBtn = document.getElementById("appModalCancel");
+  const okBtn = document.getElementById("appModalOk");
+  if (icon) icon.textContent = "✨";
+  if (title) title.textContent = "添加精灵" + (defMap && defMap !== "__orphans__" ? "→" + defMap : "");
+  if (inputWrap) inputWrap.style.display = "none";
+  content.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;gap:8px">
+        <div style="flex:2"><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">精灵名：</label>
+          <input id="spAddName" style="width:100%;padding:6px 10px;border-radius:8px" placeholder="如：雷精灵"></div>
+        <div style="flex:1"><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">属性：</label>
+          <input id="spAddType" style="width:100%;padding:6px 10px;border-radius:8px" placeholder="火/水/木…"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+        ${["hp|生命|40", "atk|攻击|40", "def|防御|40", "spa|特攻|40", "spd|特防|40", "spe|速度|40", "lv|进化等级|50"].map((s) => { const [k, l, d] = s.split("|"); return `<div><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">${l}：</label><input id="spAdd_${k}" type="number" value="${d}" style="width:100%;padding:6px 10px;border-radius:8px"></div>`; }).join("")}
+        <div><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">进化成：</label><input id="spAddEvolve" value="否" style="width:100%;padding:6px 10px;border-radius:8px"></div>
+      </div>
+      <div><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">形象图（精灵目录 data/img/spirits）：</label>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <button class="ghost sm" id="spAddPickUpload">外置选图（本地上传）</button>
+          <button class="ghost sm" id="spAddPickBuiltin">内置选图（精灵目录）</button>
+          <button class="ghost sm" id="spAddPreview">浏览图片</button>
+          <span id="spAddImgTip" style="font-size:11.5px;color:var(--muted)">未选择（可后补）</span>
+        </div></div>
+      <div class="hint">保存后进地图掉落，点保存精灵生效；图片可先空后在卡片绑定</div>
+    </div>`;
+  const setTip = (t) => { const el = document.getElementById("spAddImgTip"); if (el) el.textContent = t; };
+  window._spAddImgPath = "";
+  document.getElementById("spAddPickUpload")?.addEventListener("click", () => {
+    const inp = document.createElement("input"); inp.type = "file"; inp.accept = "image/*";
+    inp.onchange = (e) => {
+      const file = e.target.files[0]; if (!file) return;
+      _SP_ADD_FILE = file; _SP_ADD_SRC = ""; window._spAddImgPath = "";
+      setTip("本地：" + file.name);
+    };
+    inp.click();
+  });
+  document.getElementById("spAddPickBuiltin")?.addEventListener("click", async () => {
+    modal.className = "";
+    window.SHOP_PICK_TARGET = "__spadd__"; window.SHOP_PICK_KIND = "spadd";
+    toast("已进入精灵图片目录，请选中后点确定", "ok");
+    document.querySelectorAll(".tabs button").forEach(x => x.classList.remove("on"));
+    const rb = document.querySelector("[data-tab=\"imgs\"]"); if (rb) rb.classList.add("on");
+    document.querySelectorAll(".tab").forEach(x => x.classList.remove("on"));
+    const tab = document.getElementById("tab-imgs"); if (tab) tab.classList.add("on");
+    await loadImages("data/img/spirits");
+    const old = document.getElementById("shopPickTip"); if (old) old.remove();
+    const tip = document.createElement("div"); tip.id = "shopPickTip"; tip.style = "background:var(--accSoft);border:1px solid var(--acc);padding:8px 12px;border-radius:8px;margin-bottom:10px";
+    tip.innerHTML = `<b>为新精灵选择形象图：</b> 精灵目录 data/img/spirits，然后 <button class="ghost sm" id="btnShopPickConfirm">确定绑定</button> <button class="ghost sm" id="btnShopPickCancel">取消</button>`;
+    const panel = document.querySelector("#tab-imgs .panel"); if (panel) panel.prepend(tip);
+    const backToModal = () => { tip.remove(); window.SHOP_PICK_TARGET = null; window.SHOP_PICK_KIND = null; modal.className = "show"; };
+    document.getElementById("btnShopPickConfirm")?.addEventListener("click", () => {
+      const sel = IMG_SELECTED;
+      if (!sel) { toast("请先选中图片文件", "bad"); return; }
+      _SP_ADD_FILE = null; _SP_ADD_SRC = sel; window._spAddImgPath = sel;
+      backToModal(); setTip("内置：" + sel);
+    });
+    document.getElementById("btnShopPickCancel")?.addEventListener("click", () => { backToModal(); });
+  });
+  document.getElementById("spAddPreview")?.addEventListener("click", async () => {
+    let p = window._spAddImgPath || _SP_ADD_SRC || "";
+    if (!p) { toast("请先选一张图片", "bad"); return; }
+    try {
+      const r = await getBridge().apiPost("images/thumb", { path: p });
+      const thumb = r && (r.thumb || (r.data && r.data.thumb));
+      if (thumb) showLightbox(thumb, String(p).split("/").pop());
+      else toast("无预览", "bad");
+    } catch (e) { toast("预览失败:" + e.message, "bad"); }
+  });
+  if (cancelBtn) { cancelBtn.style.display = ""; cancelBtn.textContent = "取消"; cancelBtn.onclick = () => { modal.className = ""; }; }
+  if (okBtn) {
+    okBtn.textContent = "确定添加"; okBtn.style.background = "var(--acc)"; okBtn.style.borderColor = "transparent";
+    okBtn.onclick = async () => {
+      const n = (document.getElementById("spAddName")?.value || "").trim();
+      if (!n) { toast("请填写精灵名称", "bad"); return; }
+      const spirits = SPIRIT.spirits || (SPIRIT.spirits = {});
+      const maps = SPIRIT.maps || (SPIRIT.maps = {});
+      if (spirits[n] !== undefined) { toast("已存在同名精灵", "bad"); return; }
+      const num = (id, d) => { const v = Number(document.getElementById(id)?.value); return Number.isFinite(v) ? Math.max(0, v) : (d || 0); };
+      let imgPath = window._spAddImgPath || _SP_ADD_SRC || "";
+      try {
+        if (_SP_ADD_FILE) {
+          const r = await postFile("images/upload?dir=" + encodeURIComponent("data/img/spirits"), {}, _SP_ADD_FILE);
+          if (r && r.error) throw new Error(r.error);
+          imgPath = (r && (r.path || (r.data && r.data.path))) || ("data/img/spirits/" + _SP_ADD_FILE.name);
+        }
+      } catch (e) { toast("图片上传失败:" + e.message, "bad"); return; }
+      spirits[n] = {
+        type: (document.getElementById("spAddType")?.value || "").trim(),
+        hp: num("spAdd_hp", 40), atk: num("spAdd_atk", 40), def: num("spAdd_def", 40),
+        spa: num("spAdd_spa", 40), spd: num("spAdd_spd", 40), spe: num("spAdd_spe", 40),
+        lv: num("spAdd_lv", 50), evolve: (document.getElementById("spAddEvolve")?.value || "否").trim() || "否",
+        img: imgPath || ""
+      };
+      if (defMap && defMap !== "__orphans__") {
+        const dd = maps[defMap] || (maps[defMap] = { lv: 1, drops: [] });
+        if (!Array.isArray(dd.drops)) dd.drops = [];
+        if (!dd.drops.map(String).includes(n)) dd.drops.push(n);
+        SPIRIT_OPEN[defMap] = true;
+      }
+      SPIRIT_DIRTY = true;
+      modal.className = "";
+      refreshSpiritViews();
+      toast("已添加精灵，点保存精灵生效", "ok");
+    };
+  }
+  modal.className = "show";
+  setTimeout(() => { try { document.getElementById("spAddName")?.focus(); } catch (e) {} }, 50);
 }
 
 function renderShop(q = "", forceOpen = false) {
@@ -2403,7 +2527,7 @@ function renderShop(q = "", forceOpen = false) {
   const curDetails = body.querySelector("details");
   const wasOpen = curDetails ? curDetails.open : forceOpen;
   let html = `<details class="panel" style="margin:0"${wasOpen ? " open" : ""}><summary style="cursor:pointer;font-weight:600">🎒 精灵道具商城 (spirit_shop) — ${names.length} 件（点击折叠/展开）${(!SPIRIT_CUSTOM.shop && !SPIRIT_DIRTY && !q) ? " · <span style='color:var(--muted);font-weight:400'>内置默认·未自定义</span>" : ""}</summary>`;
-  html += `<div class="hint" style="margin-top:8px">编辑精灵球、药品等道具价格与效果（保存时将与精灵配置一并持久化）</div>`;
+  html += `<div class="hint" style="margin-top:8px">类型决定效果：精灵球=收服率%（大师球100必中）/ 等级=奇异甜食+Lv / HP·攻击·防御·特攻·特防=+对应点数 / 进化=进化液。改完点保存道具，只写精灵道具。</div>`;
   if (!Object.keys(shop).length && !q) {
     html += `<div class="hint" style="margin:8px 0">当前无自定义道具，运行中使用内置 ${_spiritBuiltinCount("shop")} 件`
       + ` <button class="ghost sm" id="btnSpiritUseBuiltinShop">载入内置为起点</button></div>`;
@@ -2413,12 +2537,13 @@ function renderShop(q = "", forceOpen = false) {
   } else {
     names.forEach((key) => {
       const it = shop[key] || {};
-      const cells = SHOP_FIELDS.map(([fk, label]) =>
-        `<div class="s-row"><small>${label}</small>` +
-        `<input data-s-field="${fk}" value="${esc(it[fk] ?? "")}" style="width:90px"></div>`);
+      const _attr = String(it.attr || "");
+      const _help = SHOP_ATTR_HELP[_attr] || "选类型后看说明";
+      const attrCell = `<div class="s-row"><small>类型</small><select data-s-field="attr" style="width:96px">${SHOP_ATTR_OPTS.map((o) => `<option value="${esc(o)}"${o === _attr ? " selected" : ""}>${esc(o)}</option>`).join("")}${_attr && !SHOP_ATTR_OPTS.includes(_attr) ? `<option value="${esc(_attr)}" selected>${esc(_attr)}</option>` : ""}</select></div>`;
+      const cells = `<div class="s-row"><small>价格</small><input data-s-field="price" type="number" value="${esc(it.price ?? 0)}" style="width:80px"></div>` + attrCell + `<div class="s-row"><small>效果(${esc(_help)})</small><input data-s-field="effect" type="number" value="${esc(it.effect ?? 0)}" style="width:70px"></div>`;
       html += `<div class="s-fields" data-s-item="${esc(key)}" style="margin-top:8px">` +
         `<div class="s-row" style="font-weight:600;min-width:90px"><small>道具名</small><div style="padding-top:4px">${esc(key)}</div></div>` +
-        cells.join("") +
+        cells +
         `<button class="s-del" data-del-key="${esc(key)}" style="margin-left:auto">删除</button></div>`;
     });
   }
@@ -2430,8 +2555,9 @@ function renderShop(q = "", forceOpen = false) {
   document.getElementById("btnShopSpiritSave")?.addEventListener("click", () => saveSpiritKind("shop"));
   document.getElementById("btnShopSpiritReset")?.addEventListener("click", () => resetSpiritKind("shop"));
 
-  body.querySelectorAll("input[data-s-field]").forEach((inp) => {
-    inp.addEventListener("input", () => {
+  body.querySelectorAll("[data-s-field]").forEach((inp) => {
+    const _ev = inp.tagName === "SELECT" ? "change" : "input";
+    inp.addEventListener(_ev, () => {
       const parent = inp.closest("[data-s-item]");
       if (!parent) return;
       const key = parent.dataset.sItem;
@@ -2439,6 +2565,7 @@ function renderShop(q = "", forceOpen = false) {
       if (shop[key]) {
         shop[key][fk] = ["price", "effect"].includes(fk) ? (Number(inp.value) || 0) : inp.value;
         SPIRIT_DIRTY = true;
+        if (fk === "attr") renderShop(q, true);
       }
     });
   });
@@ -2453,29 +2580,78 @@ function renderShop(q = "", forceOpen = false) {
       toast("已删除，点保存道具生效", "ok");
     }));
   const add = body.querySelector("#shopAddItem");
-  if (add) add.addEventListener("click", async () => {
-    let n = await uiPrompt("输入新物品名称：", "", "添加物品");
-    if (!n) return;
-    n = n.trim();
-    if (!n) return;
-    if (!shop[n]) shop[n] = { price: 0, attr: "", effect: 0 };
-    SPIRIT_DIRTY = true;
-    renderShop(q, true);
-    toast("已添加，点保存道具生效", "ok");
+  if (add) add.addEventListener("click", async () => { openShopItemAddModal(q); });
+}
+function openShopItemAddModal(q) {
+  const modal = document.getElementById("appModal");
+  if (!modal || !SPIRIT) return;
+  const icon = document.getElementById("appModalIcon");
+  const title = document.getElementById("appModalTitle");
+  const content = document.getElementById("appModalContent");
+  const inputWrap = document.getElementById("appModalInputWrap");
+  const cancelBtn = document.getElementById("appModalCancel");
+  const okBtn = document.getElementById("appModalOk");
+  if (icon) icon.textContent = "🎒";
+  if (title) title.textContent = "添加精灵道具";
+  if (inputWrap) inputWrap.style.display = "none";
+  content.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">道具名：</label>
+        <input id="shopAddName" style="width:100%;padding:6px 10px;border-radius:8px" placeholder="如：超级球"></div>
+      <div style="display:flex;gap:8px">
+        <div style="flex:1"><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">价格：</label>
+          <input id="shopAddPrice" type="number" value="300" style="width:100%;padding:6px 10px;border-radius:8px"></div>
+        <div style="flex:1"><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">类型：</label>
+          <select id="shopAddAttr" style="width:100%;padding:6px 10px;border-radius:8px">${SHOP_ATTR_OPTS.map((o) => `<option value="${o}">${o}</option>`).join("")}</select></div>
+        <div style="flex:1"><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">效果：</label>
+          <input id="shopAddEffect" type="number" value="10" style="width:100%;padding:6px 10px;border-radius:8px"></div>
+      </div>
+      <div class="hint" id="shopAddHelp">精灵球=收服率%（大师球100必中）；等级=+Lv；HP/攻击/防御/特攻/特防=+点数；进化=1</div>
+    </div>`;
+  document.getElementById("shopAddAttr")?.addEventListener("change", (e) => {
+    const v = e.target.value;
+    const h = document.getElementById("shopAddHelp");
+    if (h) h.textContent = "当前类型 " + v + "：" + (SHOP_ATTR_HELP[v] || "");
   });
+  if (cancelBtn) { cancelBtn.style.display = ""; cancelBtn.textContent = "取消"; cancelBtn.onclick = () => { modal.className = ""; }; }
+  if (okBtn) {
+    okBtn.textContent = "确定添加"; okBtn.style.background = "var(--acc)"; okBtn.style.borderColor = "transparent";
+    okBtn.onclick = () => {
+      const n = (document.getElementById("shopAddName")?.value || "").trim();
+      if (!n) { toast("请填写道具名称", "bad"); return; }
+      const shop = (SPIRIT.shop || (SPIRIT.shop = {}));
+      if (shop[n] !== undefined) { toast("已存在同名道具", "bad"); return; }
+      shop[n] = {
+        price: Math.max(0, Number(document.getElementById("shopAddPrice")?.value) || 0),
+        attr: (document.getElementById("shopAddAttr")?.value || "精灵球"),
+        effect: Math.max(0, Number(document.getElementById("shopAddEffect")?.value) || 0)
+      };
+      SPIRIT_DIRTY = true;
+      modal.className = "";
+      renderShop(q || "", true);
+      toast("已添加，点保存道具生效", "ok");
+    };
+  }
+  modal.className = "show";
+  setTimeout(() => { try { document.getElementById("shopAddName")?.focus(); } catch (e) {} }, 50);
 }
 
-const SPIRIT_KIND_LABEL = { maps: "地图", spirits: "属性", shop: "道具" };
+const SPIRIT_KIND_LABEL = { maps: "地图", spirits: "属性", shop: "道具", all: "精灵" };
 async function saveSpiritKind(kind) {
   // 按系统保存：直接存 SPIRIT 状态（输入即时写回，与过滤/视图无关，杜绝搜后保存丢数据）
+  // maps+spirits 已合并为 all 一键保存，避免只存一半丢形象图；shop 独立保存
+  if (kind === "maps" || kind === "spirits") kind = "all";
   const msg = document.getElementById("spiritMsg");
   if (!SPIRIT) { toast("请先加载图鉴", "bad"); return; }
-  if (!["maps", "spirits", "shop"].includes(kind)) return;
+  if (!["all", "shop"].includes(kind)) return;
   try {
-    const r = await getBridge().apiPost("spirits/save", { [kind]: SPIRIT[kind] || {} });
+    const payload = kind === "all" ? { maps: SPIRIT.maps || {}, spirits: SPIRIT.spirits || {} } : { shop: SPIRIT.shop || {} };
+    const r = await getBridge().apiPost("spirits/save", payload);
     if (r && r.error) throw new Error(r.error);
-    SPIRIT_CUSTOM[kind] = true;
-    const label = SPIRIT_KIND_LABEL[kind] || kind;
+    if (kind === "all") { SPIRIT_CUSTOM.maps = true; SPIRIT_CUSTOM.spirits = true; }
+    else SPIRIT_CUSTOM[kind] = true;
+    SPIRIT_DIRTY = false;
+    const label = kind === "all" ? "精灵" : SPIRIT_KIND_LABEL[kind];
     if (msg) { msg.className = "msg ok"; msg.textContent = label + "已保存"; }
     toast(label + "已保存", "ok");
   } catch (e) {
@@ -2485,17 +2661,28 @@ async function saveSpiritKind(kind) {
 }
 async function resetSpiritKind(kind) {
   // 按系统恢复内置：直接清理旧数据并持久化，不保留（数据库自有备份可回滚）
+  // maps+spirits 合并为 all 一键恢复默认，shop 独立
+  if (kind === "maps" || kind === "spirits") kind = "all";
   if (!SPIRIT) { toast("请先加载图鉴", "bad"); return; }
-  if (!["maps", "spirits", "shop"].includes(kind)) return;
-  const label = SPIRIT_KIND_LABEL[kind] || kind;
-  if (!(await uiConfirm(`直接恢复精灵${label}为内置默认？旧数据不保留。`, `恢复${label}默认`))) return;
+  if (!["all", "shop"].includes(kind)) return;
+  const label = kind === "all" ? "精灵" : SPIRIT_KIND_LABEL[kind];
+  if (!(await uiConfirm(`直接恢复${label}为内置默认？旧数据不保留。`, `恢复默认`))) return;
   try {
-    const b = (SPIRIT._builtin && SPIRIT._builtin[kind]) || {};
-    SPIRIT[kind] = JSON.parse(JSON.stringify(b));
-    SPIRIT_CUSTOM[kind] = true;
+    if (kind === "all") {
+      ["maps", "spirits"].forEach((k) => {
+        const b = (SPIRIT._builtin && SPIRIT._builtin[k]) || {};
+        SPIRIT[k] = JSON.parse(JSON.stringify(b));
+        SPIRIT_CUSTOM[k] = true;
+      });
+      SPIRIT_OPEN = {};
+      await getBridge().apiPost("spirits/save", { maps: SPIRIT.maps || {}, spirits: SPIRIT.spirits || {} });
+    } else {
+      const b = (SPIRIT._builtin && SPIRIT._builtin[kind]) || {};
+      SPIRIT[kind] = JSON.parse(JSON.stringify(b));
+      SPIRIT_CUSTOM[kind] = true;
+      await getBridge().apiPost("spirits/save", { [kind]: SPIRIT[kind] || {} });
+    }
     SPIRIT_DIRTY = false;
-    if (kind === "maps") SPIRIT_OPEN = {};
-    await getBridge().apiPost("spirits/save", { [kind]: SPIRIT[kind] || {} });
     try { renderShop(); } catch (e) {}
     refreshSpiritViews();
     toast(`已恢复${label}默认`, "ok");
@@ -2938,18 +3125,18 @@ function renderPoolBox(forceOpen=false){
     inp.click();
   }));
   box.querySelectorAll("[data-pool-pick-builtin]").forEach(b=>b.addEventListener("click", async ()=>{
-    const [, name] = _poolKey(b);
+    const [rar, name] = _poolKey(b);
     if (!name) return;
     window.SHOP_PICK_TARGET = name; window.SHOP_PICK_KIND = "pool";
-    toast("已进入根目录，请单击选中图片后点“确定绑定”", "ok");
+    toast("已进入武器图片目录，请单击选中后点确定", "ok");
     document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("on"));
     const rb=document.querySelector("[data-tab=\"imgs\"]"); if(rb) rb.classList.add("on");
     document.querySelectorAll(".tab").forEach(x=>x.classList.remove("on"));
     const tab=document.getElementById("tab-imgs"); if(tab) tab.classList.add("on");
-    await loadImages("");
+    await loadImages("data/img/gacha/" + (rar || "SSR"));
     const old=document.getElementById("shopPickTip"); if(old) old.remove();
     const tip=document.createElement("div"); tip.id="shopPickTip"; tip.style="background:var(--accSoft);border:1px solid var(--acc);padding:8px 12px;border-radius:8px;margin-bottom:10px";
-    tip.innerHTML=`<b>为武器 "${esc(name)}" 选择内置图：</b> 请在下方根目录单击选中图片文件，然后 <button class="ghost sm" id="btnShopPickConfirm">确定绑定</button> <button class="ghost sm" id="btnShopPickCancel">取消</button>`;
+    tip.innerHTML=`<b>为武器 "${esc(name)}" 选择内置图：</b> 武器目录 data/img/gacha/${esc(rar || "SSR")}，然后 <button class="ghost sm" id="btnShopPickConfirm">确定绑定</button> <button class="ghost sm" id="btnShopPickCancel">取消</button>`;
     const panel=document.querySelector("#tab-imgs .panel"); if(panel) panel.prepend(tip);
     const backToShops=()=>{
       document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("on"));
@@ -3052,15 +3239,16 @@ function openPoolAddModal(defRar) {
   document.getElementById("poolAddPickBuiltin")?.addEventListener("click", async () => {
     modal.className = "";
     window.SHOP_PICK_TARGET = "__pooladd__"; window.SHOP_PICK_KIND = "pooladd";
-    toast("已进入根目录，请单击选中图片后点“确定绑定”", "ok");
+    const _rar0 = (document.getElementById("poolAddRar")?.value || "SSR");
+    toast("已进入武器图片目录，请选中后点确定", "ok");
     document.querySelectorAll(".tabs button").forEach(x => x.classList.remove("on"));
     const rb = document.querySelector("[data-tab=\"imgs\"]"); if (rb) rb.classList.add("on");
     document.querySelectorAll(".tab").forEach(x => x.classList.remove("on"));
     const tab = document.getElementById("tab-imgs"); if (tab) tab.classList.add("on");
-    await loadImages("");
+    await loadImages("data/img/gacha/" + _rar0);
     const old = document.getElementById("shopPickTip"); if (old) old.remove();
     const tip = document.createElement("div"); tip.id = "shopPickTip"; tip.style = "background:var(--accSoft);border:1px solid var(--acc);padding:8px 12px;border-radius:8px;margin-bottom:10px";
-    tip.innerHTML = `<b>为新武器选择内置图：</b> 请在下方根目录单击选中图片文件，然后 <button class="ghost sm" id="btnShopPickConfirm">确定绑定</button> <button class="ghost sm" id="btnShopPickCancel">取消</button>`;
+    tip.innerHTML = `<b>为新武器选择内置图：</b> 武器目录 data/img/gacha/${_rar0}，然后 <button class="ghost sm" id="btnShopPickConfirm">确定绑定</button> <button class="ghost sm" id="btnShopPickCancel">取消</button>`;
     const panel = document.querySelector("#tab-imgs .panel"); if (panel) panel.prepend(tip);
     const backToModal = () => {
       tip.remove(); window.SHOP_PICK_TARGET = null; window.SHOP_PICK_KIND = null;
@@ -3146,7 +3334,7 @@ function renderShopRideBox(forceOpen = false) {
       `<div class="s-row"><small>坐骑名</small><input data-ride-name value="${esc(name)}"></div>` +
       `<div class="s-row"><small>价格</small><input type="number" data-ride-price value="${esc(price)}" style="width:90px"></div>` +
       `<div class="s-row" style="flex:1"><small>图片路径</small><input data-ride-img value="${esc(img)}" placeholder="data/img/..."></div>` +
-      `<div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${showImg ? `<button class="ghost sm" data-ride-view="${esc(showImg)}">浏览</button>` : `<span style="color:var(--muted);font-size:11px">无图</span>`}<button class="ghost sm" data-ride-pick="${esc(name)}">外置选图</button><button class="ghost sm" data-ride-pick-builtin="${esc(name)}">内置选图</button><button class="s-del" data-ride-del="${esc(name)}">删除</button></div>` +
+      `<div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${showImg ? `<button class="ghost sm" data-ride-view="${esc(showImg)}">浏览图片</button>` : `<span style="color:var(--muted);font-size:11px">无图</span>`}<button class="ghost sm" data-ride-pick="${esc(name)}">外置选图</button><button class="ghost sm" data-ride-pick-builtin="${esc(name)}">内置选图</button><button class="s-del" data-ride-del="${esc(name)}">删除</button></div>` +
       `</div>`;
   });
   html += `<div style="margin-top:8px"><button class="ghost sm" id="btnRideAdd">＋ 添加坐骑</button> <button class="ghost sm" id="btnRideReset">恢复默认</button></div></details>`;
@@ -3185,18 +3373,18 @@ function renderShopRideBox(forceOpen = false) {
   }));
   box.querySelectorAll("[data-ride-pick-builtin]").forEach(b=> b.addEventListener("click", async ()=>{
     const k=b.dataset.ridePickBuiltin;
-    // 跳转到根目录让用户选择后点确定绑定（仅图片）
+    // 跳转到坐骑目录让用户选择后点确定绑定（仅图片）
     window.SHOP_PICK_TARGET = k;
-    toast("已进入根目录，请单击选中图片后点“确定绑定”","ok");
-    // 切换到根目录页并加载根目录
+    toast("已进入坐骑图片目录，请单击选中后点“确定绑定”","ok");
+    // 切换到根目录页并加载坐骑目录
     document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("on"));
     const rb=document.querySelector("[data-tab=\"imgs\"]"); if(rb) rb.classList.add("on");
     document.querySelectorAll(".tab").forEach(x=>x.classList.remove("on"));
     const tab=document.getElementById("tab-imgs"); if(tab) tab.classList.add("on");
-    await loadImages("");
+    await loadImages("data/img/rides");
     // 在根目录顶部显示绑定提示（仅图片可选）
     const tip=document.createElement("div"); tip.id="shopPickTip"; tip.style="background:var(--accSoft);border:1px solid var(--acc);padding:8px 12px;border-radius:8px;margin-bottom:10px";
-    tip.innerHTML=`<b>为坐骑 "${esc(k)}" 选择内置图：</b> 请在下方根目录单击选中图片文件（png/jpg/gif等），然后 <button class="ghost sm" id="btnShopPickConfirm">确定绑定</button> <button class="ghost sm" id="btnShopPickCancel">取消</button>`;
+    tip.innerHTML=`<b>为坐骑 "${esc(k)}" 选择内置图：</b> 坐骑目录 data/img/rides（png/jpg/gif等），然后 <button class="ghost sm" id="btnShopPickConfirm">确定绑定</button> <button class="ghost sm" id="btnShopPickCancel">取消</button>`;
     const panel=document.querySelector("#tab-imgs .panel"); if(panel) panel.prepend(tip);
     document.getElementById("btnShopPickConfirm")?.addEventListener("click", ()=>{
       const sel=IMG_SELECTED;
@@ -3246,7 +3434,8 @@ function renderShopRideBox(forceOpen = false) {
   if (addBtn) addBtn.addEventListener("click", () => openRideAddModal());
   const resetBtn = document.getElementById("btnRideReset");
   if (resetBtn) resetBtn.addEventListener("click", async () => {
-    SHOP_RIDE = { "企鹅":213250, "伞兵":500000, "宝驴":1000000, "保时捷":1500000, "法拉利":1500000, "玛莎拉蒂":1500000, "劳斯莱斯":1500000, "布加迪威龙":1500000, "私人航空":5000000 };
+    if (!(await uiConfirm("直接恢复坐骑商城为内置默认？旧数据不保留（点上方保存生效）。", "恢复默认"))) return;
+    SHOP_RIDE = JSON.parse(JSON.stringify(DEFAULT_RIDE_SHOP));
     SHOP_DIRTY=true; syncShopRaw(); renderShopRideBox(true); toast("已恢复默认，需保存","ok");
   });
 }
@@ -3269,23 +3458,51 @@ function openRideAddModal() {
         <input id="rideAddName" style="width:100%;padding:6px 10px;border-radius:8px" placeholder="如：汗血宝马"></div>
       <div><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">价格：</label>
         <input id="rideAddPrice" type="number" value="500000" style="width:100%;padding:6px 10px;border-radius:8px"></div>
-      <div><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">图片路径（可选，留空自动匹配）：</label>
+      <div><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">图片（坐骑目录 data/img/rides，可选，留空自动匹配）：</label>
         <input id="rideAddImg" style="width:100%;padding:6px 10px;border-radius:8px" placeholder="data/img/rides/xxx.jpg">
-        <div style="margin-top:6px"><button class="ghost sm" id="rideAddPickBuiltin">内置选图（服务器文件）</button></div></div>
+        <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap"><button class="ghost sm" id="rideAddPickUpload">外置选图（本地上传）</button><button class="ghost sm" id="rideAddPickBuiltin">内置选图（坐骑目录）</button><button class="ghost sm" id="rideAddPreview">浏览图片</button><span id="rideAddImgTip" style="font-size:11.5px;color:var(--muted)">未选择</span></div></div>
       <div class="hint">保存后记得点商城页「保存」持久化；图片也可在列表中用“外置选图/内置选图”绑定</div>
     </div>`;
+  let _RIDE_ADD_FILE = null;
+  const _rideSetTip = (t) => { const el = document.getElementById("rideAddImgTip"); if (el) el.textContent = t; };
+  document.getElementById("rideAddPickUpload")?.addEventListener("click", () => {
+    const inp = document.createElement("input"); inp.type = "file"; inp.accept = "image/*";
+    inp.onchange = async (e) => {
+      const file = e.target.files[0]; if (!file) return;
+      try {
+        const r = await postFile("images/upload?dir=" + encodeURIComponent("data/img/rides"), {}, file);
+        if (r && r.error) throw new Error(r.error);
+        const path = (r && (r.path || (r.data && r.data.path))) || ("data/img/rides/" + file.name);
+        _RIDE_ADD_FILE = null;
+        const ie = document.getElementById("rideAddImg");
+        if (ie) ie.value = path;
+        _rideSetTip("已上传：" + path);
+      } catch (err) { toast("上传失败:" + (err.message || err), "bad"); }
+    };
+    inp.click();
+  });
+  document.getElementById("rideAddPreview")?.addEventListener("click", async () => {
+    const p = (document.getElementById("rideAddImg")?.value || "").trim();
+    if (!p) { toast("请先选一张图片", "bad"); return; }
+    try {
+      const r = await getBridge().apiPost("images/thumb", { path: p });
+      const thumb = r && (r.thumb || (r.data && r.data.thumb));
+      if (thumb) showLightbox(thumb, p.split("/").pop());
+      else toast("无预览", "bad");
+    } catch (e) { toast("预览失败:" + e.message, "bad"); }
+  });
   document.getElementById("rideAddPickBuiltin")?.addEventListener("click", async () => {
     modal.className = "";
     window.SHOP_PICK_TARGET = "__rideadd__"; window.SHOP_PICK_KIND = "rideadd";
-    toast("已进入根目录，请单击选中图片后点“确定绑定”", "ok");
+    toast("已进入坐骑图片目录，请单击选中后点确定", "ok");
     document.querySelectorAll(".tabs button").forEach(x => x.classList.remove("on"));
     const rb = document.querySelector("[data-tab=\"imgs\"]"); if (rb) rb.classList.add("on");
     document.querySelectorAll(".tab").forEach(x => x.classList.remove("on"));
     const tab = document.getElementById("tab-imgs"); if (tab) tab.classList.add("on");
-    await loadImages("");
+    await loadImages("data/img/rides");
     const old = document.getElementById("shopPickTip"); if (old) old.remove();
     const tip = document.createElement("div"); tip.id = "shopPickTip"; tip.style = "background:var(--accSoft);border:1px solid var(--acc);padding:8px 12px;border-radius:8px;margin-bottom:10px";
-    tip.innerHTML = `<b>为新坐骑选择内置图：</b> 请在下方根目录单击选中图片文件，然后 <button class="ghost sm" id="btnShopPickConfirm">确定绑定</button> <button class="ghost sm" id="btnShopPickCancel">取消</button>`;
+    tip.innerHTML = `<b>为新坐骑选择内置图：</b> 坐骑目录 data/img/rides，然后 <button class="ghost sm" id="btnShopPickConfirm">确定绑定</button> <button class="ghost sm" id="btnShopPickCancel">取消</button>`;
     const panel = document.querySelector("#tab-imgs .panel"); if (panel) panel.prepend(tip);
     const backToModal = () => {
       tip.remove(); window.SHOP_PICK_TARGET = null; window.SHOP_PICK_KIND = null;
@@ -3391,10 +3608,8 @@ async function renderAtlas(curCfg){
       let h = `<div style="border:1px solid var(--line);border-radius:var(--radius-xs);padding:8px 10px;background:var(--panel2)">`
         + `<div style="font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">精灵系统-精灵地图 (${_names.length})`
         + `<span style="margin-left:auto;display:inline-flex;gap:4px;flex-wrap:wrap">`
-        + `<button class="ghost sm" id="btnAtlasSaveMaps">💾 保存地图</button>`
-        + `<button class="ghost sm" id="btnAtlasSaveSpirits">💾 保存属性</button>`
-        + `<button class="ghost sm" id="btnAtlasResetMaps">↩️ 恢复地图</button>`
-        + `<button class="ghost sm" id="btnAtlasResetSpirits">↩️ 恢复属性</button>`
+        + `<button class="ghost sm" id="btnAtlasSaveMaps">💾 保存精灵</button>`
+        + `<button class="ghost sm" id="btnAtlasResetMaps">↩️ 恢复默认</button>`
         + `</span></div>`;
       if (!_names.length) {
         const _bc = (() => { try { return Object.keys((SPIRIT && SPIRIT._builtin && SPIRIT._builtin.maps) || {}).length; } catch (e) { return 0; } })();
@@ -3406,11 +3621,11 @@ async function renderAtlas(curCfg){
         h += `<div class="s-mapcard ${SPIRIT_OPEN["__orphans__"] ? "open" : ""}" data-map="__orphans__" style="margin-top:10px"><div class="s-maphead" data-map-toggle="__orphans__"><span class="s-mapname">🧩 未上架精灵 (${_orphans.length})</span><span class="s-maplv">不在任何地图掉落中</span><span class="s-arr">${SPIRIT_OPEN["__orphans__"] ? "▾" : "▸"}</span></div>${SPIRIT_OPEN["__orphans__"] ? `<div class="s-mapbody"><div class="hint" style="margin-bottom:6px">这些精灵不会在野外遭遇，可编辑后分配进图，或直接移除</div><div class="sp-spirits">${spiritAttrCards(_spirits, _orphans, _names)}</div></div>` : ``}</div>`;
       }
       h += `<div style="margin-top:8px"><button class="ghost sm" id="btnAtlasAddMap">＋ 添加地图</button></div>`;
-      h += `<div class="hint" style="margin-top:6px">地图/属性各对保存恢复，互不干扰</div></div>`;
+      h += `<div class="hint" style="margin-top:6px">地图+属性一键保存/恢复，只动精灵范围</div></div>`;
       html += h;
     }
     else html += mkSec("坐骑系统-坐骑", rides, "btnAtlasAddRide", "ride", "坐骑系统-坐骑", `<button class="ghost sm" id="btnAtlasSaveRide">💾 保存坐骑</button><button class="ghost sm" id="btnAtlasResetRide">↩️ 恢复默认</button>`);
-    html += `</div><div class="hint" style="margin-top:6px">武器增删即时生效；宝物/坐骑改动即时保存，只动各自范围；精灵卡改动点保存地图/保存属性</div>`;
+    html += `</div><div class="hint" style="margin-top:6px">武器增删即时生效；宝物/坐骑改动即时保存，只动各自范围；精灵卡改动点保存精灵</div>`;
     box.innerHTML = html;
     box.querySelectorAll("[data-atlas-tab]").forEach((b) => b.addEventListener("click", () => {
       ATLAS_CUR = b.dataset.atlasTab;
@@ -3488,10 +3703,8 @@ async function renderAtlas(curCfg){
       catch (e) { toast("保存失败: " + e.message, "bad"); }
       renderAtlas();
     }));
-    document.getElementById("btnAtlasSaveMaps")?.addEventListener("click", () => saveSpiritKind("maps"));
-    document.getElementById("btnAtlasSaveSpirits")?.addEventListener("click", () => saveSpiritKind("spirits"));
-    document.getElementById("btnAtlasResetMaps")?.addEventListener("click", () => resetSpiritKind("maps"));
-    document.getElementById("btnAtlasResetSpirits")?.addEventListener("click", () => resetSpiritKind("spirits"));
+    document.getElementById("btnAtlasSaveMaps")?.addEventListener("click", () => saveSpiritKind("all"));
+    document.getElementById("btnAtlasResetMaps")?.addEventListener("click", () => resetSpiritKind("all"));
     document.getElementById("btnAtlasAddMap")?.addEventListener("click", async () => {
       if (!SPIRIT) { toast("请先加载图鉴", "bad"); return; }
       const n = await uiPrompt("输入新地图名称：", "", "添加地图");
@@ -3501,7 +3714,7 @@ async function renderAtlas(curCfg){
       SPIRIT_OPEN[n.trim()] = true;
       SPIRIT_DIRTY = true;
       refreshSpiritViews();
-      toast("已添加地图，点保存地图持久化", "ok");
+      toast("已添加地图，点保存精灵持久化", "ok");
     });
     document.getElementById("btnAtlasAddWeapon")?.addEventListener("click", () => {
       const sel = document.getElementById("atlasPoolRar");
@@ -3599,22 +3812,13 @@ async function saveShops() {
         else cleanRide[k] = v;
       } else cleanRide[k] = v;
     });
-    // 商城页只存坐骑：武器=池文件即时生效，宝物名/效果由图鉴页即时保存，互不干扰
+    // 商城页顶部保存只存坐骑：武器=池文件即时生效，精灵道具由下方保存道具独立保存，互不串写
     const payload = { "商城图鉴": { "ride_shop": JSON.stringify(cleanRide) } };
     await getBridge().apiPost("config/save", payload);
     SHOP_DIRTY = false;
     SHOP_RIDE_CUSTOM = true;
-    window._TREAS_DIRTY = false;
-    try {
-      if (typeof CFG === "object" && CFG && CFG["设置"] && payload["设置"]) CFG["设置"]["宝物"] = payload["设置"]["宝物"];
-    } catch (e) {}
-    if (SPIRIT && SPIRIT.shop) {
-      try {
-        await getBridge().apiPost("spirits/save", { shop: SPIRIT.shop });
-      } catch (e) {}
-    }
-    if (msg) { msg.textContent = "商城已保存"; msg.classList.add("ok"); }
-    toast("商城已保存", "ok");
+    if (msg) { msg.textContent = "坐骑商城已保存"; msg.classList.add("ok"); }
+    toast("坐骑商城已保存", "ok");
     syncShopRaw();
   } catch (e) {
     if (msg) { msg.textContent = "保存失败: " + e.message; msg.classList.add("bad"); }
