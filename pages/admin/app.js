@@ -1544,7 +1544,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.7.14"
+        version: res.version || "0.7.15"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -2149,7 +2149,7 @@ function renderSpiritBody() {
   if (!SPIRIT) return;
   const q = (document.getElementById("spiritSearch")?.value || "").trim().toLowerCase();
   renderMaps(q);
-  try { renderAtlasSpirit(); } catch (e) {}
+  try { if (ATLAS_CUR === "spirit") renderAtlas(); } catch (e) {}
 }
 
 function renderMaps(q) {
@@ -2221,7 +2221,7 @@ function renderMaps(q) {
       </div>
     </div>`;
   }).join("") + (_orphans.length
-    ? `<div class="s-mapcard" data-map="__orphans__" style="margin-top:10px"><div class="s-maphead" data-map-toggle="__orphans__"><span class="s-mapname">🧩 未上架精灵 (${_orphans.length})</span><span class="s-maplv">不在任何地图掉落中</span><span class="s-arr">${SPIRIT_OPEN["__orphans__"] ? "▾" : "▸"}</span></div>${SPIRIT_OPEN["__orphans__"] ? `<div class="s-mapbody"><div class="hint" style="margin-bottom:6px">这些精灵不会在野外遭遇，可编辑后分配进图，或直接移除</div><div class="sp-spirits">${spiritAttrCards(spirits, _orphans, mapNames)}</div></div>` : ``}</div>`
+    ? `<div class="s-mapcard ${SPIRIT_OPEN["__orphans__"] ? "open" : ""}" data-map="__orphans__" style="margin-top:10px"><div class="s-maphead" data-map-toggle="__orphans__"><span class="s-mapname">🧩 未上架精灵 (${_orphans.length})</span><span class="s-maplv">不在任何地图掉落中</span><span class="s-arr">${SPIRIT_OPEN["__orphans__"] ? "▾" : "▸"}</span></div>${SPIRIT_OPEN["__orphans__"] ? `<div class="s-mapbody"><div class="hint" style="margin-bottom:6px">这些精灵不会在野外遭遇，可编辑后分配进图，或直接移除</div><div class="sp-spirits">${spiritAttrCards(spirits, _orphans, mapNames)}</div></div>` : ``}</div>`
     : ``) + `<button id="mapAddItem" class="ghost" style="margin-top:10px">＋ 添加地图</button>`;
 
   body.querySelectorAll("[data-map-toggle]").forEach((h) =>
@@ -2380,6 +2380,7 @@ async function saveSpirits() {
     // 地图: 逐张读 推荐等级 + 出没精灵列表; 精灵属性卡回写 spirits
     document.querySelectorAll("#spiritBody .s-mapcard").forEach((card) => {
       const mname = card.dataset.map;
+      if (!mname || mname === "__orphans__") return;
       if (!maps[mname]) maps[mname] = { lv: 1, drops: [] };
       const mo = maps[mname];
       const lv = card.querySelector('[data-map-field="lv"]');
@@ -2947,23 +2948,6 @@ function openWeaponEditModal(name){
   }
   modal.className="show";
 }
-function renderAtlasSpirit(){
-  const box=document.getElementById("atlasSpiritBox");
-  if(!box) return;
-  try{
-    const maps=(SPIRIT && SPIRIT.maps) || {};
-    const names=Object.keys(maps);
-    if(!names.length){ box.innerHTML=`<span style="color:var(--muted)">暂无精灵地图（去上方精灵图鉴添加）</span>`; return; }
-    let html=`<div style="display:flex;flex-direction:column;gap:8px">`;
-    names.forEach(m=>{
-      const d=maps[m]||{}; const drops=((d.drops||[]).map(String));
-      html+=`<div style="border:1px solid var(--line);border-radius:var(--radius-xs);padding:8px 10px;background:var(--panel2)"><div style="font-weight:600">🗺 ${esc(m)} <span style="color:var(--muted);font-weight:400">Lv.${esc(d.lv ?? 1)} · ${drops.length} 只</span></div><div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:5px">${drops.length ? drops.map(n=>`<span class="badge" style="font-size:11.5px">${esc(n)}</span>`).join("") : `<span style="color:var(--muted)">空地图</span>`}</div></div>`;
-    });
-    html+=`</div><div class="hint" style="margin-top:6px">精灵地图独立总览（只读），编辑请到上方精灵图鉴</div>`;
-    box.innerHTML=html;
-  }catch(e){ box.innerHTML=`<span style="color:var(--muted)">精灵地图加载失败</span>`; }
-}
-
 function parseShopRide(raw) {
   // 兼容旧调用：只返回数据对象
   return _parseShopInput(raw, _normRideObj).data;
@@ -3135,7 +3119,7 @@ function openRideAddModal() {
   modal.className = "show";
   setTimeout(() => { try { document.getElementById("rideAddName")?.focus(); } catch (e) {} }, 50);
 }
-let ATLAS_CUR = "weapon";  // 总览分类：weapon | treasure | ride
+let ATLAS_CUR = "weapon";  // 总览分类：weapon | treasure | ride | spirit
 async function renderAtlas(curCfg){
   const box = document.getElementById("atlasBox");
   if (!box) return;
@@ -3154,7 +3138,8 @@ async function renderAtlas(curCfg){
     } catch(e) { Treas = ["酒神葫芦", "四象护符"]; }
     const weapons = Object.keys(SHOP_WEAPON || {});
     const rides = Object.keys(SHOP_RIDE || {});
-    const _tabs = [["weapon", "⚔️ 武器", weapons.length], ["treasure", "🎁 宝物", Treas.length], ["ride", "🐴 坐骑", rides.length]];
+    const _spiritMaps = (() => { try { return Object.keys((SPIRIT && SPIRIT.maps) || {}); } catch (e) { return []; } })();
+    const _tabs = [["weapon", "⚔️ 武器", weapons.length], ["treasure", "🎁 宝物", Treas.length], ["ride", "🐴 坐骑", rides.length], ["spirit", "✨ 精灵", _spiritMaps.length]];
     let html = `<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">` + _tabs.map(([k, label, n]) =>
       `<button class="ghost sm" data-atlas-tab="${k}" ${ATLAS_CUR === k ? 'disabled style="opacity:.45"' : ""}>${label} (${n})</button>`
     ).join("") + `</div><div style="display:flex;flex-direction:column;gap:8px">`;
@@ -3181,10 +3166,21 @@ async function renderAtlas(curCfg){
       h += `</div><div class="hint" style="margin-top:6px">✎ 可改宝物效果（不止名字），× 删除；效果保存到商城图鉴 treasure_effects</div></div>`;
       html += h;
     }
+    else if (ATLAS_CUR === "spirit") {
+      const _maps = (() => { try { return (SPIRIT && SPIRIT.maps) || {}; } catch (e) { return {}; } })();
+      const _names = Object.keys(_maps);
+      let h = `<div style="border:1px solid var(--line);border-radius:var(--radius-xs);padding:8px 10px;background:var(--panel2)"><div style="font-weight:600;margin-bottom:6px">精灵系统-精灵地图 (${_names.length})</div>`;
+      if (!_names.length) h += `<span style="color:var(--muted)">暂无地图，去上方精灵图鉴添加</span>`;
+      else h += `<div style="display:flex;flex-direction:column;gap:6px">` + _names.map(m => {
+        const d = _maps[m] || {}; const drops = ((d.drops || []).map(String));
+        return `<div style="border:1px solid var(--line);border-radius:var(--radius-xs);padding:6px 8px;background:var(--panel)"><div style="font-weight:600">🗺 ${esc(m)} <span style="color:var(--muted);font-weight:400">Lv.${esc(d.lv ?? 1)} · ${drops.length} 只</span></div><div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">${drops.length ? drops.map(n => `<span class="badge" style="font-size:11px">${esc(n)}</span>`).join("") : `<span style="color:var(--muted)">空地图</span>`}</div></div>`;
+      }).join("") + `</div>`;
+      h += `<div class="hint" style="margin-top:6px">只读总览，编辑请到上方精灵图鉴</div></div>`;
+      html += h;
+    }
     else html += mkSec("坐骑系统-坐骑", rides, "btnAtlasAddRide", "ride", "坐骑系统-坐骑");
     html += `</div><div class="hint" style="margin-top:6px">点击 × 删除，✎ 改默认值，＋ 添加；修改后点上方“保存”同步到 商城图鉴/设置</div>`;
     box.innerHTML = html;
-    try { renderAtlasSpirit(); } catch (e) {}
     box.querySelectorAll("[data-atlas-tab]").forEach((b) => b.addEventListener("click", () => {
       ATLAS_CUR = b.dataset.atlasTab;
       renderAtlas();
