@@ -123,8 +123,6 @@
       position: sticky;
       top: 10px;
       z-index: 40;
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
     }
     .brand {
       display: flex;
@@ -1320,6 +1318,12 @@
       margin-top: 10px;
     }
 
+    /* 长列表滚动优化：视口外跳过渲染（滚动更顺滑；自动回退高度防跳动） */
+    .log-line, [data-pool-item], .sp-card, .s-mapcard {
+      content-visibility: auto;
+      contain-intrinsic-size: auto 44px;
+    }
+
     @media (max-width: 768px) {
       .wrap {
         padding: 8px 8px calc(24px + env(safe-area-inset-bottom, 0px));
@@ -1596,7 +1600,7 @@
   <div class="wrap">
     <header>
       <div class="brand">
-        <h1>管理控制台 <span class="ver">v0.7.36</span> <span id="verBadge" style="display:none;font-size:11px;padding:3px 8px;border-radius:12px;background:linear-gradient(135deg, #10B981, #059669);color:#fff;font-weight:600;cursor:pointer;margin-left:4px;box-shadow:0 2px 6px rgba(16,185,129,0.3)" title="点击查看更新并一键升级">🚀 发现新版本</span></h1>
+        <h1>管理控制台 <span class="ver">v0.7.37</span> <span id="verBadge" style="display:none;font-size:11px;padding:3px 8px;border-radius:12px;background:linear-gradient(135deg, #10B981, #059669);color:#fff;font-weight:600;cursor:pointer;margin-left:4px;box-shadow:0 2px 6px rgba(16,185,129,0.3)" title="点击查看更新并一键升级">🚀 发现新版本</span></h1>
         <div class="sub">
           <span class="status-badge"><span class="status-dot"></span> 运行正常</span>
         </div>
@@ -1628,20 +1632,19 @@
     </div>
 
     <!-- 总览 -->
-    <!-- 📊 群生态与宏观经济运行大屏 -->
+    <!-- 📊 全群数据总览 -->
     <div class="tab on" id="tab-overview">
       <div class="panel" style="margin-bottom:12px">
         <div class="toolbar" style="margin-bottom:8px">
-          <h2>📊 群生态与宏观经济运行大屏</h2>
+          <h2>📊 全群数据总览</h2>
           <div style="display:flex;gap:6px;margin-left:auto;flex-wrap:wrap;align-items:center">
             <button id="btnDbDoctorOv" class="ghost" style="color:var(--succ);border-color:var(--succSoft);font-weight:600">🩺 数据库体检与整理</button>
             <button id="btnCheckUpdate" class="ghost" style="color:var(--acc);border-color:var(--accSoft2);font-weight:600">🚀 检查更新</button>
             <span id="checkUpdateStatus" style="display:none;font-size:12px;font-weight:600;padding:3px 10px;border-radius:8px;align-items:center;gap:4px"></span>
-            <button id="btnRefreshAnalytics" class="ghost">🔄 刷新大屏数据</button>
           </div>
         </div>
 
-        <!-- 统一 6 大核心宏观生态指标卡片 (纯净无冗余) -->
+        <!-- 统一 6 大核心指标卡片 (纯净无冗余) -->
         <div class="kpi-grid" id="analyticsKpiGrid" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:10px;margin:8px 0 14px">
           <div class="card" style="padding:12px 14px;background:var(--panel2);border-radius:12px;border:1px solid var(--line)">
             <div style="font-size:11.5px;color:var(--muted)">👥 玩家与群聊规模</div>
@@ -1677,9 +1680,9 @@
       </div>
       <div class="panel">
         <h2>💡 快速指引</h2>
-        <div class="hint">· <strong>概览大屏</strong>：实时呈现全群资金规模、银行存款与奴隶总身价。</div>
+        <div class="hint">· <strong>总览</strong>：实时呈现全群资金规模、银行存款与奴隶总身价。</div>
         <div class="hint">· <strong>智能平衡</strong>：内置休闲高福利/标准/硬核三大模式，一键统筹全28大系统玩法与冷却时间。</div>
-        <div class="hint">· <strong>图鉴</strong>：宝物/坐骑/精灵统一管理，改动按各自范围保存，互不干扰；武器请到商城抽奖武器池管理。</div>
+        <div class="hint">· <strong>图鉴</strong>：宝物/精灵统一管理，改动按各自范围保存，互不干扰；武器坐骑请到商城管理。</div>
       </div>
     </div>
 
@@ -1908,7 +1911,7 @@
       </div>
     </div>
 
-    <!-- 图鉴：精灵图鉴 + 宝物坐骑总览 -->
+    <!-- 图鉴：精灵图鉴 + 宝物总览 -->
     <div class="tab" id="tab-spirits">
       <div class="panel">
         <div class="toolbar">
@@ -1921,7 +1924,7 @@
           <span class="msg" id="spiritMsg"></span>
         </div>
         <div class="hint">导出的文件可直接导入。</div>
-        <h3 style="margin:14px 0 8px;font-size:13px">📖 总览（宝物/坐骑/精灵地图）</h3>
+        <h3 style="margin:14px 0 8px;font-size:13px">📖 总览（宝物/精灵地图）</h3>
         <div id="atlasBox" style="max-height:600px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px"></div>
       </div>
     </div>
@@ -2230,6 +2233,9 @@
 
   <!-- 全局 Toast 提示容器 -->
   <div id="toast"><span id="toastTxt"></span></div>
+
+  <!-- 回到顶部：划过半屏出现，全页签通用 -->
+  <button id="backTop" title="回到顶部" style="position:fixed;right:14px;bottom:16px;z-index:60;width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:var(--panel2);color:var(--text);font-size:16px;line-height:1;cursor:pointer;display:none;box-shadow:0 2px 10px rgba(0,0,0,0.18)">↑</button>
 
   <script src="./app.js"></script>
 </body>

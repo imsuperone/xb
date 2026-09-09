@@ -5,13 +5,13 @@
 | 属性 | 值 |
 | :--- | :--- |
 | 插件 | `astrbot_plugin_xbbot`（小白统一模块） |
-| 当前版本 | `v0.7.36` |
+| 当前版本 | `v0.7.37` |
 | 作者 | Light (`faxlight@faxt.top`) |
 | 仓库 | `https://github.com/imsuperone/xb`（main） |
 | 主目录 | `astrbot_plugins/astrbot_plugin_xbbot` |
-| 发行包 | `astrbot_plugin_xbbot_v0.7.36.zip`（仓库根 / astrbot_plugins / backup 三端同步） |
+| 发行包 | `astrbot_plugin_xbbot_v0.7.37.zip`（仓库根 / astrbot_plugins / backup 三端同步） |
 | 依赖 | AstrBot >= 3.4.0，Python >= 3.10 |
-| 规模 | 41 模块 / 29 节 907 配置项 / 68 Web API / app.js 约 5450 行 / 179 DOM（0 重复） |
+| 规模 | 41 模块 / 29 节 904 配置项 / 68 Web API / app.js 约 5450 行 / 179 DOM（0 重复） |
 | 本卡与手册 | 根与插件目录各一份，内容同步；改一处必须同步另一处 |
 
 ## 🛡️ 十二大红线（1~7 为初版，8~12 为 v0.7.14~22 血泪新增，违反即回滚）

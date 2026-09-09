@@ -399,7 +399,37 @@ def _snap_index():
 
 def _snap_index_save(idx):
     try:
-        ST.recall_set("cfgsnap__index", _json.dumps(idx[:_CFG_SNAP_MAX], ensure_ascii=False))
+        keep = [str(x) for x in (idx or [])][: _CFG_SNAP_MAX]
+        ST.recall_set("cfgsnap__index", _json.dumps(keep, ensure_ascii=False))
+        # 清理被挤出索引的孤儿快照行 + 扶正 latest（防 kv 无限堆积，旧库一次自愈）
+        try:
+            if ST._DB is not None:
+                with ST._LOCK:
+                    if keep:
+                        _ph = ",".join("?" * len(keep))
+                        _sql = ("DELETE FROM kv WHERE k LIKE 'cfgsnap\\_\\_%' ESCAPE '\\' "
+                                "AND k NOT IN ('cfgsnap__index','cfgsnap__latest') "
+                                "AND k NOT IN (" + _ph + ")")
+                        ST._DB.execute(
+                            _sql,
+                            ["cfgsnap__" + k for k in keep])
+                    ST._safe_commit()
+            try:
+                _latest = str(ST.recall_get("cfgsnap__latest", "") or "")
+                if _latest and _latest not in keep:
+                    ST.recall_set("cfgsnap__latest", keep[0] if keep else "")
+            except Exception:
+                pass
+            try:
+                if hasattr(ST, "_KV_CACHE_LOCK"):
+                    with ST._KV_CACHE_LOCK:
+                        for k in list(ST._KV_CACHE.keys()):
+                            if k.startswith("cfgsnap__") and k not in ("cfgsnap__index", "cfgsnap__latest") and k[9:] not in keep:
+                                ST._KV_CACHE.pop(k, None)
+            except Exception:
+                pass
+        except Exception:
+            pass
     except Exception:
         pass
 

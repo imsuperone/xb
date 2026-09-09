@@ -2217,11 +2217,6 @@
         "default": "真",
         "description": "【银行】指令启用开关(真/假；假=不再响应)"
       },
-      "补偿": {
-        "type": "string",
-        "default": "真",
-        "description": "【奴隶】指令启用开关(真/假；假=不再响应)"
-      },
       "解散帮派": {
         "type": "string",
         "default": "真",
@@ -2556,11 +2551,6 @@
       "造反": {
         "type": "text",
         "description": "造反回复模板(数值走 概率配置.造反概率/间隔配置.造反间隔)",
-        "default": ""
-      },
-      "补偿": {
-        "type": "text",
-        "description": "补偿回复模板(数值走 费用配置.补偿上限/间隔配置.补偿间隔)",
         "default": ""
       },
       "30连抽": {
@@ -4288,11 +4278,6 @@
         "type": "string",
         "default": "所有人",
         "description": "【银行】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
-      },
-      "补偿": {
-        "type": "string",
-        "default": "所有人",
-        "description": "【奴隶】指令权限（所有人/超管；超管=仅超管可用，非超管静默）"
       },
       "解散帮派": {
         "type": "string",

@@ -40,24 +40,13 @@ async def handle_analytics_overview(request):
 
             # 2. 银行储蓄与签到人次统计：SQL 侧聚合（原逐行 json.loads，百万行即秒级）
             #    语义与旧循环一致：deposit 按行取整累加；sign 取 sign_count 回退 total_sign_days；
-            #    精灵仅统计数组/对象形态（JSON 字符串形态与旧逻辑同样计 0），spirits 优先于 bag_spirits；
             #    非法 JSON/非对象行整行跳过（旧 json.loads 抛错即跳过）；NULL data 视作 {}。
             #    注意 json_each 遇脏串会抛错（json_extract 只回 NULL），故 WHERE 先过滤。
             cur.execute("""
                 SELECT
                     COALESCE(SUM(CAST(COALESCE(json_extract(data, '$.deposit'), '0') AS INTEGER)), 0),
                     COALESCE(SUM(CASE WHEN CAST(COALESCE(json_extract(data, '$.deposit'), '0') AS REAL) > 0 THEN 1 ELSE 0 END), 0),
-                    COALESCE(SUM(CAST(COALESCE(json_extract(data, '$.sign_count'), json_extract(data, '$.total_sign_days'), '0') AS INTEGER)), 0),
-                    COALESCE(SUM(
-                        CASE
-                            WHEN (SELECT COUNT(*) FROM json_each(accounts.data, '$.spirits')
-                                  WHERE json_type(accounts.data, '$.spirits') IN ('array', 'object')) > 0
-                            THEN (SELECT COUNT(*) FROM json_each(accounts.data, '$.spirits')
-                                  WHERE json_type(accounts.data, '$.spirits') IN ('array', 'object'))
-                            ELSE (SELECT COUNT(*) FROM json_each(accounts.data, '$.bag_spirits')
-                                  WHERE json_type(accounts.data, '$.bag_spirits') IN ('array', 'object'))
-                        END
-                    ), 0)
+                    COALESCE(SUM(CAST(COALESCE(json_extract(data, '$.sign_count'), json_extract(data, '$.total_sign_days'), '0') AS INTEGER)), 0)
                 FROM accounts
                 WHERE json_valid(COALESCE(data, '{}'))
             """)
@@ -65,7 +54,6 @@ async def handle_analytics_overview(request):
             total_bank_deposit = int(row[0]) if row and row[0] is not None else 0
             total_bank_users = int(row[1]) if row and row[1] is not None else 0
             total_sign_count = int(row[2]) if row and row[2] is not None else 0
-            total_spirits_count = int(row[3]) if row and row[3] is not None else 0
 
             # 3. 奴隶生态与总身价统计：SQL 侧聚合（原 groups 全表逐行解析）
             #    非法 JSON/非对象/NULL 行按旧逻辑处理（NULL 视作 {} 计默认身价，其余跳过）
@@ -106,8 +94,7 @@ async def handle_analytics_overview(request):
                 "avg_money_per_user": avg_money_per_user,
                 "total_slave_worth": total_slave_worth,
                 "total_slaves_count": total_slaves_count,
-                "total_masters_count": total_masters_count,
-                "total_spirits_count": total_spirits_count
+                "total_masters_count": total_masters_count
             }
         }
         return result

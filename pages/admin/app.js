@@ -727,9 +727,35 @@ const TAB_LOADERS = {
 };
 const TAB_DONE = {};
 
+function initBackTop() {
+  // 回到顶部：窗口滚动过半屏出现；点击回窗顶并顺带复位页内滚动区（图鉴/日志）
+  try {
+    const btn = document.getElementById("backTop");
+    if (!btn || btn.dataset.bound) return;
+    btn.dataset.bound = "1";
+    const onScroll = () => {
+      try {
+        const y = window.scrollY || document.documentElement.scrollTop || 0;
+        btn.style.display = y > 400 ? "" : "none";
+      } catch (e) {}
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    btn.addEventListener("click", () => {
+      try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) { try { window.scrollTo(0, 0); } catch (err) {} }
+      ["atlasBox", "logTerminal"].forEach((id) => {
+        try { const el = document.getElementById(id); if (el && el.scrollTop > 0) el.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) {}
+      });
+      onScroll();
+    });
+    onScroll();
+  } catch (e) {}
+}
+
 async function main() {
   initTheme();
   bindTabs();
+  try { initBackTop(); } catch (e) {}
+  try { bindShopOrderOnce(); } catch (e) {}
   const _b = getBridge();
   try {
     if (_b && typeof _b.ready === "function") {
@@ -1637,7 +1663,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.7.36"
+        version: res.version || "0.7.37"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -1763,8 +1789,6 @@ const CMD_NUMS = {
     ["精灵配置", "等级加成下限", "等级加成下限", "int"], ["精灵配置", "等级加成上限", "等级加成上限", "int"],
     ["精灵配置", "冒险间隔", "冒险间隔(分)", "int"]],
   "丢弃精灵": [["精灵配置", "魅力减少", "魅力减少", "int"]],
-  "打赏": [["费用配置", "打赏上限", "打赏上限", "int"], ["间隔配置", "打赏间隔", "打赏间隔(分)", "int"]],
-  "补偿": [["费用配置", "变化上限", "变化上限", "int"]],
   "保护": [["设置", "保护费用", "保护费用", "int"], ["设置", "保护时长小时", "保护时长(时)", "int"],
     ["间隔配置", "保护间隔", "保护间隔(分)", "int"]],
   "我要学习": [["设置", "奇遇触发概率", "奇遇概率%", "int"], ["间隔配置", "学习间隔", "学习间隔(分)", "int"]],
@@ -1822,7 +1846,6 @@ const CMD_DEFAULT_REPLY = {
   "买奴隶位": "恭喜您花费{价格}货币\r\n买下一个奴隶位。\r\n当前可拥有奴隶上限：{上限}",
   "我要自由": "万恶的主人，大发善心，花费{价格}换取自由！",
   "保护": "恭喜您花费{费用}货币保护{目标}，剩余保护时间{分钟}分钟！",
-  "补偿": "[{名字}] 打赏给了 [{目标}] {金额}货币，实际获得{实收}",
   "折磨": "你对 [{目标}] 实施了折磨...\r\n【奇遇】{剧情}\r\n奴隶货币 +{数值}",
   "讨好": "摇摇尾巴~向你主人卖个萌，主人一开心给了你{金额}",
   "造反": "经过艰苦卓绝的战斗，你打败了万恶的主人，并恢复自由！抢走主人{金额}货币",
@@ -2694,7 +2717,7 @@ function renderShop(q = "", forceOpen = false) {
   const wasOpen = curDetails ? curDetails.open : forceOpen;
   let html = `<details class="panel" style="margin:0"${wasOpen ? " open" : ""}><summary style="cursor:pointer;font-weight:600">🎒 精灵道具商城 — ${names.length} 件</summary>`;
   html += `<div class="hint" style="margin-top:8px">类型决定效果：精灵球=收服率% / 等级=奇异甜食+Lv / HP·攻击·防御·特攻·特防=+对应点数 / 进化=进化液。改完点保存道具，只写精灵道具。</div>`;
-  html += `<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button id="shopAddItemTop" class="ghost sm">＋ 添加精灵道具</button><button id="btnShopSpiritSave" class="ghost sm">💾 保存道具</button><button id="btnShopSpiritReset" class="ghost sm">↩️ 恢复默认</button></div>`;
+  html += `<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button id="shopAddItemTop" class="ghost sm">＋ 添加精灵道具</button><button id="btnShopSpiritSave" class="ghost sm">💾 保存道具</button><button id="btnShopSpiritReset" class="ghost sm">↩️ 恢复默认</button><button class="ghost sm" data-shopsec-up="shop" title="上移">↑</button><button class="ghost sm" data-shopsec-down="shop" title="下移">↓</button></div>`;
   if (!Object.keys(shop).length && !q) {
     html += `<div class="hint" style="margin:8px 0">当前无自定义道具，运行中使用内置 ${_spiritBuiltinCount("shop")} 件`
       + ` <button class="ghost sm" id="btnSpiritUseBuiltinShop">载入内置为起点</button></div>`;
@@ -3203,7 +3226,7 @@ function renderPoolBox(forceOpen=false){
   try { box.querySelectorAll("details[data-pool-group]").forEach((d) => { openGroups[d.dataset.poolGroup] = d.open; }); } catch (e) {}
   let html=`<details class="panel" style="margin:0"${wasOpen?" open":""}><summary style="cursor:pointer;font-weight:600">🎰 抽奖武器池 — ${poolCount()} 件</summary>`;
   html+=`<div class="hint" style="margin-top:8px">武器=图片文件本身：改名改文件名，稀有度改所在目录；攻击加成参战、描述进详情，改完点保存武器属性；↑↓ 排序即时保存</div>`;
-  html+=`<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button class="ghost sm" id="btnPoolUploadTop">＋ 添加武器</button><button class="ghost sm" id="btnPoolAttrsSave">💾 保存武器属性</button><button class="ghost sm" id="btnPoolAttrsReset">↩️ 恢复默认</button></div>`;
+  html+=`<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button class="ghost sm" id="btnPoolUploadTop">＋ 添加武器</button><button class="ghost sm" id="btnPoolAttrsSave">💾 保存武器属性</button><button class="ghost sm" id="btnPoolAttrsReset">↩️ 恢复默认</button><button class="ghost sm" data-shopsec-up="pool" title="上移">↑</button><button class="ghost sm" data-shopsec-down="pool" title="下移">↓</button></div>`;
   ["SSR","SR","R"].forEach((rar)=>{
     const items=(POOL_WEAPONS&&POOL_WEAPONS[rar])||[];
     const open = openGroups[rar] !== undefined ? openGroups[rar] : false;
@@ -3563,7 +3586,7 @@ function renderShopRideBox(forceOpen = false) {
   const wasOpen = curDetails ? curDetails.open : forceOpen;
   let html = `<details class="panel" style="margin:0"${wasOpen ? " open" : ""}><summary style="cursor:pointer;font-weight:600">🐴 坐骑商城 — ${entries.length} 件</summary>`;
   html += `<div class="hint" style="margin-top:8px">每行一个坐骑，支持改名、改价、删、绑图（图片路径如 data/img/rides/企鹅.jpg，留空自动匹配）</div>`;
-  html += `<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button class="ghost sm" id="btnRideAddTop">＋ 添加坐骑</button><button class="ghost sm" id="btnRideSaveTop">💾 保存坐骑</button><button class="ghost sm" id="btnRideReset">↩️ 恢复默认</button></div>`;
+  html += `<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button class="ghost sm" id="btnRideAddTop">＋ 添加坐骑</button><button class="ghost sm" id="btnRideSaveTop">💾 保存坐骑</button><button class="ghost sm" id="btnRideReset">↩️ 恢复默认</button><button class="ghost sm" data-shopsec-up="ride" title="上移">↑</button><button class="ghost sm" data-shopsec-down="ride" title="下移">↓</button></div>`;
   if (!entries.length) {
     html += `<div class="hint" style="margin:8px 0">当前为空，运行时使用内置坐骑（${Object.keys(DEFAULT_RIDE_SHOP).length} 种）；可添加或恢复默认</div>`;
   }
@@ -3807,10 +3830,11 @@ function openRideAddModal() {
   modal.className = "show";
   setTimeout(() => { try { document.getElementById("rideAddName")?.focus(); } catch (e) {} }, 50);
 }
-let ATLAS_CUR = "treasure";  // 总览分类：treasure | ride | spirit（武器只在商城池管理）
+let ATLAS_CUR = "treasure";  // 总览分类：treasure | spirit（武器坐骑只在商城管理）
 async function renderAtlas(curCfg){
   const box = document.getElementById("atlasBox");
   if (!box) return;
+  if (ATLAS_CUR !== "treasure" && ATLAS_CUR !== "spirit") ATLAS_CUR = "treasure";
   try {
     let Treas = [];
     try {
@@ -3824,19 +3848,11 @@ async function renderAtlas(curCfg){
         window._TREAS_DIRTY = false;
       }
     } catch(e) { Treas = ["酒神葫芦", "四象护符"]; }
-    const rides = Object.keys(SHOP_RIDE || {});
     const _spiritMaps = (() => { try { return Object.keys((SPIRIT && SPIRIT.maps) || {}); } catch (e) { return []; } })();
-    const _tabs = [["treasure", "🎁 宝物", Treas.length], ["ride", "🐴 坐骑", rides.length], ["spirit", "✨ 精灵", _spiritMaps.length]];
+    const _tabs = [["treasure", "🎁 宝物", Treas.length], ["spirit", "✨ 精灵", _spiritMaps.length]];
     let html = `<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">` + _tabs.map(([k, label, n]) =>
       `<button class="ghost sm" data-atlas-tab="${k}" ${ATLAS_CUR === k ? 'disabled style="opacity:.45"' : ""}>${label} (${n})</button>`
     ).join("") + `</div><div style="display:flex;flex-direction:column;gap:8px">`;
-    const mkSec = (title, items, addId, delAttr, sys, extraBtns = "") => {
-      let h = `<div style="border:1px solid var(--line);border-radius:var(--radius-xs);padding:8px 10px;background:var(--panel2)"><div style="font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">${title} (${items.length}) <span style="margin-left:auto;display:inline-flex;gap:4px;flex-wrap:wrap">${extraBtns}<button class="ghost sm" id="${addId}">＋ 添加</button></span></div><div style="display:flex;flex-wrap:wrap;gap:5px">`;
-      if (!items.length) h += `<span style="color:var(--muted)">暂无</span>`;
-      else h += items.map(n => `<span class="badge badge-primary" style="font-size:11.5px;display:inline-flex;align-items:center;gap:5px;padding:3px 8px">${esc(n)}${(sys || "").includes("坐骑") ? `<span style="cursor:pointer" data-atlas-ride-up="${esc(n)}" title="上移">↑</span><span style="cursor:pointer" data-atlas-ride-down="${esc(n)}" title="下移">↓</span>` : ""}<span style="cursor:pointer;font-weight:bold" data-atlas-del="${esc(sys||title)}|${esc(n)}" title="删除">×</span></span>`).join("");
-      h += `</div></div>`;
-      return h;
-    };
     const _effOf = (n) => { try { const e = (window._TREAS_EFF || {})[n]; if (e && typeof e === "object") return String(e.effect || ""); return String(e || ""); } catch (e) { return ""; } };
     if (ATLAS_CUR === "treasure") {
       let h = `<div style="border:1px solid var(--line);border-radius:var(--radius-xs);padding:8px 10px;background:var(--panel2)"><div style="font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">奴隶系统-宝物 (${Treas.length}) <span style="margin-left:auto;display:inline-flex;gap:4px;flex-wrap:wrap"><button class="ghost sm" id="btnAtlasSaveTreasure">💾 保存宝物</button><button class="ghost sm" id="btnAtlasResetTreasure">↩️ 恢复默认</button><button class="ghost sm" id="btnAtlasAddTreasure">＋ 添加</button></span></div><div style="display:flex;flex-wrap:wrap;gap:5px">`;
@@ -3876,8 +3892,8 @@ async function renderAtlas(curCfg){
       h += `<div class="hint" style="margin-top:6px">地图+属性一键保存/恢复，只动精灵范围</div></div>`;
       html += h;
     }
-    else html += mkSec("坐骑系统-坐骑", rides, "btnAtlasAddRide", "ride", "坐骑系统-坐骑", `<button class="ghost sm" id="btnAtlasSaveRide">💾 保存坐骑</button><button class="ghost sm" id="btnAtlasResetRide">↩️ 恢复默认</button>`);
-    html += `</div><div class="hint" style="margin-top:6px">宝物/坐骑改动即时保存，只动各自范围；精灵卡改动点保存精灵；武器请到🛒商城→抽奖武器池管理</div>`;
+    else html += `<div style="border:1px solid var(--line);border-radius:var(--radius-xs);padding:8px 10px;background:var(--panel2)"><div style="color:var(--muted)">未知分类</div></div>`;
+    html += `</div><div class="hint" style="margin-top:6px">宝物改动即时保存，只动各自范围；精灵卡改动点保存精灵；武器坐骑请到🛒商城管理</div>`;
     box.innerHTML = html;
     box.querySelectorAll("[data-atlas-tab]").forEach((b) => b.addEventListener("click", () => {
       ATLAS_CUR = b.dataset.atlasTab;
@@ -3898,24 +3914,9 @@ async function renderAtlas(curCfg){
       window._TREAS_DIRTY = false;
       try { if (CFG && CFG.cur && CFG.cur["设置"]) CFG.cur["设置"]["宝物"] = (window._TREAS_LIST || Treas).filter(Boolean).join("|"); } catch (e) {}
     };
-    const persistRideShop = async () => {
-      // 坐骑商城即时持久化（商城/总览共用同一内存态，只写 ride_shop）
-      const cleanRide = {};
-      Object.entries(SHOP_RIDE).forEach(([k, v]) => {
-        if (v && typeof v === "object" && !Array.isArray(v)) {
-          if (!v.img) cleanRide[k] = v.price;
-          else cleanRide[k] = v;
-        } else cleanRide[k] = v;
-      });
-      const r = await getBridge().apiPost("config/save", { "商城图鉴": { "ride_shop": JSON.stringify(cleanRide) } });
-      if (r && r.error) throw new Error(r.error);
-      SHOP_DIRTY = false;
-      try { syncShopRaw(); renderShopRideBox(true); } catch (e) {}
-    };
     box.querySelectorAll("[data-atlas-del]").forEach(el => el.addEventListener("click", async () => {
       const [sys, name] = el.dataset.atlasDel.split("|");
-      const _lastR = sys.includes("坐骑") && Object.keys(SHOP_RIDE).length <= 1;
-      if (!(await uiConfirm(`确认删除 ${sys} "${name}"？` + (_lastR ? "\n\n注意：这是最后一件，删光后运行时自动使用内置默认。" : ""), "删除图鉴"))) return;
+      if (!(await uiConfirm(`确认删除 ${sys} "${name}"？`, "删除图鉴"))) return;
       try {
         if (sys.includes("宝物")) {
           window._TREAS_LIST = (window._TREAS_LIST || Treas).filter(x => x !== name);
@@ -3923,33 +3924,9 @@ async function renderAtlas(curCfg){
           await persistTreasure();
           toast("已删除并保存", "ok");
           renderAtlas();
-        } else if (sys.includes("坐骑")) {
-          delete SHOP_RIDE[name];
-          await persistRideShop();
-          toast("已删除并保存", "ok");
-          renderAtlas();
         }
       } catch (e) { toast("删除失败: " + e.message, "bad"); }
     }));
-    // 图鉴排序委托（绑在 atlasBox 上一次，多次渲染不重复）：坐骑改内存序即时保存
-    if (!box.dataset.atlasSortBound) {
-      box.dataset.atlasSortBound = "1";
-      box.addEventListener("click", async (e) => {
-        const t = e.target && e.target.closest ? e.target : null;
-        if (!t || !box.contains(t)) return;
-        const upR = t.closest("[data-atlas-ride-up]");
-        const dnR = t.closest("[data-atlas-ride-down]");
-        if (upR || dnR) {
-          const n = upR ? upR.dataset.atlasRideUp : dnR.dataset.atlasRideDown;
-          if (n && _moveKey(SHOP_RIDE, n, upR ? -1 : 1)) {
-            try { await persistRideShop(); toast("已排序并保存", "ok"); }
-            catch (err) { toast("保存失败: " + (err.message || err), "bad"); }
-            renderAtlas();
-          }
-          return;
-        }
-      });
-    }
     try {
       // 委托绑在 atlasBox 上（一次，多次渲染不重复），覆盖地图卡与未上架区
       bindSpiritMapCards(box);
@@ -4003,20 +3980,6 @@ async function renderAtlas(curCfg){
       } catch (e) { toast("恢复失败: " + e.message, "bad"); }
       renderAtlas();
     });
-    document.getElementById("btnAtlasSaveRide")?.addEventListener("click", async () => {
-      try { await persistRideShop(); toast("坐骑已保存", "ok"); }
-      catch (e) { toast("保存失败: " + e.message, "bad"); }
-      renderAtlas();
-    });
-    document.getElementById("btnAtlasResetRide")?.addEventListener("click", async () => {
-      if (!(await uiConfirm("直接恢复坐骑商城为内置默认？旧数据不保留。", "恢复默认"))) return;
-      try {
-        SHOP_RIDE = JSON.parse(JSON.stringify(DEFAULT_RIDE_SHOP));
-        await persistRideShop();
-        toast("已恢复默认", "ok");
-      } catch (e) { toast("恢复失败: " + e.message, "bad"); }
-      renderAtlas();
-    });
     document.getElementById("btnAtlasAddTreasure")?.addEventListener("click", async () => {
       let n = await uiPrompt("输入宝物名（奴隶系统-宝物）：", "", "添加宝物");
       if (!n) return; n = n.trim(); if (!n) return;
@@ -4029,7 +3992,6 @@ async function renderAtlas(curCfg){
       catch (e) { window._TREAS_DIRTY = true; toast("保存失败: " + e.message, "bad"); }
       renderAtlas();
     });
-    document.getElementById("btnAtlasAddRide")?.addEventListener("click", () => openRideAddModal());
   } catch (e) { box.innerHTML = `<span style="color:var(--muted)">图鉴加载失败: ${esc(e.message)}</span>`; }
 }
 
@@ -4048,6 +4010,15 @@ async function loadShops(skipAtlas = false) {
     else { SHOP_RIDE = JSON.parse(JSON.stringify(DEFAULT_RIDE_SHOP)); SHOP_RIDE_CUSTOM = false; }
     if (_rr.corrupt) toast("坐骑商城配置损坏，已载入内置，保存将覆盖", "bad");
     try {
+      const _so = sec["shop_order"];
+      if (typeof _so === "string" && _so.trim()) {
+        try {
+          const d = JSON.parse(_so);
+          if (Array.isArray(d) && d.length === 3 && ["ride", "pool", "shop"].every((k) => d.includes(k))) _SHOP_ORDER = d;
+        } catch (e) {}
+      }
+    } catch (e) {}
+    try {
       const _te = sec["weapon_order"];
       if (_te && typeof _te === "object" && !Array.isArray(_te)) _POOL_ORDER = { ..._te };
       else if (typeof _te === "string" && _te.trim()) { try { const d = JSON.parse(_te); if (d && typeof d === "object") _POOL_ORDER = d; } catch (e) {} }
@@ -4064,10 +4035,55 @@ async function loadShops(skipAtlas = false) {
     try { renderShop(); } catch (e) {}
     try { await loadPool(true); } catch (e) {}
     if (!skipAtlas) { try { renderAtlas(cur); } catch (e) {} }
+    try { applyShopOrder(); } catch (e) {}
     if (msg) { msg.textContent = ""; msg.classList.remove("ok", "bad"); }
   } catch (e) {
     if (msg) { msg.textContent = "加载失败: " + e.message; msg.classList.add("bad"); }
   }
+}
+let _SHOP_ORDER = null; // ["ride","pool","shop"] | null=默认顺序
+function applyShopOrder() {
+  // 按 shop_order 重排商城三栏容器（只动 DOM 顺序，不碰数据）
+  try {
+    const order = (_SHOP_ORDER && _SHOP_ORDER.length === 3 &&
+      ["ride", "pool", "shop"].every((k) => _SHOP_ORDER.includes(k))) ? _SHOP_ORDER : ["ride", "pool", "shop"];
+    const parent = document.querySelector("#tab-shops .responsive-shop-grid > div");
+    const map = { ride: document.getElementById("shopRideBox"), pool: document.getElementById("poolWeaponBox"), shop: document.getElementById("shopSpiritBox") };
+    if (!parent || !map.ride || !map.pool || !map.shop) return;
+    order.forEach((k, i) => {
+      if (map[k]) {
+        parent.appendChild(map[k]);
+        map[k].style.marginTop = i === 0 ? "0" : "10px";
+      }
+    });
+  } catch (e) {}
+}
+async function moveShopSection(key, dir) {
+  const order = ((_SHOP_ORDER && _SHOP_ORDER.length === 3) ? [..._SHOP_ORDER] : ["ride", "pool", "shop"]);
+  const i = order.indexOf(key), j = i + dir;
+  if (i < 0 || j < 0 || j >= order.length) return;
+  const t = order[i]; order[i] = order[j]; order[j] = t;
+  _SHOP_ORDER = order;
+  applyShopOrder();
+  try {
+    const r = await getBridge().apiPost("config/save", { "商城图鉴": { "shop_order": JSON.stringify(order) } });
+    if (r && r.error) throw new Error(r.error);
+    try { if (CFG && CFG.cur && CFG.cur["商城图鉴"]) CFG.cur["商城图鉴"]["shop_order"] = JSON.stringify(order); } catch (e) {}
+    toast("商城排序已保存", "ok");
+  } catch (e) { toast("排序保存失败: " + e.message, "bad"); }
+}
+function bindShopOrderOnce() {
+  if (document.body.dataset.shopOrderBound) return;
+  document.body.dataset.shopOrderBound = "1";
+  document.addEventListener("click", (e) => {
+    const t = e.target && e.target.closest ? e.target : null;
+    if (!t) return;
+    const up = t.closest("[data-shopsec-up]");
+    const dn = t.closest("[data-shopsec-down]");
+    if (!up && !dn) return;
+    const key = up ? up.dataset.shopsecUp : dn.dataset.shopsecDown;
+    if (key) moveShopSection(key, up ? -1 : 1);
+  });
 }
 async function saveRideOnly(silent = false) {
   // 坐骑单独保存：只写 商城图鉴.ride_shop，不碰武器/精灵/宝物
@@ -4119,12 +4135,29 @@ async function saveShops() {
 }
 
 async function exportShops() {
-  // 商城导出（仅坐骑 ride_shop，与导入同口径）；走统一导出通道（自动下载+弹窗手动兜底）
+  // 商城全量导出：坐骑 + 武器属性/顺序 + 武器清单 + 精灵道具；走统一导出通道（自动下载+弹窗手动兜底）
+  // 注意：武器图片二进制不在内，导入时缺图跳过并提示（属性会留待传图后生效）
   try {
     const cur = await getBridge().apiGet("config/get");
     const sec = (cur || {})["商城图鉴"] || {};
-    const payload = { ride_shop: sec["ride_shop"] || "" };
+    const pool = [];
+    try {
+      ["SSR", "SR", "R"].forEach((rar) => ((POOL_WEAPONS && POOL_WEAPONS[rar]) || []).forEach((it) => {
+        pool.push({ rar, name: it.name, attrs: (POOL_ATTRS && POOL_ATTRS[it.name]) || { atk: 0, desc: "" } });
+      }));
+    } catch (e) {}
+    let spiritShop = {};
+    try { spiritShop = (SPIRIT && SPIRIT.shop) || {}; } catch (e) {}
+    const payload = {
+      app: "astrbot_plugin_xbbot", kind: "shop", version: 1,
+      ride_shop: sec["ride_shop"] || "",
+      weapon_attrs: sec["weapon_attrs"] || "",
+      weapon_order: sec["weapon_order"] || "",
+      spirit_shop: spiritShop,
+      pool: pool
+    };
     triggerExportResult({ filename: `xbbot_shop_${Date.now()}.json`, mime: "application/json;charset=utf-8", rawText: JSON.stringify(payload, null, 2) });
+    toast("商城已导出", "ok");
   } catch (e) { toast("导出失败: " + e.message, "bad"); }
 }
 async function importShops() {
@@ -4133,7 +4166,45 @@ async function importShops() {
     const file = e.target.files[0]; if (!file) return;
     try {
       const txt = await file.text(); const data = JSON.parse(txt);
-      // 兼容旧格式 {商城图鉴: {...}} / 直接 {ride_shop: "..."} / 裸商城JSON（仅坐骑，武器已改为文件池）
+      const done = [], failed = [];
+      // 新格式：全量商城包
+      if (data && (data.kind === "shop" || data.spirit_shop !== undefined || data.weapon_attrs !== undefined || Array.isArray(data.pool))) {
+        if (data.ride_shop !== undefined) {
+          const r = await getBridge().apiPost("config/save", { "商城图鉴": { "ride_shop": data.ride_shop } });
+          if (r && r.error) throw new Error(r.error);
+          done.push("坐骑");
+        }
+        if (data.weapon_attrs !== undefined) {
+          let _attrs = data.weapon_attrs;
+          if (typeof _attrs === "string" && _attrs.trim()) { try { _attrs = JSON.parse(_attrs); } catch (err) { _attrs = null; } }
+          if (_attrs && typeof _attrs === "object") {
+            const r = await getBridge().apiPost("weapons/pool/attrs", { attrs: _attrs, full: 1 });
+            if (r && r.error) throw new Error(r.error);
+            done.push("武器属性");
+          }
+        }
+        if (data.weapon_order !== undefined) {
+          const r = await getBridge().apiPost("config/save", { "商城图鉴": { "weapon_order": data.weapon_order } });
+          if (r && r.error) throw new Error(r.error);
+          done.push("武器顺序");
+        }
+        if (data.spirit_shop && typeof data.spirit_shop === "object") {
+          const r = await getBridge().apiPost("spirits/save", { shop: data.spirit_shop });
+          if (r && r.error) throw new Error(r.error);
+          done.push("精灵道具");
+        }
+        if (Array.isArray(data.pool) && data.pool.length) {
+          const have = new Set();
+          try { ["SSR", "SR", "R"].forEach((rar) => ((POOL_WEAPONS && POOL_WEAPONS[rar]) || []).forEach((it) => have.add(rar + "|" + it.name))); } catch (err) {}
+          const missing = data.pool.filter((p) => p && p.name && !have.has((p.rar || "") + "|" + p.name)).length;
+          if (missing) failed.push(missing + "个武器图片缺失已跳过（属性已恢复，传图后生效）");
+        }
+        if (!done.length && !failed.length) throw new Error("文件中无有效数据");
+        toast("商城已导入" + (done.length ? "：" + done.join("、") : "") + (failed.length ? "；" + failed.join("；") : ""), done.length ? "ok" : "bad");
+        await loadShops();
+        return;
+      }
+      // 兼容旧格式 {商城图鉴: {...}} / 直接 {ride_shop: "..."} / 裸商城JSON（仅坐骑）
       let sec = {};
       if (data["商城图鉴"]) sec = data["商城图鉴"];
       else if (data["ride_shop"] !== undefined) sec = data;
@@ -5008,7 +5079,6 @@ document.getElementById("btnSimClear")?.addEventListener("click", () => {
 document.querySelectorAll("[data-sim-cmd]").forEach(btn => {
   btn.addEventListener("click", () => sendSimulatorCommand(btn.dataset.simCmd));
 });
-document.getElementById("btnRefreshAnalytics")?.addEventListener("click", loadAnalytics);
 document.getElementById("btnUsersAirdrop")?.addEventListener("click", openAirdropModal);
 
 // Tab 切换时自动加载大屏数据
@@ -5046,7 +5116,6 @@ function initNewModules() {
   document.querySelectorAll("[data-sim-cmd]").forEach(btn => {
     btn.addEventListener("click", () => sendSimulatorCommand(btn.dataset.simCmd));
   });
-  document.getElementById("btnRefreshAnalytics")?.addEventListener("click", loadAnalytics);
   document.getElementById("btnCmdAddCustomTop")?.addEventListener("click", () => {
     const inner = document.getElementById("btnCmdAddCustom");
     if (inner) { inner.click(); return; }

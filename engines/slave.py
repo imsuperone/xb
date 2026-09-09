@@ -762,27 +762,6 @@ def cmd_query(gid, qq, target, st):
     return cmd_myinfo(gid, target, st)
 
 
-def cmd_compensate(gid, qq, target, amount, st):
-    if not target:
-        return T.COMP_WHO
-    if str(target) == qq:
-        return "自己给自己补偿好玩吗！？"
-    if amount <= 0:
-        return T.COMP_WHO
-    ok, mins = cd_check(U(st, qq), "compensate_time", "打赏间隔")
-    if not ok:
-        return _fmt(mins, "打赏")
-    limit = cfgi("费用配置", "打赏上限", 10000)
-    if amount > limit:
-        return f"单次补偿最多 {limit}{coin_name()} 哦~"
-    if coins_get(gid, qq) < amount:
-        return T.POOR.format(coin=coin_name())
-    coins_add(gid, qq, -amount)
-    coins_add(gid, target, amount)
-    cd_commit(U(st, qq), "compensate_time")
-    return f"[{uname(st,qq)}] 补偿了 [{uname(st,target)}] {amount}{coin_name()}"
-
-
 def cmd_buy_slave(gid, qq, target, st):
     if not target:
         return T.BUY_WHO
@@ -1945,7 +1924,7 @@ def _route_locked(gid, qq, raw):
         # 兼容纯 QQ 号（无 @）的写法：文案仅 @QQ，但解析支持 QQ 号
         if not target:
             # 仅对需要目标的指令尝试提取，避免金额被误判
-            _need = ("查询","补偿","买下","折磨","保护","释放","赎身","打架","购买奴隶位")
+            _need = ("查询","买下","折磨","保护","释放","赎身","打架","购买奴隶位")
             for _pref in _need:
                 if text.startswith(_pref):
                     m = _re.search(r"\b(\d{5,12})\b", text)
@@ -1956,7 +1935,7 @@ def _route_locked(gid, qq, raw):
             # 通用兜底：若仍无 target 且文本含 @QQ 之外的独立 QQ 号（如 买下 123），也尝试首个数字
             if not target:
                 # 对于买下/查询等，即使前缀不完全匹配也尝试
-                if any(kw in text for kw in ("买下","查询","补偿","保护","释放","赎身","打架")):
+                if any(kw in text for kw in ("买下","查询","保护","释放","赎身","打架")):
                     m = _re.search(r"\b(\d{5,12})\b", text)
                     if m:
                         target = m.group(1)
@@ -2045,10 +2024,6 @@ def _route_locked(gid, qq, raw):
         if t:
             return cmd_query(gid, qq, t, st)
         return "未能找到该成员～格式：【查询 @QQ】或【查询 昵称】"
-    if text.startswith("补偿"):
-        mnum = _NUM.search(text)
-        amt = int(mnum.group(1)) if mnum else 0
-        return cmd_compensate(gid, qq, target, amt, st)
     if text.startswith("买下"):
         return cmd_buy_slave(gid, qq, target, st)
     if text.startswith("折磨"):
