@@ -40,7 +40,7 @@ def _get_local_version(plugin_base=""):
                     return line.split(":", 1)[1].strip().strip('"').strip("'")
     except Exception:
         pass
-    return "0.7.40"
+    return "0.7.41"
 
 
 def _parse_version_tuple(v_str):

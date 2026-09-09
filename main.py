@@ -109,7 +109,7 @@ def _raw_file_response(data_bytes, filename):
 PLUGIN_ID = "astrbot_plugin_xbbot"
 PLUGIN_DESC = "小白(奴/签/银/娱/私/灵/骑/超管/帮派/冒险+主菜单+WebUI), 现代SQLite存储"
 PLUGIN_AUTHOR = "Light"
-PLUGIN_VERSION = "0.7.40"
+PLUGIN_VERSION = "0.7.41"
 PLUGIN_REPO = "https://github.com/imsuperone/xb"
 
 # 消息处理定长线程池：突发千群不再打爆默认无限池，与 ST._LOCK 串行叠加可控
@@ -492,35 +492,38 @@ class XbBot(Star):
                         pass
                     return  # 全静默（BY DESIGN，见 AIINFO）
                 try:
-                    menus = []
-                    for mod, label in [(sign, "签到系统"), (spirit, "精灵系统"), (ent, "娱乐系统"), (bank, "银行系统"), (slave, "奴隶系统"), (ride, "坐骑系统"), (guild, "帮派系统"), (adventure, "冒险系统")]:
-                        try:
-                            m = getattr(mod, "MENU", None)
-                            if m is None:
-                                m = getattr(mod, "_MENU", None)
-                            if callable(m):
-                                try:
-                                    m = m()
-                                except Exception:
-                                    m = str(m)
-                            if not m:
-                                try:
-                                    m2 = mod.handle(gid, qq, label)
-                                    m = m2 if m2 else f"【{label}】无菜单"
-                                except Exception:
-                                    m = f"【{label}】无菜单"
-                            m = str(m)
-                        except Exception as e:
-                            m = f"【{label}】获取失败: {e}"
-                        menus.append(m)
+                    def _build_test_menus():
+                        _menus = []
+                        for mod, label in [(sign, "签到系统"), (spirit, "精灵系统"), (ent, "娱乐系统"), (bank, "银行系统"), (slave, "奴隶系统"), (ride, "坐骑系统"), (guild, "帮派系统"), (adventure, "冒险系统")]:
+                            try:
+                                m = getattr(mod, "MENU", None)
+                                if m is None:
+                                    m = getattr(mod, "_MENU", None)
+                                if callable(m):
+                                    try:
+                                        m = m()
+                                    except Exception:
+                                        m = str(m)
+                                if not m:
+                                    try:
+                                        m2 = mod.handle(gid, qq, label)
+                                        m = m2 if m2 else f"【{label}】无菜单"
+                                    except Exception:
+                                        m = f"【{label}】无菜单"
+                                m = str(m)
+                            except Exception as e:
+                                m = f"【{label}】获取失败: {e}"
+                            _menus.append(m)
+                        return _menus
+                    menus = await asyncio.to_thread(_build_test_menus)
                     bot = getattr(event, "bot", None)
                     if bot and not is_private:
                         try:
                             nodes = []
                             for idx, m in enumerate(menus):
                                 txt = str(m)[:4000]
-                                nodes.append({"type": "node", "data": {"name": f"测试{idx+1}-{['签到','精灵','娱乐','银行','奴隶','坐骑','帮派','冒险'][idx]}", "uin": str(qq), "content": [{"type": "text", "data": {"text": txt}}]}})
-                            await bot.call_action("send_group_forward_msg", group_id=int(gid), messages=nodes)
+                                nodes.append({"type": "node", "data": {"name": f"测试{idx+1}-{['签到','精灵','娱乐','银行','奴隶','坐骑','帮派','冒险'][idx]}", "uin": str(getattr(slave, "BOT_UIN", "") or qq), "content": [{"type": "text", "data": {"text": txt}}]}})
+                            await asyncio.wait_for(bot.call_action("send_group_forward_msg", group_id=int(gid), messages=nodes), timeout=8)
                             try:
                                 event.stop_event()
                             except Exception:

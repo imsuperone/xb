@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """Test harness — 测试 1-9 + all 前置与探针，v0.45 抽离自 dispatch"""
+import asyncio
 import json
+import re
 import time
 try:
     from .. import store as ST
@@ -108,9 +110,9 @@ def _setup_user(v_gid, v_qq, label, cmd):
             try:
                 a = ST.acct(v_gid, v_qq)
                 if "末位保底" in label:
-                    sp = {"list": [{"name": "火苗", "level": 5, "hp": 40, "atk": 51, "def": 40, "spa": 34, "spd": 40}], "active": "火苗", "bag": {}}
+                    sp = {"list": [{"name": "火苗", "level": 5, "hp": 40, "atk": 51, "def": 40, "spa": 34, "spd": 40}], "active": "火苗", "adopted": 1, "bag": {}}
                 else:
-                    sp = {"list": [{"name": "火苗", "level": 5, "hp": 40, "atk": 51, "def": 40, "spa": 34, "spd": 40}, {"name": "水滴", "level": 5, "hp": 40, "atk": 34, "def": 40, "spa": 51, "spd": 40}, {"name": "木叶", "level": 5, "hp": 40, "atk": 40, "def": 45, "spa": 40, "spd": 35}], "active": "火苗", "bag": {"jinglingqiu": 5, "dashiqiu": 2}}
+                    sp = {"list": [{"name": "火苗", "level": 5, "hp": 40, "atk": 51, "def": 40, "spa": 34, "spd": 40}, {"name": "水滴", "level": 5, "hp": 40, "atk": 34, "def": 40, "spa": 51, "spd": 40}, {"name": "木叶", "level": 5, "hp": 40, "atk": 40, "def": 45, "spa": 40, "spd": 35}], "active": "火苗", "adopted": 1, "bag": {"精灵球": 5, "大师球": 2}}
                 a.set("spirits", json.dumps(sp, ensure_ascii=False))
                 ST.acct_save(v_gid, v_qq)
             except Exception:
@@ -136,7 +138,7 @@ def _setup_user(v_gid, v_qq, label, cmd):
         if "没球" in label:
             try:
                 a = ST.acct(v_gid, v_qq)
-                sp = {"list": [{"name": "火苗", "level": 5, "hp": 40, "atk": 51, "def": 40, "spa": 34, "spd": 40}, {"name": "水滴", "level": 5, "hp": 40, "atk": 34, "def": 40, "spa": 51, "spd": 40}, {"name": "木叶", "level": 5, "hp": 40, "atk": 40, "def": 45, "spa": 40, "spd": 35}], "active": "火苗", "bag": {}}
+                sp = {"list": [{"name": "火苗", "level": 5, "hp": 40, "atk": 51, "def": 40, "spa": 34, "spd": 40}, {"name": "水滴", "level": 5, "hp": 40, "atk": 34, "def": 40, "spa": 51, "spd": 40}, {"name": "木叶", "level": 5, "hp": 40, "atk": 40, "def": 45, "spa": 40, "spd": 35}], "active": "火苗", "adopted": 1, "bag": {}}
                 a.set("spirits", json.dumps(sp, ensure_ascii=False))
                 ST.acct_save(v_gid, v_qq)
             except Exception:
@@ -146,7 +148,7 @@ def _setup_user(v_gid, v_qq, label, cmd):
                 a = ST.acct(v_gid, v_qq)
                 cur = a.get("spirits","")
                 if not cur or cur=="{}" or "火苗" not in cur:
-                    sp = {"list": [{"name": "火苗", "level": 5, "hp": 40, "atk": 51, "def": 40, "spa": 34, "spd": 40}, {"name": "水滴", "level": 5, "hp": 40, "atk": 34, "def": 40, "spa": 51, "spd": 40}, {"name": "木叶", "level": 5, "hp": 40, "atk": 40, "def": 45, "spa": 40, "spd": 35}], "active": "火苗", "bag": {"jinglingqiu": 5, "dashiqiu": 2}}
+                    sp = {"list": [{"name": "火苗", "level": 5, "hp": 40, "atk": 51, "def": 40, "spa": 34, "spd": 40}, {"name": "水滴", "level": 5, "hp": 40, "atk": 34, "def": 40, "spa": 51, "spd": 40}, {"name": "木叶", "level": 5, "hp": 40, "atk": 40, "def": 45, "spa": 40, "spd": 35}], "active": "火苗", "adopted": 1, "bag": {"精灵球": 5, "大师球": 2}}
                     a.set("spirits", json.dumps(sp, ensure_ascii=False))
                     ST.acct_save(v_gid, v_qq)
             except Exception:
@@ -341,6 +343,179 @@ def _setup_user(v_gid, v_qq, label, cmd):
         pass
 
 
+def _probe_verdict(text):
+    """探针结论：异常/无回复判❌，其余判✅（有回复即链路通，语义由人看）"""
+    t = str(text or "")
+    if "异常" in t or "无回复" in t:
+        return "❌"
+    return "✅"
+
+
+def _pick_test_qq(mod, label, prev_qq, n, A_RICH, B_POOR):
+    if mod in (slave, ride):
+        return str(10006 + (n % 5))
+    if mod == guild and "创建帮派" in label:
+        if "有钱" in label:
+            return "10008"
+        elif "没钱" in label:
+            return "10009"
+        else:
+            return "10010"
+    if label == "抢红包-有口令":
+        return B_POOR
+    if "再开" in label and "接龙" in label:
+        # 第三人重开，测群级“进行中”拦截（冒险按人隔离，保持同人测冷却）
+        return "10008"
+    if "重复" in label and prev_qq:
+        return prev_qq
+    is_poor = any(k in label for k in ["没钱", "没券", "没体力", "没球", "没口令", "错口令"]) or label.endswith("-无") or label.endswith("-空") or label.endswith("-不存在")
+    if "非主人" in label or "无主人" in label or "无奴隶" in label:
+        is_poor = "没钱" in label
+    if "无位" in label:
+        is_poor = False
+    return B_POOR if is_poor else A_RICH
+
+
+def _verify_24(reply):
+    """二四点有解校验：从开局回复解析 4 数，验算可解性"""
+    try:
+        m = re.search(r"【([\d\s]+)】", str(reply or ""))
+        if not m:
+            return "有解校验：❌未解析到题目"
+        nums = tuple(sorted(int(x) for x in m.group(1).split()))
+        if len(nums) != 4:
+            return "有解校验：❌题目不足4数"
+        ok24 = bool(ent._can_make_24_cached(nums))
+        return "有解校验：✅可解" if ok24 else "有解校验：❌无解"
+    except Exception as e:
+        return f"有解校验：❌校验异常{e}"
+
+
+def _execute_system(mod, probes, v_gid, A_RICH, B_POOR):
+    """同步执行单系统探针表（重活，调用方负责扔线程池）。返回 (outs, v_qqs)，
+    outs 元素为 (label, cmd, text)。绝不碰真实群/真实QQ。"""
+    outs = []
+    v_qqs = []
+    prev_qq = None
+    for label, cmd in probes:
+        v_qq = _pick_test_qq(mod, label, prev_qq, len(v_qqs), A_RICH, B_POOR)
+        if mod not in (slave, ride):
+            prev_qq = v_qq
+        else:
+            prev_qq = v_qq if "重复" in label else None
+        v_qqs.append(v_qq)
+        _setup_user(v_gid, v_qq, label, cmd)
+        if mod == slave:
+            try:
+                st2 = slave.state(v_gid)
+                if st2.has_section(v_qq):
+                    u2 = st2[v_qq]
+                    for ck in ["flatter_time", "study_time", "torture_time", "protect_time", "打架时间", "造反时间", "讨好时间", "学习时间", "保护时间"]:
+                        if ck in u2:
+                            u2[ck] = ""
+                    slave.save(v_gid)
+            except Exception:
+                pass
+        if label.endswith("-加入"):
+            try:
+                ST.recall_set(f"ent_game_{v_gid}", "")
+            except Exception:
+                pass
+        try:
+            r = mod.handle(v_gid, v_qq, cmd)
+            if not r:
+                r = f"【{label}】无回复（虚拟环境）"
+            if label == "二四点-有解校验":
+                r = str(r) + "\r\n" + _verify_24(r)
+            outs.append((label, cmd, str(r)[:800]))
+        except Exception as e:
+            outs.append((label, cmd, f"【{label}】异常: {e}"))
+    return outs, v_qqs
+
+
+def _cleanup_test_users(v_gid, v_qqs):
+    """虚拟号清档：三表+红包+会话键+奴隶群档案+缓存（防跨轮污染）"""
+    uniq = set((v_qqs or []) + ["10001", "10002", "10003", "10004", "10005", "10006", "10007", "10008", "10009", "10010"])
+    try:
+        for vq in uniq:
+            try:
+                ST._DB.execute("DELETE FROM wallet WHERE gid=? AND qq=?", (int(v_gid), int(vq)))
+                ST._DB.execute("DELETE FROM accounts WHERE gid=? AND qq=?", (int(v_gid), int(vq)))
+                ST._DB.execute("DELETE FROM groups WHERE gid=? AND qq=?", (int(v_gid), int(vq)))
+            except Exception:
+                pass
+        try:
+            ST._DB.execute("DELETE FROM redpacks WHERE gid=?", (int(v_gid),))
+        except Exception:
+            pass
+        ST._DB.commit()
+        for vq in uniq:
+            ST._ACC_CACHE.pop((v_gid, vq), None)
+        ST._GROUP_CACHE.pop(v_gid, None)
+    except Exception:
+        pass
+    # 会话/冷却 recall 键清零（接龙/急转弯/字谜/猜数/答题/二四点/冒险冷却）
+    try:
+        keys = [f"ent_game_{v_gid}"]
+        for kind in ("chain", "trick", "miri", "quiz", "guessnum", "game24"):
+            for suffix in ("", "_owner", "_players", "_start", "_last_time", "_used", "_last_qq"):
+                keys.append(f"{kind}_{suffix}_{v_gid}" if suffix else f"{kind}_{v_gid}")
+            keys.append(f"{kind}_{v_gid}_10006")
+        for vq in uniq:
+            keys.append(f"advt_{v_gid}_{vq}")
+        for k in keys:
+            try:
+                ST.recall_set(k, "")
+            except Exception:
+                pass
+    except Exception:
+        pass
+    # 奴隶群档案虚拟号清档
+    try:
+        st = slave.state(v_gid)
+        for vq in uniq:
+            try:
+                if st.has_section(vq):
+                    st.remove_section(vq)
+            except Exception:
+                pass
+        slave.save(v_gid)
+    except Exception:
+        pass
+
+
+async def _forward_texts(bot, gid, uin, title, texts, is_private):
+    """合并转发（8秒熔断，uin 取机器人QQ防适配器拒收）"""
+    if not bot or is_private:
+        return False
+    try:
+        nodes = []
+        for idx, txt in enumerate(texts):
+            nodes.append({"type": "node", "data": {"name": f"{title}-{idx+1}", "uin": str(uin), "content": [{"type": "text", "data": {"text": txt[:4000]}}]}})
+        await asyncio.wait_for(bot.call_action("send_group_forward_msg", group_id=int(gid), messages=nodes), timeout=8)
+        return True
+    except Exception as e:
+        try:
+            print(f"forward {title} failed: {e}")
+        except Exception:
+            pass
+        return False
+
+
+def _render_report(title, outs):
+    """探针报告：逐条 verdict + 通过率汇总"""
+    lines = []
+    ok = 0
+    for label, cmd, text in outs:
+        mark = _probe_verdict(text)
+        if mark == "✅":
+            ok += 1
+        lines.append(f"{mark}【{label}】\r\n指令：{cmd}\r\n回复：\r\n{text}")
+    total = len(outs)
+    head = f"{title} 通过 {ok}/{total}" + (" ✅全过" if ok == total else "")
+    return head, lines, ok, total
+
+
 async def handle_test_probes(raw, gid, qq, is_admin, event, is_private):
     if raw.strip() == "测试testxb all":
         pass
@@ -361,94 +536,37 @@ async def handle_test_probes(raw, gid, qq, is_admin, event, is_private):
             v_qqs = []
             sys_order = [("测试testxb 2", sign), ("测试testxb 3", spirit), ("测试testxb 4", ent), ("测试testxb 5", bank), ("测试testxb 6", slave), ("测试testxb 7", ride), ("测试testxb 8", guild), ("测试testxb 9", adventure)]
             for sys_key, mod in sys_order:
-                sys_outs = []
-                prev_qq = None
-                for label, cmd in _TEST_PROBES.get(sys_key, []):
-                    if mod in (slave, ride):
-                        v_qq = str(10006 + (len(v_qqs) % 5))
-                    elif mod == guild and "创建帮派" in label:
-                        if "有钱" in label:
-                            v_qq = "10008"
-                        elif "没钱" in label:
-                            v_qq = "10009"
-                        else:
-                            v_qq = "10010"
-                    elif label == "抢红包-有口令":
-                        v_qq = B_POOR
-                    elif "重复" in label and prev_qq:
-                        v_qq = prev_qq
-                    else:
-                        is_poor = any(k in label for k in ["没钱","没券","没体力","没球","没口令","错口令"]) or label.endswith("-无") or label.endswith("-空") or label.endswith("-不存在")
-                        if "非主人" in label or "无主人" in label or "无奴隶" in label:
-                            is_poor = "没钱" in label
-                        if "无位" in label:
-                            is_poor = False
-                        v_qq = B_POOR if is_poor else A_RICH
-                    if mod not in (slave, ride):
-                        prev_qq = v_qq
-                    else:
-                        prev_qq = v_qq if "重复" in label else None
-                    v_qqs.append(v_qq)
-                    _setup_user(v_gid, v_qq, label, cmd)
-                    if mod == slave:
-                        try:
-                            st2 = slave.state(v_gid)
-                            if st2.has_section(v_qq):
-                                u2 = st2[v_qq]
-                                for ck in ["flatter_time","study_time","torture_time","protect_time","打架时间","造反时间","讨好时间","学习时间","保护时间"]:
-                                    if ck in u2:
-                                        u2[ck] = ""
-                                slave.save(v_gid)
-                        except Exception:
-                            pass
-                    if label.endswith("-加入"):
-                        try:
-                            ST.recall_set(f"ent_game_{v_gid}", "")
-                        except Exception:
-                            pass
-                    try:
-                        r = mod.handle(v_gid, v_qq, cmd)
-                        if not r:
-                            r = f"【{label}】无回复（需前置状态）"
-                        sys_outs.append(f"【{label}】\r\n指令：{cmd}\r\n回复：\r\n{str(r)[:800]}")
-                    except Exception as e:
-                        sys_outs.append(f"【{label}】异常: {e}")
+                # 重活扔线程池，主循环零阻塞；单条结构 (label, cmd, text)
+                sys_outs, sys_qqs = await asyncio.to_thread(
+                    _execute_system, mod, _TEST_PROBES.get(sys_key, []), v_gid, A_RICH, B_POOR)
                 outs.append((sys_key, sys_outs))
-            try:
-                uniq = set(v_qqs + ["10001","10002","10003","10004","10005","10006","10007"])
-                for vq in uniq:
-                    try:
-                        ST._DB.execute("DELETE FROM wallet WHERE gid=? AND qq=?", (int(v_gid), int(vq)))
-                        ST._DB.execute("DELETE FROM accounts WHERE gid=? AND qq=?", (int(v_gid), int(vq)))
-                        ST._DB.execute("DELETE FROM groups WHERE gid=? AND qq=?", (int(v_gid), int(vq)))
-                    except Exception:
-                        pass
-                ST._DB.commit()
-                for vq in uniq:
-                    ST._ACC_CACHE.pop((v_gid, vq), None)
-                ST._GROUP_CACHE.pop(v_gid, None)
-            except Exception:
-                pass
+                v_qqs += sys_qqs
+            await asyncio.to_thread(_cleanup_test_users, v_gid, v_qqs)
+            uin = getattr(slave, "BOT_UIN", "") or str(qq)
             bot = getattr(event, "bot", None)
             if bot and not is_private:
+                sent = 0
                 try:
                     for sys_key, sys_outs in outs:
-                        nodes = []
-                        for idx, txt in enumerate(sys_outs):
-                            nodes.append({"type": "node", "data": {"name": f"{sys_key}-{idx+1}", "uin": str(qq), "content": [{"type": "text", "data": {"text": txt[:4000]}}]}})
-                        await bot.call_action("send_group_forward_msg", group_id=int(gid), messages=nodes)
-                        import asyncio
-                        await asyncio.sleep(5)
+                        head, lines, _ok, _total = _render_report(sys_key, sys_outs)
+                        if not await _forward_texts(bot, gid, uin, sys_key, [head] + lines, is_private):
+                            break
+                        sent += 1
                     try:
                         event.stop_event()
                     except Exception:
                         pass
-                    return f"__HANDLED__已发送测试testxb all {len(outs)}系统，分段5秒"
+                    if sent == len(outs):
+                        return f"__HANDLED__已发送测试testxb all {len(outs)}系统（逐条✅❌见转发）"
                 except Exception as e:
-                    print(f"forward all failed: {e}")
+                    try:
+                        print(f"forward all failed: {e}")
+                    except Exception:
+                        pass
             merged = ""
             for sys_key, sys_outs in outs:
-                merged += f"\n\n===== {sys_key} =====\n\n" + "\n\n".join(sys_outs)
+                head, lines, _ok, _total = _render_report(sys_key, sys_outs)
+                merged += f"\n\n===== {sys_key}（{head}） =====\n\n" + "\n\n".join(lines)
             try:
                 event.stop_event()
             except Exception:
@@ -460,95 +578,20 @@ async def handle_test_probes(raw, gid, qq, is_admin, event, is_private):
         v_gid = "999999"
         A_RICH = "10006"
         B_POOR = "10007"
-        v_qqs = []
-        outs = []
-        prev_qq = None
-        for label, cmd in probes:
-            if mod in (slave, ride):
-                v_qq = str(10006 + (len(v_qqs) % 5))
-            elif mod == guild and "创建帮派" in label:
-                if "有钱" in label:
-                    v_qq = "10008"
-                elif "没钱" in label:
-                    v_qq = "10009"
-                else:
-                    v_qq = "10010"
-            elif label == "抢红包-有口令":
-                v_qq = B_POOR
-            elif "重复" in label and prev_qq:
-                v_qq = prev_qq
-            else:
-                is_poor = any(k in label for k in ["没钱","没券","没体力","没球","没口令","错口令"]) or label.endswith("-无") or label.endswith("-空") or label.endswith("-不存在")
-                if "非主人" in label or "无主人" in label or "无奴隶" in label:
-                    is_poor = "没钱" in label
-                if "无位" in label:
-                    is_poor = False
-                v_qq = B_POOR if is_poor else A_RICH
-            if mod not in (slave, ride):
-                prev_qq = v_qq
-            else:
-                prev_qq = v_qq if "重复" in label else None
-            v_qqs.append(v_qq)
-            _setup_user(v_gid, v_qq, label, cmd)
-            if mod == slave:
-                try:
-                    st2 = slave.state(v_gid)
-                    if st2.has_section(v_qq):
-                        u2 = st2[v_qq]
-                        for ck in ["flatter_time","study_time","torture_time","protect_time","打架时间","造反时间","讨好时间","学习时间","保护时间"]:
-                            if ck in u2:
-                                u2[ck] = ""
-                        slave.save(v_gid)
-                except Exception:
-                    pass
-            if label.endswith("-加入"):
-                try:
-                    ST.recall_set(f"ent_game_{v_gid}", "")
-                except Exception:
-                    pass
-            try:
-                r = mod.handle(v_gid, v_qq, cmd)
-                if not r:
-                    try:
-                        r2 = mod.handle(gid, qq, cmd)
-                        r = r2
-                    except Exception:
-                        pass
-                if not r:
-                    r = f"【{label}】无回复（需前置状态）"
-                outs.append(f"【{label}】\r\n指令：{cmd}\r\n回复：\r\n{str(r)[:800]}")
-            except Exception as e:
-                outs.append(f"【{label}】异常: {e}")
-        try:
-            uniq = set(v_qqs + ["10001","10002","10003","10004","10005","10006","10007"])
-            for vq in uniq:
-                try:
-                    ST._DB.execute("DELETE FROM wallet WHERE gid=? AND qq=?", (int(v_gid), int(vq)))
-                    ST._DB.execute("DELETE FROM accounts WHERE gid=? AND qq=?", (int(v_gid), int(vq)))
-                    ST._DB.execute("DELETE FROM groups WHERE gid=? AND qq=?", (int(v_gid), int(vq)))
-                except Exception:
-                    pass
-            ST._DB.commit()
-            for vq in uniq:
-                ST._ACC_CACHE.pop((v_gid, vq), None)
-            ST._GROUP_CACHE.pop(v_gid, None)
-        except Exception:
-            pass
+        outs, v_qqs = await asyncio.to_thread(
+            _execute_system, mod, probes, v_gid, A_RICH, B_POOR)
+        await asyncio.to_thread(_cleanup_test_users, v_gid, v_qqs)
+        head, lines, _ok, _total = _render_report(raw.strip(), outs)
+        uin = getattr(slave, "BOT_UIN", "") or str(qq)
         bot = getattr(event, "bot", None)
         if bot and not is_private:
-            try:
-                nodes = []
-                for idx, txt in enumerate(outs):
-                    nodes.append({"type": "node", "data": {"name": f"{raw.strip()}-{idx+1}", "uin": str(qq), "content": [{"type": "text", "data": {"text": txt[:4000]}}]}})
-                await bot.call_action("send_group_forward_msg", group_id=int(gid), messages=nodes)
+            if await _forward_texts(bot, gid, uin, raw.strip(), [head] + lines, is_private):
                 try:
                     event.stop_event()
                 except Exception:
                     pass
-                return f"__HANDLED__已发送{raw.strip()}合并转发"
-            except Exception as e:
-                print(f"forward {raw.strip()} failed: {e}")
-        merged = f"\n\n===== {raw.strip()} =====\n\n".join(outs)
+                return f"__HANDLED__已发送{raw.strip()}合并转发（{head}）"
+        merged = f"\n\n===== {raw.strip()}（{head}） =====\n\n" + "\n\n".join(lines)
         try:
             event.stop_event()
         except Exception:
