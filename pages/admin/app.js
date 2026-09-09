@@ -1637,7 +1637,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.7.35"
+        version: res.version || "0.7.36"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -1788,8 +1788,6 @@ const CMD_NUMS = {
   "学习": [["间隔配置", "学习间隔", "学习间隔(分)", "int"], ["设置", "奇遇触发概率", "奇遇概率%", "int"]],
   "祈福": [["祈福配置", "祈福奖励下限", "奖励下限", "int"], ["祈福配置", "祈福奖励上限", "奖励上限", "int"]],
   "释放": [["间隔配置", "释放间隔", "释放间隔(分)", "int"]],
-  "查询": [["设置", "货币名称", "货币名称", "text"]],
-  "我的信息": [["设置", "货币名称", "货币名称", "text"]],
   "抽签": [["娱乐配置", "抽签造价", "抽签造价", "int"], ["娱乐配置", "抽签大吉奖励", "大吉奖励", "int"], ["娱乐配置", "抽签上签奖励", "上签奖励", "int"], ["娱乐配置", "抽签中签奖励", "中签奖励", "int"]],
   "猜拳": [["娱乐配置", "猜拳奖励金币", "奖励金币", "int"], ["娱乐配置", "猜拳奖励魅力", "奖励魅力", "int"], ["娱乐配置", "猜拳成功概率", "成功概率%", "int"], ["娱乐配置", "猜拳消耗体力", "消耗体力", "int"], ["娱乐配置", "猜拳需要金钱", "需要金钱", "int"]],
   "猜数": [["娱乐配置", "猜数奖励金币", "奖励金币", "int"], ["娱乐配置", "猜数奖励魅力", "奖励魅力", "int"], ["娱乐配置", "猜数消耗体力", "消耗体力", "int"], ["娱乐配置", "猜数需要金钱", "需要金钱", "int"]],
@@ -3153,7 +3151,6 @@ async function loadPool(skipAtlas = false) {
   } catch (e) {}
   try { _applyPoolOrder(); } catch (e) {}
   try { renderPoolBox(); } catch (e) {}
-  try { if (!skipAtlas && ATLAS_CUR === "weapon") renderAtlas(); } catch (e) {}
 }
 function poolCount() {
   try { return ["SSR", "SR", "R"].reduce((n, r) => n + ((POOL_WEAPONS && POOL_WEAPONS[r]) || []).length, 0); } catch (e) { return 0; }
@@ -3205,7 +3202,7 @@ function renderPoolBox(forceOpen=false){
   const openGroups = {};
   try { box.querySelectorAll("details[data-pool-group]").forEach((d) => { openGroups[d.dataset.poolGroup] = d.open; }); } catch (e) {}
   let html=`<details class="panel" style="margin:0"${wasOpen?" open":""}><summary style="cursor:pointer;font-weight:600">🎰 抽奖武器池 — ${poolCount()} 件</summary>`;
-  html+=`<div class="hint" style="margin-top:8px">武器=图片文件本身：改名改文件名，稀有度改所在目录；攻击加成参战、描述进详情，改完点保存武器属性</div>`;
+  html+=`<div class="hint" style="margin-top:8px">武器=图片文件本身：改名改文件名，稀有度改所在目录；攻击加成参战、描述进详情，改完点保存武器属性；↑↓ 排序即时保存</div>`;
   html+=`<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button class="ghost sm" id="btnPoolUploadTop">＋ 添加武器</button><button class="ghost sm" id="btnPoolAttrsSave">💾 保存武器属性</button><button class="ghost sm" id="btnPoolAttrsReset">↩️ 恢复默认</button></div>`;
   ["SSR","SR","R"].forEach((rar)=>{
     const items=(POOL_WEAPONS&&POOL_WEAPONS[rar])||[];
@@ -3229,7 +3226,7 @@ function renderPoolBox(forceOpen=false){
         `<div class="s-row"><small>稀有度</small><select data-pool-rar>${["SSR","SR","R"].map((r)=>`<option value="${r}"${r===rar?" selected":""}>${r}</option>`).join("")}</select></div>`+
         `<div class="s-row"><small>攻击加成</small><input type="number" data-pool-atk value="${esc(pa.atk ?? 0)}" style="width:70px"></div>`+
         `<div class="s-row" style="flex:1"><small>描述</small><input data-pool-desc value="${esc(pa.desc ?? "")}" placeholder="详情页展示"></div>`+
-        `<div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${pv}<button class="ghost sm" data-pool-pick-upload>外置选图</button><button class="ghost sm" data-pool-pick-builtin>内置选图</button><button class="ghost sm" data-pool-rename>改名</button><button class="s-del" data-pool-del>删除</button></div>`+
+        `<div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${pv}<button class="ghost sm" data-pool-pick-upload>外置选图</button><button class="ghost sm" data-pool-pick-builtin>内置选图</button><button class="ghost sm" data-pool-rename>改名</button><button class="ghost sm" data-pool-up title="上移">↑</button><button class="ghost sm" data-pool-down title="下移">↓</button><button class="s-del" data-pool-del>删除</button></div>`+
         `</div></div>`;
     });
     html+=`</details>`;
@@ -3271,6 +3268,31 @@ function renderPoolBox(forceOpen=false){
         if (thumb) showLightbox(thumb, nm);
         else toast("无预览", "bad");
       } catch (err) { toast("预览失败:" + (err.message || err), "bad"); }
+    });
+  }
+  // 池内排序委托（一次）：同稀有度内上移/下移，顺序即时保存
+  if (!box.dataset.poolSortBound) {
+    box.dataset.poolSortBound = "1";
+    box.addEventListener("click", async (e) => {
+      const t = e.target && e.target.closest ? e.target : null;
+      if (!t || !box.contains(t)) return;
+      const up = t.closest("[data-pool-up]");
+      const dn = t.closest("[data-pool-down]");
+      if (!up && !dn) return;
+      const wrap = (up || dn).closest("[data-pool-item]");
+      if (!wrap) return;
+      const parts = String(wrap.dataset.poolItem || "").split("|");
+      const rar = parts[0] || null, nm = parts.slice(1).join("|") || null;
+      const arr = (rar && POOL_WEAPONS && POOL_WEAPONS[rar]) || null;
+      if (!arr || !nm) return;
+      const i = arr.findIndex((it) => it && it.name === nm);
+      const j = i + (up ? -1 : 1);
+      if (i < 0 || j < 0 || j >= arr.length) return;
+      const tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+      _savePoolOrder(rar);
+      try { await _persistPoolOrder(); toast("已排序并保存", "ok"); }
+      catch (err) { toast("保存失败: " + (err.message || err), "bad"); }
+      try { renderPoolBox(true); } catch (err2) {}
     });
   }
   const _poolKey = (el) => {
@@ -3785,7 +3807,7 @@ function openRideAddModal() {
   modal.className = "show";
   setTimeout(() => { try { document.getElementById("rideAddName")?.focus(); } catch (e) {} }, 50);
 }
-let ATLAS_CUR = "weapon";  // 总览分类：weapon | treasure | ride | spirit
+let ATLAS_CUR = "treasure";  // 总览分类：treasure | ride | spirit（武器只在商城池管理）
 async function renderAtlas(curCfg){
   const box = document.getElementById("atlasBox");
   if (!box) return;
@@ -3802,11 +3824,9 @@ async function renderAtlas(curCfg){
         window._TREAS_DIRTY = false;
       }
     } catch(e) { Treas = ["酒神葫芦", "四象护符"]; }
-    const weapons = [];
-    try { ["SSR", "SR", "R"].forEach((r) => ((POOL_WEAPONS && POOL_WEAPONS[r]) || []).forEach((it) => weapons.push({ rar: r, name: it.name }))); } catch (e) {}
     const rides = Object.keys(SHOP_RIDE || {});
     const _spiritMaps = (() => { try { return Object.keys((SPIRIT && SPIRIT.maps) || {}); } catch (e) { return []; } })();
-    const _tabs = [["weapon", "⚔️ 武器", weapons.length], ["treasure", "🎁 宝物", Treas.length], ["ride", "🐴 坐骑", rides.length], ["spirit", "✨ 精灵", _spiritMaps.length]];
+    const _tabs = [["treasure", "🎁 宝物", Treas.length], ["ride", "🐴 坐骑", rides.length], ["spirit", "✨ 精灵", _spiritMaps.length]];
     let html = `<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">` + _tabs.map(([k, label, n]) =>
       `<button class="ghost sm" data-atlas-tab="${k}" ${ATLAS_CUR === k ? 'disabled style="opacity:.45"' : ""}>${label} (${n})</button>`
     ).join("") + `</div><div style="display:flex;flex-direction:column;gap:8px">`;
@@ -3818,14 +3838,7 @@ async function renderAtlas(curCfg){
       return h;
     };
     const _effOf = (n) => { try { const e = (window._TREAS_EFF || {})[n]; if (e && typeof e === "object") return String(e.effect || ""); return String(e || ""); } catch (e) { return ""; } };
-    if (ATLAS_CUR === "weapon") {
-      let h = `<div style="border:1px solid var(--line);border-radius:var(--radius-xs);padding:8px 10px;background:var(--panel2)"><div style="font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">抽奖武器池 (${weapons.length}) <span style="margin-left:auto;display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap"><button class="ghost sm" id="btnAtlasSavePoolAttrs">💾 保存属性</button><button class="ghost sm" id="btnAtlasResetPoolAttrs">↩️ 恢复默认</button><select id="atlasPoolRar" style="padding:3px 6px;border-radius:6px">${["SSR", "SR", "R"].map((r) => `<option value="${r}">${r}</option>`).join("")}</select><button class="ghost sm" id="btnAtlasAddWeapon">＋ 上传</button></span></div><div style="display:flex;flex-wrap:wrap;gap:5px">`;
-      if (!weapons.length) h += `<span style="color:var(--muted)">暂无</span>`;
-      else h += weapons.map(({ rar, name: n }) => `<span class="badge badge-primary" style="font-size:11.5px;display:inline-flex;align-items:center;gap:5px;padding:3px 8px" title="${esc(rar)}">${esc(rar)}·${esc(n)}<span style="cursor:pointer" data-atlas-pool-up="${esc(rar)}|${esc(n)}" title="上移">↑</span><span style="cursor:pointer" data-atlas-pool-down="${esc(rar)}|${esc(n)}" title="下移">↓</span><span style="cursor:pointer;font-weight:bold" data-atlas-del="抽奖武器池|${esc(n)}" title="删除文件">×</span></span>`).join("");
-      h += `</div><div class="hint" style="margin-top:6px">文件即池：× 删除文件即时生效；改名/改稀有度请到🛒商城→抽奖武器池；↑↓ 排序即时保存</div></div>`;
-      html += h;
-    }
-    else if (ATLAS_CUR === "treasure") {
+    if (ATLAS_CUR === "treasure") {
       let h = `<div style="border:1px solid var(--line);border-radius:var(--radius-xs);padding:8px 10px;background:var(--panel2)"><div style="font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">奴隶系统-宝物 (${Treas.length}) <span style="margin-left:auto;display:inline-flex;gap:4px;flex-wrap:wrap"><button class="ghost sm" id="btnAtlasSaveTreasure">💾 保存宝物</button><button class="ghost sm" id="btnAtlasResetTreasure">↩️ 恢复默认</button><button class="ghost sm" id="btnAtlasAddTreasure">＋ 添加</button></span></div><div style="display:flex;flex-wrap:wrap;gap:5px">`;
       if (!Treas.length) h += `<span style="color:var(--muted)">暂无</span>`;
       else h += Treas.map(n => { const e = _effOf(n); return `<span class="badge badge-primary" style="font-size:11.5px;display:inline-flex;align-items:center;gap:5px;padding:3px 8px" title="${esc(e || "无自定义效果")}">🎁 ${esc(n)}${e ? "·" + esc(e.slice(0, 12)) : ""}<span style="cursor:pointer" data-atlas-edit-treasure="${esc(n)}" title="修改效果">✎</span><span style="cursor:pointer;font-weight:bold" data-atlas-del="奴隶系统-宝物|${esc(n)}" title="删除">×</span></span>`; }).join("");
@@ -3864,7 +3877,7 @@ async function renderAtlas(curCfg){
       html += h;
     }
     else html += mkSec("坐骑系统-坐骑", rides, "btnAtlasAddRide", "ride", "坐骑系统-坐骑", `<button class="ghost sm" id="btnAtlasSaveRide">💾 保存坐骑</button><button class="ghost sm" id="btnAtlasResetRide">↩️ 恢复默认</button>`);
-    html += `</div><div class="hint" style="margin-top:6px">武器增删即时生效；宝物/坐骑改动即时保存，只动各自范围；精灵卡改动点保存精灵</div>`;
+    html += `</div><div class="hint" style="margin-top:6px">宝物/坐骑改动即时保存，只动各自范围；精灵卡改动点保存精灵；武器请到🛒商城→抽奖武器池管理</div>`;
     box.innerHTML = html;
     box.querySelectorAll("[data-atlas-tab]").forEach((b) => b.addEventListener("click", () => {
       ATLAS_CUR = b.dataset.atlasTab;
@@ -3902,15 +3915,6 @@ async function renderAtlas(curCfg){
     box.querySelectorAll("[data-atlas-del]").forEach(el => el.addEventListener("click", async () => {
       const [sys, name] = el.dataset.atlasDel.split("|");
       const _lastR = sys.includes("坐骑") && Object.keys(SHOP_RIDE).length <= 1;
-      if (sys.includes("抽奖武器")) {
-        if (!(await uiConfirm(`确认删除抽奖武器「${name}」？文件将直接删除，即时生效。`, "删除武器"))) return;
-        try {
-          const r = await getBridge().apiPost("weapons/pool/delete", { name });
-          if (r && r.error) throw new Error(r.error);
-          toast("已删除", "ok"); await loadPool();
-        } catch (e) { toast("删除失败: " + e.message, "bad"); }
-        return;
-      }
       if (!(await uiConfirm(`确认删除 ${sys} "${name}"？` + (_lastR ? "\n\n注意：这是最后一件，删光后运行时自动使用内置默认。" : ""), "删除图鉴"))) return;
       try {
         if (sys.includes("宝物")) {
@@ -3927,7 +3931,7 @@ async function renderAtlas(curCfg){
         }
       } catch (e) { toast("删除失败: " + e.message, "bad"); }
     }));
-    // 图鉴排序委托（绑在 atlasBox 上一次，多次渲染不重复）：坐骑改内存序即时保存，武器顺序即时保存
+    // 图鉴排序委托（绑在 atlasBox 上一次，多次渲染不重复）：坐骑改内存序即时保存
     if (!box.dataset.atlasSortBound) {
       box.dataset.atlasSortBound = "1";
       box.addEventListener("click", async (e) => {
@@ -3941,28 +3945,6 @@ async function renderAtlas(curCfg){
             try { await persistRideShop(); toast("已排序并保存", "ok"); }
             catch (err) { toast("保存失败: " + (err.message || err), "bad"); }
             renderAtlas();
-          }
-          return;
-        }
-        const upP = t.closest("[data-atlas-pool-up]");
-        const dnP = t.closest("[data-atlas-pool-down]");
-        if (upP || dnP) {
-          const v = upP ? upP.dataset.atlasPoolUp : dnP.dataset.atlasPoolDown;
-          const _parts = String(v || "").split("|");
-          const _rar = _parts[0];
-          const _nm = _parts.slice(1).join("|");
-          const _arr = (POOL_WEAPONS && POOL_WEAPONS[_rar]) || null;
-          if (_arr && _nm) {
-            const _i = _arr.findIndex((it) => it && it.name === _nm);
-            const _j = _i + (upP ? -1 : 1);
-            if (_i >= 0 && _j >= 0 && _j < _arr.length) {
-              const _tmp = _arr[_i]; _arr[_i] = _arr[_j]; _arr[_j] = _tmp;
-              _savePoolOrder(_rar);
-              try { await _persistPoolOrder(); toast("已排序并保存", "ok"); }
-              catch (err) { toast("保存失败: " + (err.message || err), "bad"); }
-              renderAtlas();
-              try { renderPoolBox(true); } catch (err2) {}
-            }
           }
           return;
         }
@@ -4006,12 +3988,6 @@ async function renderAtlas(curCfg){
       refreshSpiritViews();
       toast("已添加地图，点保存精灵持久化", "ok");
     });
-    document.getElementById("btnAtlasAddWeapon")?.addEventListener("click", () => {
-      const sel = document.getElementById("atlasPoolRar");
-      poolUploadTo((sel && sel.value) || "SSR");
-    });
-    document.getElementById("btnAtlasSavePoolAttrs")?.addEventListener("click", () => savePoolAttrs());
-    document.getElementById("btnAtlasResetPoolAttrs")?.addEventListener("click", () => resetPoolAttrs());
     document.getElementById("btnAtlasSaveTreasure")?.addEventListener("click", async () => {
       try { await persistTreasure(); toast("宝物已保存", "ok"); }
       catch (e) { toast("保存失败: " + e.message, "bad"); }
