@@ -1230,6 +1230,14 @@ def _coll_path(sec):
         return ""
 
 
+def _sidecar_exists(sec):
+    try:
+        p = _coll_path(sec)
+        return bool(p and os.path.isfile(p))
+    except Exception:
+        return False
+
+
 def _coll_load(sec):
     """读 sidecar（内存缓存；缺文件返回 {}，不回退内存，防旧值复活）"""
     try:
@@ -1287,7 +1295,8 @@ def _coll_coerce(v):
 
 
 def coll_migrate():
-    """启动迁移（幂等）：AstrBot 参数 ∪ 持久文件 → sidecar（文件优先），随后逐出内存。
+    """启动迁移（once 语义，幂等）：sidecar 缺失时才从 AstrBot 参数 ∪ 持久文件收编
+    （文件优先），随后逐出内存；sidecar 已存在则只逐出内存，绝不回写覆盖用户定制。
     在 wd_cfg_restore 头部调用，此时参数与文件回填均已就位。旧快照恢复时同样调用。"""
     try:
         # 读持久文件侧（扁平 已弃用节__键 + 嵌套节 两形态）
@@ -1311,21 +1320,25 @@ def coll_migrate():
             pass
         for sec in _COLL_FILES:
             try:
-                mem = _CONFIG.get(sec) if isinstance(_CONFIG, dict) and isinstance(_CONFIG.get(sec), dict) else {}
-                merged = dict(mem or {})
-                for k, v in (fsec_all.get(sec) or {}).items():
-                    merged[str(k)] = v
-                if merged:
-                    cur = _coll_load(sec)
-                    cur.update(merged)
-                    if _COLL_LOCK is not None:
-                        try:
-                            with _COLL_LOCK:
+                if _sidecar_exists(sec):
+                    # 已有 sidecar：只逐出内存，不收编（用户定制至上）
+                    pass
+                else:
+                    mem = _CONFIG.get(sec) if isinstance(_CONFIG, dict) and isinstance(_CONFIG.get(sec), dict) else {}
+                    merged = dict(mem or {})
+                    for k, v in (fsec_all.get(sec) or {}).items():
+                        merged[str(k)] = v
+                    if merged:
+                        cur = _coll_load(sec)
+                        cur.update(merged)
+                        if _COLL_LOCK is not None:
+                            try:
+                                with _COLL_LOCK:
+                                    _coll_write(sec)
+                            except Exception:
                                 _coll_write(sec)
-                        except Exception:
+                        else:
                             _coll_write(sec)
-                    else:
-                        _coll_write(sec)
             except Exception:
                 pass
             try:
