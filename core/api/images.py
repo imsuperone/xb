@@ -126,13 +126,13 @@ async def handle_images_upload(request, plugin_base=""):
     dst_dir = _safe_path(target_dir, base)
     if not dst_dir:
         return _err("bad dir", 400)
-    os.makedirs(dst_dir, exist_ok=True)
     if b64_data:
         filename = os.path.basename(b64_name or "upload.bin")
         data = bytes(b64_data)
     else:
         filename = str(getattr(f, "filename", None) or getattr(f, "name", None) or "upload.bin").strip()
         filename = os.path.basename(filename)
+        # 文件内容在事件循环上读出（ plc 适配器 read 可能是 awaitable），落盘进线程池
         data = b""
         try:
             val = f.read() if hasattr(f, "read") else None
@@ -160,13 +160,18 @@ async def handle_images_upload(request, plugin_base=""):
                 data = bytes(data)
             except Exception:
                 data = b""
-    dst = os.path.join(dst_dir, filename)
-    try:
-        with open(dst, "wb") as w:
-            w.write(data)
-        return json_response({"ok": True, "path": os.path.relpath(dst, base).replace(os.sep, "/"), "size": len(data)})
-    except Exception as e:
-        return _err(f"upload failed: {e}", 500)
+
+    def _work():
+        try:
+            os.makedirs(dst_dir, exist_ok=True)
+            dst = os.path.join(dst_dir, filename)
+            with open(dst, "wb") as w:
+                w.write(data)
+            return json_response({"ok": True, "path": os.path.relpath(dst, base).replace(os.sep, "/"), "size": len(data)})
+        except Exception as e:
+            return _err(f"upload failed: {e}", 500)
+
+    return await asyncio.to_thread(_work)
 
 
 async def handle_images_delete(request, plugin_base=""):
@@ -181,15 +186,19 @@ async def handle_images_delete(request, plugin_base=""):
     fp = _safe_path(rel, base)
     if not fp or not os.path.exists(fp):
         return _err("file not found", 404)
-    try:
-        import shutil
-        if os.path.isfile(fp):
-            os.remove(fp)
-        elif os.path.isdir(fp):
-            shutil.rmtree(fp)
-        return json_response({"ok": True, "path": rel})
-    except Exception as e:
-        return _err(f"delete failed: {e}", 500)
+
+    def _work():
+        try:
+            import shutil
+            if os.path.isfile(fp):
+                os.remove(fp)
+            elif os.path.isdir(fp):
+                shutil.rmtree(fp)
+            return json_response({"ok": True, "path": rel})
+        except Exception as e:
+            return _err(f"delete failed: {e}", 500)
+
+    return await asyncio.to_thread(_work)
 
 
 async def handle_images_rename(request, plugin_base=""):
@@ -210,11 +219,15 @@ async def handle_images_rename(request, plugin_base=""):
         np = _safe_path(os.path.relpath(np, base), base)
     if not np:
         return _err("bad dst", 400)
-    try:
-        os.rename(fp, np)
-        return json_response({"ok": True, "path": os.path.relpath(np, base).replace(os.sep, "/")})
-    except Exception as e:
-        return _err(f"rename failed: {e}", 500)
+
+    def _work():
+        try:
+            os.rename(fp, np)
+            return json_response({"ok": True, "path": os.path.relpath(np, base).replace(os.sep, "/")})
+        except Exception as e:
+            return _err(f"rename failed: {e}", 500)
+
+    return await asyncio.to_thread(_work)
 
 
 async def handle_images_thumb(request, plugin_base=""):
@@ -230,20 +243,24 @@ async def handle_images_thumb(request, plugin_base=""):
     fp = _safe_path(rel, base)
     if not fp or not os.path.isfile(fp):
         return _err("file not found", 404)
-    try:
-        if os.path.getsize(fp) > 200 * 1024:
-            return _err("too large", 400)
-        with open(fp, "rb") as f:
-            raw = f.read()
-        if not raw:
-            return _err("empty file", 400)
-        ext = os.path.splitext(fp)[1].lower().lstrip(".") or "png"
-        if ext == "jpg":
-            ext = "jpeg"
-        return json_response({"ok": True, "path": rel,
-                              "thumb": "data:image/%s;base64,%s" % (ext, base64.b64encode(raw).decode("ascii"))})
-    except Exception as e:
-        return _err(f"thumb failed: {e}", 500)
+
+    def _work():
+        try:
+            if os.path.getsize(fp) > 200 * 1024:
+                return _err("too large", 400)
+            with open(fp, "rb") as f:
+                raw = f.read()
+            if not raw:
+                return _err("empty file", 400)
+            ext = os.path.splitext(fp)[1].lower().lstrip(".") or "png"
+            if ext == "jpg":
+                ext = "jpeg"
+            return json_response({"ok": True, "path": rel,
+                                  "thumb": "data:image/%s;base64,%s" % (ext, base64.b64encode(raw).decode("ascii"))})
+        except Exception as e:
+            return _err(f"thumb failed: {e}", 500)
+
+    return await asyncio.to_thread(_work)
 
 
 async def handle_images_mkdir(request, plugin_base=""):
@@ -258,11 +275,15 @@ async def handle_images_mkdir(request, plugin_base=""):
     fp = _safe_path(rel, base)
     if not fp:
         return _err("bad path", 400)
-    try:
-        os.makedirs(fp, exist_ok=True)
-        return json_response({"ok": True, "path": rel})
-    except Exception as e:
-        return _err(f"mkdir failed: {e}", 500)
+
+    def _work():
+        try:
+            os.makedirs(fp, exist_ok=True)
+            return json_response({"ok": True, "path": rel})
+        except Exception as e:
+            return _err(f"mkdir failed: {e}", 500)
+
+    return await asyncio.to_thread(_work)
 
 
 async def handle_images_copy(request, plugin_base=""):
@@ -276,16 +297,20 @@ async def handle_images_copy(request, plugin_base=""):
     dp = _safe_path(dst, base)
     if not sp or not dp or not os.path.exists(sp):
         return _err("src not found", 404)
-    try:
-        import shutil
-        if os.path.isdir(sp):
-            shutil.copytree(sp, dp)
-        else:
-            os.makedirs(os.path.dirname(dp), exist_ok=True)
-            shutil.copy2(sp, dp)
-        return json_response({"ok": True, "src": src, "dst": dst})
-    except Exception as e:
-        return _err(f"copy failed: {e}", 500)
+
+    def _work():
+        try:
+            import shutil
+            if os.path.isdir(sp):
+                shutil.copytree(sp, dp)
+            else:
+                os.makedirs(os.path.dirname(dp), exist_ok=True)
+                shutil.copy2(sp, dp)
+            return json_response({"ok": True, "src": src, "dst": dst})
+        except Exception as e:
+            return _err(f"copy failed: {e}", 500)
+
+    return await asyncio.to_thread(_work)
 
 
 async def handle_images_export(request, plugin_base=""):

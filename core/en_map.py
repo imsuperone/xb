@@ -115,10 +115,7 @@ PROP_CN_TO_EN = {
     "进化液": "jinhuaye",
 }
 
-# 反向（英文 → 中文）用于显示
-EN_TO_CN = {v: k for k, v in PROP_CN_TO_EN.items()}
-# 基础反向（用于调试，非必须）
-EN_TO_BASE_CN = {v: k for k, v in BASE_CN_TO_EN.items()}
+# 反向（英文 → 中文）已退役：显示层直接存中文，无任何调用，删除防误用
 
 def _strip_suffix(key: str):
     """处理 升星/升阶 后缀，返回 (base, suffix)"""
@@ -171,19 +168,6 @@ def _cn_to_en_cached(key: str) -> str:
 def cn_to_en(key: str) -> str:
     """中文键 → 英文键；带 LRU 缓存，千群高频热点"""
     return _cn_to_en_cached(key)
-
-def en_to_cn(en_key: str) -> str:
-    """英文键 → 中文显示（道具）；基础键不转"""
-    if en_key in EN_TO_CN:
-        return EN_TO_CN[en_key]
-    # 带后缀
-    for suf in ("_star", "_stage"):
-        if en_key.endswith(suf):
-            base = en_key[:-len(suf)]
-            if base in EN_TO_CN:
-                cn_base = EN_TO_CN[base]
-                return cn_base + ("升星" if suf == "_star" else "升阶")
-    return en_key
 
 def translate_dict(cn_dict: dict) -> dict:
     """批量翻译 dict 的 keys（中文 → 英文），值保持中文文案不变"""

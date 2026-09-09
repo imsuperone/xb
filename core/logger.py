@@ -45,13 +45,6 @@ def get_log_dir():
     return _LOG_DIR
 
 
-def set_log_dir(path):
-    global _LOG_DIR
-    if path:
-        os.makedirs(path, exist_ok=True)
-        _LOG_DIR = path
-
-
 def get_log_file_path():
     return os.path.join(get_log_dir(), "xb.log")
 
@@ -91,10 +84,6 @@ def log(msg, level="INFO"):
 
 def info(msg):
     log(msg, "INFO")
-
-
-def warning(msg):
-    log(msg, "WARN")
 
 
 def error(msg):

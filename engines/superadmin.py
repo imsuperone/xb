@@ -234,20 +234,6 @@ def cmd_recharge(gid, qq, arg):
     return f"已为【{t_name}】充值 {amt}{ST.coin_name()}（当前 {nv}）"
 
 
-def cmd_force_take(gid, qq, arg):
-    t, amt = _parse_target_amount(arg)
-    if not t or amt is None:
-        return "格式：强制取款 @QQ 金额"
-    a = _acct(gid, t)
-    cur = a.int("deposit")
-    take = min(cur, amt)
-    a.set("deposit", str(cur - take))
-    ST.acct_save(gid, t)
-    ST.coins_add(gid, qq, take)
-    t_name = _target_name(gid, t)
-    return f"已强制取款【{t_name}】{take}{ST.coin_name()}（存入自己账户）"
-
-
 def _clear_money(gid, t):
     cur = _sum_money(gid, t)
     ST.coins_add(gid, t, -cur)
@@ -461,10 +447,10 @@ def _version():
                 except Exception:
                     pass
         if not ver:
-            ver = "0.7.39"
+            ver = "0.7.40"
         return f"小白版本：{ver}"
     except Exception:
-        return "小白版本：0.7.39"
+        return "小白版本：0.7.40"
 
 # ---- 统一入口（测试指令仅超管，WebUI可配但不显示于MENU，已删 个人信息） ----
 # 注意：凡 handle() 响应的别名必须同步进本表；非超管命中一律静默 None（BY DESIGN，见 AIINFO）

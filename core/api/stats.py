@@ -24,6 +24,7 @@ async def handle_stats(request=None):
             return default
 
     def _work():
+        # 锁内只做 cursor 快照取数，json 解析放锁外，防大库 massive 解析卡住全局写锁
         _lock = getattr(ST, "_LOCK", None)
         if _lock is not None:
             _lock.acquire()
@@ -36,34 +37,40 @@ async def handle_stats(request=None):
             n_group = _one(cur, "SELECT COUNT(DISTINCT gid) FROM wallet")
             total = _one(cur, "SELECT COALESCE(SUM(money),0) FROM wallet")
             total_dep = _one(cur, "SELECT COALESCE(SUM(CAST(COALESCE(json_extract(data,'$.deposit'), json_extract(data,'$.cunkuan'), json_extract(data,'$.\"存款总数\"'), '0') AS INTEGER)),0) FROM accounts")
+            acct_rows = None
             if not total_dep and (n_acct or 0) < 100000:
                 # 兜底全表仅小库执行，大库跳过防秒级阻塞
                 try:
-                    s = 0
-                    for (d,) in cur.execute("SELECT data FROM accounts").fetchall():
-                        try:
-                            j = json.loads(d or "{}")
-                            v = j.get("deposit") or j.get("cunkuan") or j.get("存款总数") or "0"
-                            s += int(float(v or 0))
-                        except Exception:
-                            pass
-                    if s:
-                        total_dep = s
+                    acct_rows = cur.execute("SELECT data FROM accounts").fetchall()
                 except Exception:
-                    pass
+                    acct_rows = None
             n_sign = _one(cur, "SELECT COALESCE(SUM(CAST(COALESCE(json_extract(data,'$.sign_count'), json_extract(data,'$.签到次数'), '0') AS INTEGER)),0) FROM accounts")
-            return {
-                "players": {"wallet": n_wallet, "accounts": n_acct, "groups": n_group},
-                "total_money": total,
-                "total_deposit": int(total_dep or 0),
-                "total_sign": n_sign,
-            }
         finally:
             if _lock is not None:
                 try:
                     _lock.release()
                 except Exception:
                     pass
+        if acct_rows:
+            try:
+                s = 0
+                for (d,) in acct_rows:
+                    try:
+                        j = json.loads(d or "{}")
+                        v = j.get("deposit") or j.get("cunkuan") or j.get("存款总数") or "0"
+                        s += int(float(v or 0))
+                    except Exception:
+                        pass
+                if s:
+                    total_dep = s
+            except Exception:
+                pass
+        return {
+            "players": {"wallet": n_wallet, "accounts": n_acct, "groups": n_group},
+            "total_money": total,
+            "total_deposit": int(total_dep or 0),
+            "total_sign": n_sign,
+        }
     data = await asyncio.to_thread(_work)
     return json_response(data)
 
@@ -79,6 +86,7 @@ async def handle_rank(request=None):
         rtype = "deposit"
 
     def _work():
+        # 锁内只做快照取数，昵称解析与组装放锁外
         _lock = getattr(ST, "_LOCK", None)
         if _lock is not None:
             _lock.acquire()
@@ -101,44 +109,47 @@ async def handle_rank(request=None):
                     rows = ST._DB.execute(sql[0]).fetchall() if ST._DB else []
             except Exception:
                 rows = []
-            nm = getattr(slave, "NOTE_NAMES", {}) or {}
-            # 批量预取昵称，避免 N+1
             qq_list = [str(r[0]) for r in rows]
-            g_names, a_names = {}, {}
+            g_rows, a_rows = [], []
             if qq_list:
                 try:
                     placeholders = ",".join("?" for _ in qq_list)
-                    for qq_, d in ST._DB.execute(f"SELECT qq, data FROM groups WHERE qq IN ({placeholders})", tuple(int(q) for q in qq_list)).fetchall():
-                        try:
-                            j = json.loads(d or "{}")
-                            if j.get("name"):
-                                g_names[str(qq_)] = j["name"]
-                        except Exception:
-                            pass
+                    g_rows = ST._DB.execute(f"SELECT qq, data FROM groups WHERE qq IN ({placeholders})", tuple(int(q) for q in qq_list)).fetchall()
                 except Exception:
-                    pass
+                    g_rows = []
                 try:
                     placeholders = ",".join("?" for _ in qq_list)
-                    for qq_, d in ST._DB.execute(f"SELECT qq, data FROM accounts WHERE qq IN ({placeholders})", tuple(int(q) for q in qq_list)).fetchall():
-                        try:
-                            j = json.loads(d or "{}")
-                            if j.get("name"):
-                                a_names[str(qq_)] = j["name"]
-                        except Exception:
-                            pass
+                    a_rows = ST._DB.execute(f"SELECT qq, data FROM accounts WHERE qq IN ({placeholders})", tuple(int(q) for q in qq_list)).fetchall()
                 except Exception:
-                    pass
-            out = []
-            for r in rows:
-                qq = str(r[0])
-                name = nm.get(qq, "") or g_names.get(qq, "") or a_names.get(qq, "")
-                out.append({"qq": qq, "name": name, "value": r[1]})
-            return out
+                    a_rows = []
         finally:
             if _lock is not None:
                 try:
                     _lock.release()
                 except Exception:
                     pass
+        nm = getattr(slave, "NOTE_NAMES", {}) or {}
+        # 批量预取昵称，避免 N+1
+        g_names, a_names = {}, {}
+        for qq_, d in g_rows:
+            try:
+                j = json.loads(d or "{}")
+                if j.get("name"):
+                    g_names[str(qq_)] = j["name"]
+            except Exception:
+                pass
+        for qq_, d in a_rows:
+            try:
+                j = json.loads(d or "{}")
+                if j.get("name"):
+                    a_names[str(qq_)] = j["name"]
+            except Exception:
+                pass
+        out = []
+        for r in rows:
+            qq = str(r[0])
+            name = nm.get(qq, "") or g_names.get(qq, "") or a_names.get(qq, "")
+            out.append({"qq": qq, "name": name, "value": r[1]})
+        return out
     out = await asyncio.to_thread(_work)
     return json_response(out)

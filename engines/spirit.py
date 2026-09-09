@@ -478,11 +478,6 @@ def cmd_adventure(gid, qq, place):
             "如需收服请发【使用精灵球 精灵球名称】")
 
 
-def _cfg_get(gid, qq):
-    sp = _spirits(gid, qq)
-    return sp, _wsp(sp, sp.get("active")) if sp.get("active") else None
-
-
 def cmd_catch(gid, qq, ball):
     sp = _spirits(gid, qq)
     wild = sp.get("wild")

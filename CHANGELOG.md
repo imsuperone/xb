@@ -1,5 +1,12 @@
 # 更新日志
 
+## v0.7.40
+- 🛡️ **保留数防丢**：`wd_cfg_restore` 仅缺键/空值回填（合法 30 不再被旧镜像盖掉）；`save_config` 拒空写+原子落盘。
+- ⚡ **管理接口异步化**：武器池 8 接口/图片 6 接口/群组 2 接口/`config/save`/旧库导入重活进线程池；`stats` 锁内只取数。
+- 🗑️ **精简**：删 `cmd_force_take`/`save_all`/`_cfg_get`/`_sync_weapon_shop`/同步读文件/`en_to_cn`/`set_log_dir`/`warning`/`DEFAULT_CFG`、前端死绑定（moreBtn/分类箭头/双通道导出）与废弃 CSS。
+- ⚡ **WebUI**：导出成功不再弹手动窗、备份搜索本地过滤、WebDAV 成功回执去重、CSS 变量正名、表格行懒渲染扩展。
+- 🐞 **修**：应急菜单版本、快照毫秒防撞、保存校验覆盖保留数/间隔、群刷新死按钮、精灵 `bag` 全量下发改计数。
+
 ## v0.7.39
 - ⚡ **导出双发收敛**：`exportAllUsers`/`exportImages` 手写 `apiGet→apiPost` 改单次 `callApi(GET)`。
 - 🗑️ **死按钮删除**：`btnBackupExport` 无 DOM（仅 `btnBackupExportSel` 存在），整段删。

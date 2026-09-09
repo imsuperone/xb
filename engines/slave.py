@@ -124,13 +124,6 @@ def save(gid):
     store.save_group(gid)
 
 
-def save_all():
-    try:
-        store.flush_all()
-    except Exception:
-        pass
-
-
 def U(st, qq):
     qq = str(qq)
     init_price = cfgi("费用配置", "初始身价", 1000)
@@ -1647,17 +1640,8 @@ def cmd_treasure_up(gid, qq, tname, st):
 
 
 def _weapon_shop():
-    v = store.cfg("商城图鉴", "weapon_shop", "")
-    if isinstance(v, dict):
-        return v
-    if v:
-        try:
-            d = _json.loads(v)
-            if isinstance(d, dict):
-                return d
-        except Exception:
-            pass
-    return {}
+    # 旧商城只读兼容（v0.7.16起改抽奖池直管）；与_raw同义，合一防两份解析
+    return _weapon_shop_raw()
 
 def _weapon_shop_raw():
     """返回原始 weapon_shop 配置对象(可能含 {price,atk,desc,img})，供取图/数值用；空=未自定义"""
@@ -1710,10 +1694,6 @@ def _weapon_img_path(name):
         pass
     return []
 
-
-def _sync_weapon_shop(name):
-    # 已退役：weapon_shop 仅旧数据只读兼容，禁止再写（v0.7.16 起改抽奖池直管）
-    return
 
 def cmd_weapon_menu(gid, qq, st):
     # 复用 gacha 缓存，避免每消息 listdir

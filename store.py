@@ -1208,8 +1208,17 @@ def save_config():
         except Exception:
             p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "config.json")
     try:
-        with open(p, "w", encoding="utf-8") as f:
-            json.dump(_flatten_cfg(_CONFIG), f, ensure_ascii=False, indent=2)
+        # 防截断：内存配置为空时拒绝落盘，避免把有效持久文件清成 {}
+        if not isinstance(_CONFIG, dict) or not _CONFIG:
+            return
+        flat = _flatten_cfg(_CONFIG)
+        if not flat:
+            return
+        # 原子落盘：先写临时文件再替换，防中途崩溃留半截文件
+        tmp = p + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(flat, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, p)
     except Exception:
         pass
     # 同步落盘全量配置到 SQLite kv 表，确保 .db 文件自包含全部配置与用户资产
@@ -1745,7 +1754,7 @@ def wd_cfg_backup(payload_sec=None):
 
 def wd_cfg_restore():
     """WebDAV 与备份配置 DB 镜像恢复：从数据库 kv 表恢复备份配置，杜绝任何外部重置导致配置丢失。
-    当内存中缺键、为空或处于 schema 默认值（如'假'/'3'/'30'）且数据库有非空有效值时回填。
+    仅当内存缺键或为空时回填；内存已有任何非空值（一律视为有效定制，即使撞 schema 默认如'30'）绝不覆盖。
     密钥（地址/用户名/应用密码）走独立文件，不进镜像；此处顺带做一次性迁移。"""
     try:
         sec = _CONFIG.setdefault("备份配置", {}) if isinstance(_CONFIG, dict) else {}
@@ -1756,9 +1765,9 @@ def wd_cfg_restore():
                 continue
             v = recall_get("wdcfg__" + k, None)
             if v is not None and str(v) != "":
-                cur = str(sec.get(k, "") or "")
-                # 内存中若为未定制的 schema 默认值或空值，回填数据库保存的用户定制值
-                if not cur or cur in ("", "假", "3", "30", "/xbbot_backup/"):
+                cur = sec.get(k, "")
+                # 缺键或空值才回填；有值即信任内存（文件投票另行仲裁文件侧）
+                if k not in sec or cur is None or str(cur) == "":
                     sec[k] = str(v)
     except Exception:
         pass

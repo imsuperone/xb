@@ -23,35 +23,6 @@ except ImportError:
         def _cn2en(k): return k
 
 
-def _read_file_bytes(f):
-    data = b""
-    try:
-        val = f.read() if hasattr(f, "read") else None
-        if val is not None:
-            import inspect
-            if inspect.isawaitable(val):
-                # caller will handle await, here sync fallback
-                return None
-            data = val
-        if not data and hasattr(f, "file"):
-            try:
-                ff = getattr(f, "file")
-                if hasattr(ff, "read"):
-                    data = ff.read()
-            except Exception:
-                pass
-    except Exception:
-        data = b""
-    if isinstance(data, str):
-        data = data.encode("utf-8", errors="ignore")
-    if not isinstance(data, (bytes, bytearray)):
-        try:
-            data = bytes(data)
-        except Exception:
-            data = b""
-    return bytes(data)
-
-
 async def _read_file_bytes_async(f):
     data = b""
     try:
@@ -331,7 +302,80 @@ def _handle_ini_content(content, rel_path=""):
     return imported
 
 
+async def _read_raw_body(req):
+    """loop 侧读请求原始体（含 awaitable 兼容），返回 bytes"""
+    raw_data = b""
+    for attr in ("read", "body", "content", "data"):
+        try:
+            obj = getattr(req, attr, None)
+            if obj is None:
+                continue
+            if callable(obj):
+                import inspect
+                val = obj()
+                if inspect.isawaitable(val):
+                    val = await val
+                raw_data = val
+            else:
+                if hasattr(obj, "read"):
+                    try:
+                        val = obj.read()
+                        import inspect as _ins2
+                        if _ins2.isawaitable(val):
+                            val = await val
+                        raw_data = val
+                    except Exception:
+                        continue
+                else:
+                    raw_data = obj
+            if isinstance(raw_data, (bytes, bytearray)) and len(raw_data) > 0:
+                break
+            if isinstance(raw_data, str) and raw_data:
+                raw_data = raw_data.encode("utf-8", errors="ignore")
+                break
+        except Exception:
+            continue
+    return raw_data
+
+
+def _import_users_list(users, typ="json"):
+    """用户列表入库（线程池）：钱包差值+账户覆盖+群组覆盖"""
+    ok = 0
+    for item in users or []:
+        if not isinstance(item, dict):
+            continue
+        gid = str(item.get("gid") or "").strip()
+        qq = str(item.get("qq") or "").strip()
+        if not gid or not qq:
+            continue
+        if "wallet" in item:
+            try:
+                tgt = int(item["wallet"])
+                cur = ST.coins_get(gid, qq)
+                ST.coins_add(gid, qq, tgt - cur)
+            except Exception:
+                pass
+        if "account" in item and isinstance(item["account"], dict):
+            a = ST.acct(gid, qq)
+            a.kv.clear()
+            for k, v in item["account"].items():
+                a.set(str(k), str(v))
+            ST.acct_save(gid, qq)
+        if "group" in item and isinstance(item["group"], dict):
+            g = ST.group(gid)
+            g[qq] = {str(k): str(v) for k, v in item["group"].items()}
+            ST.save_group(gid)
+        ok += 1
+    ST.flush_all()
+    return json_response({"imported": ok, "type": typ})
+
+
 async def handle_import_legacy(req, plugin_base=""):
+    """旧库导入：请求解析在事件循环上做，解包/入库等重活进线程池，不堵消息循环"""
+    import asyncio as _aio
+    # ---- Phase 1（loop）：只碰 request，产出纯数据 ----
+    users_payload = None
+    filename, data = "", b""
     try:
         form = {}
         try:
@@ -359,70 +403,12 @@ async def handle_import_legacy(req, plugin_base=""):
                 if isinstance(p, dict) and p:
                     users = p.get("users")
                     if isinstance(users, list):
-                        ok = 0
-                        for item in users:
-                            if not isinstance(item, dict):
-                                continue
-                            gid = str(item.get("gid") or "").strip()
-                            qq = str(item.get("qq") or "").strip()
-                            if not gid or not qq:
-                                continue
-                            if "wallet" in item:
-                                try:
-                                    tgt = int(item["wallet"])
-                                    cur = ST.coins_get(gid, qq)
-                                    ST.coins_add(gid, qq, tgt - cur)
-                                except Exception:
-                                    pass
-                            if "account" in item and isinstance(item["account"], dict):
-                                a = ST.acct(gid, qq)
-                                a.kv.clear()
-                                for k, v in item["account"].items():
-                                    a.set(str(k), str(v))
-                                ST.acct_save(gid, qq)
-                            if "group" in item and isinstance(item["group"], dict):
-                                g = ST.group(gid)
-                                g._users[qq] = {str(k): str(v) for k, v in item["group"].items()}
-                                g._dirty = True
-                                ST.save_group(gid)
-                            ok += 1
-                        ST.flush_all()
-                        return json_response({"imported": ok, "type": "json"})
+                        users_payload = users
             except Exception:
                 pass
-            # 兜底：读原始体
-            try:
-                raw_data = b""
-                for attr in ("read", "body", "content", "data"):
-                    try:
-                        obj = getattr(req, attr, None)
-                        if obj is None:
-                            continue
-                        if callable(obj):
-                            import inspect
-                            val = obj()
-                            if inspect.isawaitable(val):
-                                val = await val
-                            raw_data = val
-                        else:
-                            if hasattr(obj, "read"):
-                                try:
-                                    val = obj.read()
-                                    import inspect as _ins2
-                                    if _ins2.isawaitable(val):
-                                        val = await val
-                                    raw_data = val
-                                except Exception:
-                                    continue
-                            else:
-                                raw_data = obj
-                        if isinstance(raw_data, (bytes, bytearray)) and len(raw_data) > 0:
-                            break
-                        if isinstance(raw_data, str) and raw_data:
-                            raw_data = raw_data.encode("utf-8", errors="ignore")
-                            break
-                    except Exception:
-                        continue
+            if users_payload is None:
+                # 兜底：读原始体
+                raw_data = await _read_raw_body(req)
                 if isinstance(raw_data, (bytes, bytearray)) and len(raw_data) > 10:
                     # multipart 提取
                     try:
@@ -442,7 +428,7 @@ async def handle_import_legacy(req, plugin_base=""):
                                                 if _content.endswith(b"--"):
                                                     _content = _content[:-2].rstrip(b"\r\n")
                                                 raw_data = _content
-                                                mfn = re.search(br'filename=\"([^\"]+)\"', _part)
+                                                mfn = re.search(br'filename="([^"]+)"', _part)
                                                 if mfn:
                                                     try:
                                                         fname = mfn.group(1).decode("utf-8", errors="ignore")
@@ -480,15 +466,35 @@ async def handle_import_legacy(req, plugin_base=""):
                     f = _RawFile(fname, raw_data if isinstance(raw_data, (bytes, bytearray)) else bytes(raw_data))
                 else:
                     return _err("no file (field 'file') and not JSON", 400)
-            except Exception:
+            if not f and users_payload is None:
                 return _err("no file (field 'file') and not JSON", 400)
-            if not f:
-                return _err("no file (field 'file') and not JSON", 400)
+        if f is not None:
+            filename = str(getattr(f, "filename", None) or getattr(f, "name", None) or getattr(f, "file", None) or "").strip()
+            if not filename:
+                filename = "upload.bin"
+            data = await _read_file_bytes_async(f)
+            data = bytes(data or b"")
+    except Exception as e:
+        return _err(f"import failed: {e}", 500)
 
-        filename = str(getattr(f, "filename", None) or getattr(f, "name", None) or getattr(f, "file", None) or "").strip()
-        if not filename:
-            filename = "upload.bin"
-        data = await _read_file_bytes_async(f)
+    def _work():
+        try:
+            if users_payload is not None:
+                return _import_users_list(users_payload, "json")
+            return _import_file_data(filename, data)
+        except Exception as e:
+            import traceback
+            try:
+                return json_response({"error": f"import failed: {e}", "trace": traceback.format_exc()[:500], "imported": 0})
+            except Exception:
+                return _err(f"import failed: {e}", 500)
+
+    return await _aio.to_thread(_work)
+
+
+def _import_file_data(filename, data):
+    """重活（线程池）：落临时文件 → 按 zip/db/ini/json 分发入库"""
+    try:
         fd_tmp, tmp = tempfile.mkstemp(prefix="xbbot_legacy_", suffix="_" + os.path.basename(filename).replace("/", "_").replace("\\", "_"))
         os.close(fd_tmp)
         try:

@@ -275,52 +275,6 @@
       box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
     }
 
-    /* 更多下拉 */
-    .more-wrap { position: relative; flex-shrink: 0; display: none; }
-    @media (max-width: 960px) { .more-wrap { display: block; } }
-    .more-btn {
-      background: var(--panel2);
-      border: 1px solid var(--line);
-      border-radius: var(--radius-xs);
-      padding: 5px 10px;
-      font-size: 12px;
-      color: var(--muted);
-      cursor: pointer;
-      white-space: nowrap;
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-    }
-    .more-btn:hover { border-color: var(--acc); color: var(--text); }
-    .more-menu {
-      position: absolute;
-      right: 0;
-      top: 115%;
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: var(--radius-sm);
-      box-shadow: var(--shadow-lg);
-      padding: 6px;
-      display: none;
-      flex-direction: column;
-      gap: 3px;
-      min-width: 150px;
-      z-index: 50;
-    }
-    .more-menu.show { display: flex; }
-    .more-menu button {
-      text-align: left;
-      background: transparent;
-      border: 0;
-      padding: 7px 12px;
-      font-size: 12.5px;
-      color: var(--text);
-      border-radius: var(--radius-xs);
-      cursor: pointer;
-    }
-    .more-menu button:hover { background: var(--panel2); color: var(--acc); }
-    .more-menu button.on { background: var(--accSoft); color: var(--acc); font-weight: 600; }
-
     .tab { display: none; }
     .tab.on { display: block; }
 
@@ -901,7 +855,7 @@
     }
     .apple-card-field input:focus, .apple-card-field textarea:focus {
       border-color: var(--acc);
-      box-shadow: 0 0 0 3px var(--acc-soft);
+      box-shadow: 0 0 0 3px var(--accSoft);
     }
     .cmd-reply-preview {
       margin-top: 4px;
@@ -1320,7 +1274,8 @@
 
     /* 长列表滚动优化：视口外跳过渲染（滚动更顺滑；自动回退高度防跳动） */
     .log-line, [data-pool-item], .sp-card, .s-mapcard,
-    #userBody tr, #slaveBody tr, #spiritUsersBody tr {
+    #userBody tr, #slaveBody tr, #spiritUsersBody tr,
+    .bk-item, .icard, .fcard {
       content-visibility: auto;
       contain-intrinsic-size: auto 44px;
     }
@@ -1601,7 +1556,7 @@
   <div class="wrap">
     <header>
       <div class="brand">
-        <h1>管理控制台 <span class="ver">v0.7.39</span> <span id="verBadge" style="display:none;font-size:11px;padding:3px 8px;border-radius:12px;background:linear-gradient(135deg, #10B981, #059669);color:#fff;font-weight:600;cursor:pointer;margin-left:4px;box-shadow:0 2px 6px rgba(16,185,129,0.3)" title="点击查看更新并一键升级">🚀 发现新版本</span></h1>
+        <h1>管理控制台 <span class="ver">v0.7.40</span> <span id="verBadge" style="display:none;font-size:11px;padding:3px 8px;border-radius:12px;background:linear-gradient(135deg, #10B981, #059669);color:#fff;font-weight:600;cursor:pointer;margin-left:4px;box-shadow:0 2px 6px rgba(16,185,129,0.3)" title="点击查看更新并一键升级">🚀 发现新版本</span></h1>
         <div class="sub">
           <span class="status-badge"><span class="status-dot"></span> 运行正常</span>
         </div>
@@ -1639,7 +1594,7 @@
         <div class="toolbar" style="margin-bottom:8px">
           <h2>📊 全群数据总览</h2>
           <div style="display:flex;gap:6px;margin-left:auto;flex-wrap:wrap;align-items:center">
-            <button id="btnDbDoctorOv" class="ghost" style="color:var(--succ);border-color:var(--succSoft);font-weight:600">🩺 数据库体检与整理</button>
+            <button id="btnDbDoctorOv" class="ghost" style="color:var(--ok);border-color:var(--okSoft);font-weight:600">🩺 数据库体检与整理</button>
             <button id="btnCheckUpdate" class="ghost" style="color:var(--acc);border-color:var(--accSoft2);font-weight:600">🚀 检查更新</button>
             <span id="checkUpdateStatus" style="display:none;font-size:12px;font-weight:600;padding:3px 10px;border-radius:8px;align-items:center;gap:4px"></span>
           </div>
@@ -1659,7 +1614,7 @@
           </div>
           <div class="card" style="padding:12px 14px;background:var(--panel2);border-radius:12px;border:1px solid var(--line)">
             <div style="font-size:11.5px;color:var(--muted)">🏦 银行总储蓄池</div>
-            <div id="anaBankDeposit" style="font-size:20px;font-weight:700;color:var(--succ);margin-top:3px">-</div>
+            <div id="anaBankDeposit" style="font-size:20px;font-weight:700;color:var(--ok);margin-top:3px">-</div>
             <div id="anaBankUsers" style="font-size:11px;color:var(--muted);margin-top:2px">储蓄玩家: -</div>
           </div>
           <div class="card" style="padding:12px 14px;background:var(--panel2);border-radius:12px;border:1px solid var(--line)">
@@ -1670,7 +1625,7 @@
           <div class="card" style="padding:12px 14px;background:var(--panel2);border-radius:12px;border:1px solid var(--line)">
             <div style="font-size:11.5px;color:var(--muted)">📅 累计签到人次</div>
             <div id="anaSignCount" style="font-size:20px;font-weight:700;color:var(--text);margin-top:3px">-</div>
-            <div id="anaSignRate" style="font-size:11px;color:var(--succ);margin-top:2px">活跃度: 稳健</div>
+            <div id="anaSignRate" style="font-size:11px;color:var(--ok);margin-top:2px">活跃度: 稳健</div>
           </div>
         </div>
     </div>
@@ -1936,7 +1891,7 @@
         <div class="toolbar">
           <h2>💾 自动备份管理</h2>
           <div style="display:flex;gap:5px;flex-wrap:wrap">
-            <button id="btnDbDoctor" class="ghost" style="color:var(--succ);border-color:var(--succSoft);font-weight:600">🩺 数据库体检与整理</button>
+            <button id="btnDbDoctor" class="ghost" style="color:var(--ok);border-color:var(--okSoft);font-weight:600">🩺 数据库体检与整理</button>
             <button id="btnBackupNow" class="ghost">⚡ 立即备份</button>
             <button id="btnBackupRefresh" class="ghost">🔄 刷新</button>
             <button id="btnBackupRestore" class="ghost">🔄 恢复选中</button>
@@ -1972,7 +1927,7 @@
         </div>
         <div class="toolbar" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           <button id="btnBackupCfgSave">💾 保存备份配置</button>
-          <button id="btnWebDAVTest" class="ghost" style="color:var(--primary);border-color:var(--primarySoft);font-weight:600">☁️ 测试 WebDAV</button>
+          <button id="btnWebDAVTest" class="ghost" style="color:var(--acc);border-color:var(--accSoft);font-weight:600">☁️ 测试 WebDAV</button>
           <button id="btnWebDAVBackupNow" class="ghost">☁️ 立即上传云端</button>
           <span class="msg" id="backupCfgMsg"></span>
         </div>

@@ -397,6 +397,22 @@ def _snap_index():
         return []
 
 
+def _snap_name(prefix=""):
+    """毫秒精度快照名，同毫秒连存自动加 -1/-2 后缀，防同名覆盖"""
+    base = time.strftime("%Y%m%d_%H%M%S", time.localtime()) + "_%03d" % (int(time.time() * 1000) % 1000)
+    name = (prefix + base) if prefix else base
+    try:
+        idx = set(_snap_index())
+        i = 1
+        cand = name
+        while cand in idx or ST.recall_get("cfgsnap__" + cand, ""):
+            cand = "%s-%d" % (name, i)
+            i += 1
+        return cand
+    except Exception:
+        return name
+
+
 def _snap_index_save(idx):
     try:
         keep = [str(x) for x in (idx or [])][: _CFG_SNAP_MAX]
@@ -447,7 +463,7 @@ def auto_snapshot_if_changed():
                     return
             except Exception:
                 pass
-        name = time.strftime("%Y%m%d_%H%M%S", time.localtime())
+        name = _snap_name()
         ST.recall_set("cfgsnap__" + name, data)
         ST.recall_set("cfgsnap__latest", name)
         _snap_index_save([name] + [x for x in idx if x != name])
@@ -478,7 +494,7 @@ async def handle_cfg_snapshot_save(request, plugin_base=""):
     try:
         cfg = getattr(ST, "_CONFIG", {}) or {}
         data = _json.dumps({"at": int(time.time()), "config": cfg}, ensure_ascii=False, default=str)
-        name = time.strftime("%Y%m%d_%H%M%S", time.localtime())
+        name = _snap_name()
         ST.recall_set("cfgsnap__" + name, data)
         ST.recall_set("cfgsnap__latest", name)
         idx = [name] + [x for x in _snap_index() if x != name]

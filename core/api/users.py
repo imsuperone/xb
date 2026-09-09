@@ -18,7 +18,7 @@ except ImportError:
     except ImportError:
         import slave  # type: ignore
 
-PLUGIN_VERSION = "0.7.39"
+PLUGIN_VERSION = "0.7.40"
 
 
 def _extract_param(request, key, default=""):
@@ -244,8 +244,7 @@ async def handle_user_import(request):
             ST.acct_save(gid, qq)
         if "group" in p and isinstance(p["group"], dict):
             g = ST.group(gid)
-            g._users[str(qq)] = {str(k): str(v) for k, v in p["group"].items()}
-            g._dirty = True
+            g[str(qq)] = {str(k): str(v) for k, v in p["group"].items()}
             ST.save_group(gid)
         if p.get("name"):
             slave.NOTE_NAMES[str(qq)] = str(p["name"])

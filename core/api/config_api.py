@@ -81,39 +81,44 @@ async def handle_cfg_save(request, plugin_base=""):
                     _bsec["WebDAV应用密码"] = ""
         except Exception:
             pass
-        for sec, kv in norm.items():
-            ST._CONFIG.setdefault(sec, {})
-            ST._CONFIG[sec].update(kv)
-        try:
-            if hasattr(ST, "_bump_config_ver"):
-                ST._bump_config_ver()
-        except Exception:
-            pass
-        # WebDAV 配置 DB 镜像写透（含用户主动清空语义）
-        try:
-            if hasattr(ST, "wd_cfg_backup"):
-                ST.wd_cfg_backup(norm.get("备份配置"))
-        except Exception:
-            pass
-        # 全量配置自动快照（去重，删改乱可一键恢复）
-        try:
-            from .backup import auto_snapshot_if_changed as _auto_snap
-            _auto_snap()
-        except Exception:
+
+        def _work():
+            for sec, kv in norm.items():
+                ST._CONFIG.setdefault(sec, {})
+                ST._CONFIG[sec].update(kv)
             try:
-                from core.api.backup import auto_snapshot_if_changed as _auto_snap2
-                _auto_snap2()
+                if hasattr(ST, "_bump_config_ver"):
+                    ST._bump_config_ver()
             except Exception:
                 pass
-        try:
-            ST.save_config()
-        except Exception:
-            pass
-        try:
-            ST.sync_astrbot_config(ST._CONFIG)
-        except Exception:
-            pass
-        return no_cache_response(json_response({"saved": True, "备份配置": ST._CONFIG.get("备份配置", {}), "webdav_secrets": "updated" if _secrets_changed else "kept"}))
+            # WebDAV 配置 DB 镜像写透（含用户主动清空语义）
+            try:
+                if hasattr(ST, "wd_cfg_backup"):
+                    ST.wd_cfg_backup(norm.get("备份配置"))
+            except Exception:
+                pass
+            # 全量配置自动快照（去重，删改乱可一键恢复）
+            try:
+                from .backup import auto_snapshot_if_changed as _auto_snap
+                _auto_snap()
+            except Exception:
+                try:
+                    from core.api.backup import auto_snapshot_if_changed as _auto_snap2
+                    _auto_snap2()
+                except Exception:
+                    pass
+            try:
+                ST.save_config()
+            except Exception:
+                pass
+            try:
+                ST.sync_astrbot_config(ST._CONFIG)
+            except Exception:
+                pass
+            return no_cache_response(json_response({"saved": True, "备份配置": ST._CONFIG.get("备份配置", {}), "webdav_secrets": "updated" if _secrets_changed else "kept"}))
+
+        import asyncio as _aio
+        return await _aio.to_thread(_work)
     except Exception as e:
         return _err(f"save failed: {e}", 500)
 

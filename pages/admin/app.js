@@ -322,10 +322,16 @@ function triggerExportResult({ filename, mime, blob, rawText, base64Data }) {
   }
 
   const blobUrl = blob ? URL.createObjectURL(blob) : "";
+  let ok = false;
   if (blob) {
-    triggerDownload(blob, filename, rawText);
+    ok = triggerDownload(blob, filename, rawText);
   }
-  showExportModal({ filename, blob, blobUrl, rawText, base64Data });
+  // 自动下载成功不再弹手动窗；失败才弹兜底（顺手释放预览URL防大zip常驻内存）
+  if (!ok) {
+    showExportModal({ filename, blob, blobUrl, rawText, base64Data });
+  } else if (blobUrl) {
+    try { URL.revokeObjectURL(blobUrl); } catch (e) {}
+  }
 }
 
 function triggerDownload(blob, filename, rawText = "") {
@@ -377,6 +383,7 @@ function triggerDownload(blob, filename, rawText = "") {
   }
 
   toast("已触发下载: " + filename, "ok");
+  return downloaded;
 }
 
 function downloadJson(data, filename) {
@@ -704,6 +711,7 @@ function renderGroupsTable() {
     });
   });
 }
+document.getElementById("btnGroupsRefresh")?.addEventListener("click", () => loadGroups());
 
 // 各页签加载器(零延迟即时响应)
 const TAB_LOADERS = {
@@ -835,7 +843,7 @@ function renderImages(d) {
     else if (ext==="zip") ficon="🗜️";
     else if (ext==="log") ficon="📜";
     html += `<div class="icard${selCls}" data-imgsrc="${esc(x.img)}" data-imgname="${esc(x.name)}" data-imgpath="${esc(x.path)}" data-selpath="${esc(x.path)}">` +
-      (ficon ? `<div style="height:120px;display:flex;align-items:center;justify-content:center;font-size:42px;background:var(--panel2)">${ficon}</div>` : `<img src="${esc(_safeImgSrc(x.img))}" alt="">`) + `<div class="nm">${esc(x.name)}</div></div>`;
+      (ficon ? `<div style="height:120px;display:flex;align-items:center;justify-content:center;font-size:42px;background:var(--panel2)">${ficon}</div>` : `<img loading="lazy" decoding="async" src="${esc(_safeImgSrc(x.img))}" alt="">`) + `<div class="nm">${esc(x.name)}</div></div>`;
   });
   html += `</div>`;
   box.innerHTML = html;
@@ -964,27 +972,6 @@ function bindTabs() {
       tabsContainer.scrollLeft += e.deltaY;
     }
   }, { passive: false });
-  // 更多下拉
-  const moreBtn = document.getElementById("moreBtn");
-  const moreMenu = document.getElementById("moreMenu");
-  moreBtn?.addEventListener("click", (e) => {
-    e.stopPropagation();
-    moreMenu?.classList.toggle("show");
-  });
-  document.addEventListener("click", () => moreMenu?.classList.remove("show"));
-  moreMenu?.querySelectorAll("button[data-tab]").forEach((b) => {
-    b.addEventListener("click", () => {
-      moreMenu?.classList.remove("show");
-      document.querySelector(`.tabs button[data-tab=\"${b.dataset.tab}\"]`)?.click();
-    });
-  });
-  // 同步更多菜单高亮
-  const _orig = document.querySelectorAll(".tabs button");
-  const syncMore = () => {
-    const on = document.querySelector(".tabs button.on")?.dataset.tab;
-    moreMenu?.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x.dataset.tab === on));
-  };
-  _orig.forEach((b) => b.addEventListener("click", syncMore));
 }
 
 function err(m) {
@@ -1615,12 +1602,8 @@ async function cleanLeftUsers() {
   if (!ok) return;
   toast("正在对比群成员并清理退群人员...", "ok");
   try {
-    let res = null;
-    try {
-      res = await getBridge().apiPost("users/clean_left", { gid });
-    } catch(e) {
-      res = await getBridge().apiGet("users/clean_left", { gid });
-    }
+    // 单次 callApi（GET空结果不再回退POST，失败兜底在callApi内）
+    const res = await callApi("users/export", {}, "GET");
     if (res && res.ok) {
       toast(`清理完成！已清理 ${res.cleaned_count || 0} 名退群人员数据`, "ok");
       await loadUsers();
@@ -1659,7 +1642,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.7.39"
+        version: res.version || "0.7.40"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -2277,22 +2260,6 @@ function _spiritLoadBuiltin(kind) {
     SPIRIT_DIRTY = true;
     return true;
   } catch (e) { toast("载入失败: " + e.message, "bad"); return false; }
-}
-
-function renderSpiritCat() {
-  if (!SPIRIT) return;
-  const cat = document.getElementById("spiritCat");
-  if (!cat) return;
-  cat.innerHTML = ["地图", "商城"]
-    .map((s) => `<button data-scat="${s}" class="${s === SPIRIT_CUR ? "on" : ""}">${s}</button>`)
-    .join("");
-  cat.querySelectorAll("button").forEach((b) =>
-    b.addEventListener("click", () => {
-      SPIRIT_CUR = b.dataset.scat;
-      cat.querySelectorAll("button").forEach((x) => x.classList.remove("on"));
-      b.classList.add("on");
-      refreshSpiritViews();
-    }));
 }
 
 function spiritAttrCards(spirits, dropNames, assignMaps) {
@@ -2949,12 +2916,6 @@ document.getElementById("userBody")?.addEventListener("click", async (e) => {
   const bClr = e.target.closest("button[data-clear='user']");
   if (bClr) { clearUserSingle(bClr.dataset.qq, bClr.dataset.gid); return; }
 });
-document.querySelectorAll(".harrow[data-cat]").forEach((btn) =>
-  btn.addEventListener("click", () => {
-    const cat = document.getElementById("cfgCat");
-    if (cat) cat.scrollBy({ left: parseInt(btn.dataset.cat, 10) * 240, behavior: "smooth" });
-  })
-);
 ["cfgSearch", "userSearch", "cmdSearch", "imgSearch", "slaveSearch", "spiritUserSearch", "groupsSearch"].forEach((id) => {
   const el = document.getElementById(id);
   if (el) {
@@ -3099,12 +3060,6 @@ document.querySelectorAll("#varsHelp .var-tag").forEach(el => {
 document.getElementById("btnSpiritLoad")?.addEventListener("click", loadSpirits);
 document.getElementById("btnSpiritExport")?.addEventListener("click", exportSpirits);
 document.getElementById("btnSpiritImport")?.addEventListener("click", importSpirits);
-document.querySelectorAll(".harrow[data-scat]").forEach((btn) =>
-  btn.addEventListener("click", () => {
-    const cat = document.getElementById("spiritCat");
-    if (cat) cat.scrollBy({ left: parseInt(btn.dataset.scat, 10) * 200, behavior: "smooth" });
-  })
-);
 
 // 商城图鉴 (每商城独立栏 自由增删重命名+图片绑定)
 const DEFAULT_RIDE_SHOP = {
@@ -4316,10 +4271,12 @@ function renderSpiritUsersTable() {
 }
 // 备份（文件夹式，与图片库一致）
 let BACKUP_DIR = "";
+let BACKUP_CACHE = null;
 async function loadBackups(dir="") {
   try {
     BACKUP_DIR = dir || "";
     const d = await getBridge().apiGet("backups/list", BACKUP_DIR ? { dir: BACKUP_DIR } : {});
+    BACKUP_CACHE = d;
     const crumbs = (d.dir || "").split("/").filter(Boolean);
     let crumb = `<a data-bkcrumb="">根目录</a>`;
     let acc = "";
@@ -4432,7 +4389,6 @@ document.getElementById("btnWebDAVTest")?.addEventListener("click", async () => 
       const succMsg = res.msg || "WebDAV 连接与鉴权成功！";
       if (msgEl) { msgEl.textContent = "✅ " + succMsg; msgEl.className = "msg ok"; }
       toast("WebDAV 测试成功: " + succMsg, "ok", 6000);
-      uiAlert(succMsg, "WebDAV 连接测试成功", "✅");
       await loadRemoteWebDAVFiles();
     } else {
       const errMsg = (res && res.msg) ? res.msg : ((res && res.error) ? res.error : "未知错误");
@@ -4486,7 +4442,6 @@ document.getElementById("btnWebDAVBackupNow")?.addEventListener("click", async (
       const succMsg = res.msg || "已成功上传至 WebDAV 远端！";
       if (msgEl) { msgEl.textContent = "✅ " + succMsg; msgEl.className = "msg ok"; }
       toast("WebDAV 云备份成功: " + succMsg, "ok", 6000);
-      uiAlert(succMsg, "WebDAV 云端备份成功", "🎉");
       await loadBackups(BACKUP_DIR);
       await loadRemoteWebDAVFiles();
     } else {
@@ -4647,7 +4602,6 @@ async function loadRemoteWebDAVFiles(fromCache) {
           const r = await getBridge().apiPost("backup/webdav/restore", { file: fname });
           if (r && r.ok) {
             toast(`远端备份 [${fname}] 恢复成功！`, "ok", 6000);
-            uiAlert(r.msg || `数据库已成功还原至云端归档 [${fname}]！数据与配置已全量热生效。`, "远端备份恢复成功", "✅");
             await loadBackups(BACKUP_DIR);
           } else {
             const err = (r && r.msg) ? r.msg : ((r && r.error) ? r.error : "恢复失败");
@@ -4681,7 +4635,6 @@ async function loadRemoteWebDAVFiles(fromCache) {
           const r = await getBridge().apiPost("backup/webdav/delete", { file: fname });
           if (r && r.ok) {
             toast(`云端备份 [${fname}] 已删除！`, "ok", 5000);
-            uiAlert(r.msg || `已成功从 WebDAV 远端删除备份文件【${fname}】。`, "云端备份删除成功", "✅");
             await loadRemoteWebDAVFiles();
           } else {
             const err = (r && r.msg) ? r.msg : ((r && r.error) ? r.error : "删除失败");
@@ -4705,7 +4658,11 @@ document.getElementById("btnWebDAVRefreshFiles")?.addEventListener("click", () =
 let _backupSearchTimer = null;
 document.getElementById("backupSearch")?.addEventListener("input", () => {
   if (_backupSearchTimer) clearTimeout(_backupSearchTimer);
-  _backupSearchTimer = setTimeout(() => { loadBackups(BACKUP_DIR); }, 300);
+  _backupSearchTimer = setTimeout(() => {
+    // 有缓存走本地过滤，不发请求；无缓存才拉一次
+    if (BACKUP_CACHE) { try { renderBackups(BACKUP_CACHE); return; } catch (e) {} }
+    loadBackups(BACKUP_DIR);
+  }, 300);
 });
 // 备份顶部操作：对选中项生效
 document.getElementById("btnBackupDelete")?.addEventListener("click", async () => {
@@ -4783,9 +4740,7 @@ async function loadBackupCfg() {
     _setChk("autoSwitch", b["自动备份开关"] ?? "真");
     _setVal("autoHours", b["备份间隔小时"] ?? "3");
     _setVal("autoKeep", b["保留备份数量"] ?? "30");
-    if (b["WebDAV服务器地址"]) {
-      try { loadRemoteWebDAVFiles(); } catch (e) {}
-    }
+    // 远端列表由页签统一拉一次，此处不拉，防双请求
   } catch (e) { err("backup cfg: " + e.message); }
 }
 async function saveBackupCfg() {
@@ -4824,18 +4779,28 @@ async function saveBackupCfg() {
         return;
       }
     }
-    // 存后二次读回校验
+    // 存后二次读回校验（含保留数/间隔，存丢当场暴露）
     try {
       const cur = await getBridge().apiGet("config/get");
       const b = (cur || {})["备份配置"] || {};
       const savedUrl = b["WebDAV服务器地址"] || "";
       const savedSw = b["WebDAV备份开关"] || "";
+      const savedKeep = b["保留备份数量"] ?? "";
+      const savedHours = b["备份间隔小时"] ?? "";
       if (payload["备份配置"]["WebDAV服务器地址"] && savedUrl && savedUrl !== payload["备份配置"]["WebDAV服务器地址"]) {
         say(`保存异常：服务器地址读回不一致，请重试`, false);
         return;
       }
       if (savedSw && savedSw !== payload["备份配置"]["WebDAV备份开关"]) {
         say(`保存异常：备份开关读回不一致，请重试`, false);
+        return;
+      }
+      if (savedKeep !== "" && String(savedKeep) !== String(payload["备份配置"]["保留备份数量"])) {
+        say(`保存异常：保留数量读回不一致 (预期:${payload["备份配置"]["保留备份数量"]}, 实际:${savedKeep})，请重试`, false);
+        return;
+      }
+      if (savedHours !== "" && String(savedHours) !== String(payload["备份配置"]["备份间隔小时"])) {
+        say(`保存异常：备份间隔读回不一致 (预期:${payload["备份配置"]["备份间隔小时"]}, 实际:${savedHours})，请重试`, false);
         return;
       }
     } catch (readErr) {}
@@ -4858,18 +4823,8 @@ document.getElementById("slaveSort")?.addEventListener("change", renderSlaveTabl
 document.getElementById("btnSpiritUsersRefresh")?.addEventListener("click", loadSpiritUsers);
 document.getElementById("spiritUserSort")?.addEventListener("change", renderSpiritUsersTable);
 
-// 表头点击快速排序事件委托
+// 表头点击快速排序事件委托（导出/刷新类按钮走各自直绑，此处只留排序，防一点多发）
 document.addEventListener("click", (e) => {
-  const btn = e.target.closest("button");
-  if (btn) {
-    if (btn.id === "btnUsersExport") { exportAllUsers(); return; }
-    if (btn.id === "btnUsersImport") { importAllUsers(); return; }
-    if (btn.id === "btnUsersCleanLeft") { cleanLeftUsers(); return; }
-    if (btn.id === "btnUserClearManual") { clearUserManual(); return; }
-    if (btn.id === "btnUsers") { loadUsers(); return; }
-    if (btn.id === "btnImgExport") { exportImages(); return; }
-  }
-
   const target = e.target.closest("[data-sort], [data-slavesort], [data-spiritsort]");
   if (!target) return;
   if (target.dataset.sort) {
