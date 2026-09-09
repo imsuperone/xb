@@ -1637,7 +1637,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.7.34"
+        version: res.version || "0.7.35"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -2303,7 +2303,7 @@ function spiritAttrCards(spirits, dropNames, assignMaps) {
         `<input data-sp-spirit="${esc(sn)}" data-s-field="${fk}" value="${esc(it[fk] ?? "")}"${_list} style="width:78px"></div>`;
     });
     return `<div class="sp-card" data-sp="${esc(sn)}">
-      <div class="sp-name">✦ ${esc(sn)} <span style="cursor:pointer;font-size:11px;color:var(--muted)" data-rename-spirit="${esc(sn)}" title="改名">✎</span></div>
+      <div class="sp-name">✦ <input data-sp-rename value="${esc(sn)}" title="直接改名，回车/失焦生效" style="width:110px;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:2px 6px;font-size:12px;font-weight:600"></div>
       <div class="s-fields">${cells.join("")}
         <button class="s-del" data-del-spirit="${esc(sn)}">移除精灵</button></div>
       <div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap">${_img ? `<button class="ghost sm" data-sp-view="${esc(_img)}">浏览图片</button>` : ""}<button class="ghost sm" data-sp-pick-upload="${esc(sn)}">外置选图</button><button class="ghost sm" data-sp-pick-builtin="${esc(sn)}">内置选图</button></div>
@@ -2477,6 +2477,21 @@ function bindSpiritMapCards(root) {
       }
     } catch (err) {}
   });
+  // 精灵改名：行内直接改（坐骑同款），回车/失焦生效，空/重名自动回滚显示
+  root.addEventListener("change", (e) => {
+    const inp = e.target;
+    if (!inp || !inp.matches || !inp.matches("input[data-sp-rename]")) return;
+    try {
+      const card = inp.closest(".sp-card");
+      const old = card ? card.dataset.sp : "";
+      const nn = inp.value;
+      if (!old || String(nn).trim() === String(old)) { try { inp.value = old; } catch (err) {} return; }
+      const rerr = _renameSpirit(old, nn);
+      if (rerr) toast(rerr, "bad");
+      else toast(`已改名「${old}」→「${String(nn).trim()}」，点保存精灵生效`, "ok");
+      refreshSpiritViews();
+    } catch (err) {}
+  });
   root.addEventListener("click", async (e) => {
     const t = e.target && e.target.closest ? e.target : null;
     if (!t) return;
@@ -2520,15 +2535,6 @@ function bindSpiritMapCards(root) {
       SPIRIT_DIRTY = true;
       refreshSpiritViews();
       toast("已移除精灵，点保存精灵生效", "ok");
-    } else if (b.hasAttribute("data-rename-spirit")) {
-      const old = b.dataset.renameSpirit;
-      const nn = await uiPrompt(`精灵「${old}」改名（地图掉落与进化指向同步更新，点保存精灵生效）：`, old, "精灵改名");
-      if (nn === null || nn === undefined) return;
-      if (String(nn).trim() === String(old)) return;
-      const rerr = _renameSpirit(old, nn);
-      if (rerr) { toast(rerr, "bad"); return; }
-      refreshSpiritViews();
-      toast(`已改名「${old}」→「${String(nn).trim()}」，点保存精灵生效`, "ok");
     } else if (b.hasAttribute("data-assign-spirit")) {
       const spName = b.dataset.assignSpirit;
       const card = b.closest(".sp-card");
