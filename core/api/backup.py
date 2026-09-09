@@ -538,6 +538,13 @@ async def handle_cfg_snapshot_restore(request, plugin_base=""):
             ST._CONFIG.clear()
             for sec, kv in cfg.items():
                 if isinstance(kv, dict):
+                    if sec in getattr(ST, "_COLL_FILES", {}):
+                        # 旧快照可能含商城/图鉴：收编进 sidecar，不进内存
+                        try:
+                            ST.coll_merge(sec, kv)
+                        except Exception:
+                            pass
+                        continue
                     ST._CONFIG[str(sec)] = {str(k): v for k, v in kv.items()}
         try:
             if hasattr(ST, "_bump_config_ver"):

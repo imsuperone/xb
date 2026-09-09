@@ -84,6 +84,13 @@ async def handle_cfg_save(request, plugin_base=""):
 
         def _work():
             for sec, kv in norm.items():
+                if sec in getattr(ST, "_COLL_FILES", {}):
+                    # 商城/图鉴走独立 sidecar，不进内存/_CONFIG
+                    try:
+                        ST.coll_merge(sec, kv)
+                    except Exception:
+                        pass
+                    continue
                 ST._CONFIG.setdefault(sec, {})
                 ST._CONFIG[sec].update(kv)
             try:
@@ -516,6 +523,12 @@ async def handle_config_auto_balance(request):
             pass
         ST._CONFIG["_active_balance_mode"] = mode
         for sec, kv in target_preset.items():
+            if sec in getattr(ST, "_COLL_FILES", {}):
+                try:
+                    ST.coll_merge(sec, kv)
+                except Exception:
+                    pass
+                continue
             ST._CONFIG.setdefault(sec, {})
             ST._CONFIG[sec].update(kv)
         try:

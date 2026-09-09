@@ -109,7 +109,7 @@ def _raw_file_response(data_bytes, filename):
 PLUGIN_ID = "astrbot_plugin_xbbot"
 PLUGIN_DESC = "小白(奴/签/银/娱/私/灵/骑/超管/帮派/冒险+主菜单+WebUI), 现代SQLite存储"
 PLUGIN_AUTHOR = "Light"
-PLUGIN_VERSION = "0.7.41"
+PLUGIN_VERSION = "0.7.42"
 PLUGIN_REPO = "https://github.com/imsuperone/xb"
 
 # 消息处理定长线程池：突发千群不再打爆默认无限池，与 ST._LOCK 串行叠加可控
@@ -549,10 +549,13 @@ class XbBot(Star):
                         pass
                     yield event.plain_result(f"测试testxb 异常: {e}")
                     return
-            # 优先走加强版 dispatch（有钱/没钱 全分支，仅测试指令拦截，普通群聊0消耗放行）
+            # 测试探针独立 selftest/ 目录，懒加载调用，不污染正常导入链
             if raw.strip().startswith("测试testxb"):
                 try:
-                    from .core.dispatch import handle_test_probes as _ext_test
+                    try:
+                        from .selftest.harness import handle_test_probes as _ext_test
+                    except ImportError:
+                        from selftest.harness import handle_test_probes as _ext_test  # type: ignore
                     ext = await _ext_test(raw, gid, qq, is_admin, event, is_private)
                     if ext is not None:
                         if ext.startswith("__HANDLED__"):
@@ -562,7 +565,6 @@ class XbBot(Star):
                         return
                 except Exception:
                     pass
-            # 已委托 core/dispatch.handle_test_probes 统一处理2..9与all（含A-B双分支），此处不再重复，避免 main 与 test_harness 双维护
             if raw.strip() == "超管列表":
                 if not is_admin:
                     try:

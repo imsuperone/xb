@@ -222,6 +222,21 @@ def set_config(cfg: dict):
 
 def cfg(sec, key, default=""):
     sec = str(sec).strip()
+    # 商城/图鉴走独立 sidecar（内存/_CONFIG/文件/镜像均不经过，读穿透）
+    if sec in _COLL_FILES:
+        try:
+            d = _coll_load(sec)
+            if isinstance(d, dict) and str(key) in d:
+                _vv = d[str(key)]
+                if isinstance(_vv, (dict, list)):
+                    try:
+                        return json.dumps(_vv, ensure_ascii=False)
+                    except Exception:
+                        pass
+                return str(_vv)
+        except Exception:
+            pass
+        return str(default)
     # WebDAV 密钥走独立文件：运行时透明叠加，内存/备份/快照里只留空
     if sec == "备份配置" and key in _WD_SECRET_KEYS:
         try:
@@ -903,6 +918,10 @@ def set_persistent_data_dir(path):
     except Exception:
         pass
     _PERSISTENT_DATA_DIR = path
+    try:
+        _COLL_CACHE.clear()
+    except Exception:
+        pass
     base = os.path.dirname(os.path.abspath(__file__))
     _auto_migrate_and_heal(path, base)
     target_db = os.path.join(path, "xb.db")
@@ -1157,6 +1176,11 @@ CONFIG_FILE = ""
 def set_config_path(path):
     global CONFIG_FILE
     CONFIG_FILE = path
+    # 数据目录切换时 sidecar 缓存失效，下次按新目录重读
+    try:
+        _COLL_CACHE.clear()
+    except Exception:
+        pass
 
 def set_astrbot_config(cfg):
     global _ASTRBOT_CFG
@@ -1175,7 +1199,217 @@ def sync_astrbot_config(merged):
     except Exception:
         pass
 
+# ==================== 商城/图鉴独立存储（sidecar，不进 config.json / DB 镜像 / 快照） ====================
+# “正常库”只存玩法数值与账户资产；商城图鉴/精灵图鉴独立双文件，引擎与 WebUI 经 cfg/set_ini 透明读写。
+_COLL_FILES = {"商城图鉴": "shop.json", "精灵图鉴": "atlas.json"}
+_COLL_CACHE = {}
+try:
+    import threading as _th_coll
+    _COLL_LOCK = _th_coll.RLock()
+except Exception:
+    _COLL_LOCK = None
+
+
+def _coll_path(sec):
+    try:
+        base = ""
+        if CONFIG_FILE:
+            try:
+                base = os.path.dirname(os.path.abspath(CONFIG_FILE))
+            except Exception:
+                base = ""
+        if not base:
+            try:
+                base = get_persistent_data_dir()
+            except Exception:
+                base = ""
+        if not base:
+            return ""
+        return os.path.join(base, _COLL_FILES.get(sec, ""))
+    except Exception:
+        return ""
+
+
+def _coll_load(sec):
+    """读 sidecar（内存缓存；缺文件返回 {}，不回退内存，防旧值复活）"""
+    try:
+        if sec in _COLL_CACHE and isinstance(_COLL_CACHE[sec], dict):
+            return _COLL_CACHE[sec]
+        d = {}
+        p = _coll_path(sec)
+        if p and os.path.isfile(p):
+            try:
+                with open(p, encoding="utf-8") as f:
+                    raw = json.load(f)
+                if isinstance(raw, dict):
+                    d = raw
+            except Exception:
+                d = {}
+        _COLL_CACHE[sec] = d
+        return d
+    except Exception:
+        return {}
+
+
+def _coll_write(sec):
+    try:
+        p = _coll_path(sec)
+        if not p:
+            return False
+        d = _COLL_CACHE.get(sec) if isinstance(_COLL_CACHE.get(sec), dict) else {}
+        tmp = p + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(d, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, p)
+        return True
+    except Exception:
+        return False
+
+
+def _coll_coerce(v):
+    if isinstance(v, dict):
+        return v
+    if isinstance(v, str) and v.strip():
+        try:
+            d = json.loads(v)
+            if isinstance(d, dict):
+                return d
+        except Exception:
+            pass
+        try:
+            import ast as _ast
+            d = _ast.literal_eval(v)
+            if isinstance(d, dict):
+                return d
+        except Exception:
+            pass
+    return {}
+
+
+def coll_migrate():
+    """启动迁移（幂等）：AstrBot 参数 ∪ 持久文件 → sidecar（文件优先），随后逐出内存。
+    在 wd_cfg_restore 头部调用，此时参数与文件回填均已就位。旧快照恢复时同样调用。"""
+    try:
+        # 读持久文件侧（扁平 已弃用节__键 + 嵌套节 两形态）
+        fsec_all = {}
+        try:
+            p = CONFIG_FILE
+            if p and os.path.isfile(p):
+                with open(p, encoding="utf-8") as f:
+                    raw = json.load(f)
+                if isinstance(raw, dict):
+                    for k, v in raw.items():
+                        if "__" in str(k):
+                            s2, key = str(k).split("__", 1)
+                            if s2 in _COLL_FILES:
+                                fsec_all.setdefault(s2, {})[key] = v
+                    for s2 in _COLL_FILES:
+                        if isinstance(raw.get(s2), dict):
+                            for k, v in raw[s2].items():
+                                fsec_all.setdefault(s2, {})[str(k)] = v
+        except Exception:
+            pass
+        for sec in _COLL_FILES:
+            try:
+                mem = _CONFIG.get(sec) if isinstance(_CONFIG, dict) and isinstance(_CONFIG.get(sec), dict) else {}
+                merged = dict(mem or {})
+                for k, v in (fsec_all.get(sec) or {}).items():
+                    merged[str(k)] = v
+                if merged:
+                    cur = _coll_load(sec)
+                    cur.update(merged)
+                    if _COLL_LOCK is not None:
+                        try:
+                            with _COLL_LOCK:
+                                _coll_write(sec)
+                        except Exception:
+                            _coll_write(sec)
+                    else:
+                        _coll_write(sec)
+            except Exception:
+                pass
+            try:
+                if isinstance(_CONFIG, dict):
+                    _CONFIG.pop(sec, None)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
+def coll_merge(sec, kv):
+    """sidecar 合并写（供 config/save、平衡预设、旧快照恢复）：只动本节，单次落盘"""
+    try:
+        if sec not in _COLL_FILES or not isinstance(kv, dict):
+            return False
+
+        def _do():
+            d = _coll_load(sec)
+            for k, v in kv.items():
+                if v is None or (isinstance(v, str) and v.strip() == ""):
+                    d.pop(str(k), None)
+                elif isinstance(v, dict):
+                    d[str(k)] = v
+                elif isinstance(v, str):
+                    c = _coll_coerce(v)
+                    if c or c == {} and v.strip() in ("{}", "[]"):
+                        # 空对象串视为显式清空；不可解析串跳过防误清
+                        d[str(k)] = c
+            return _coll_write(sec)
+
+        if _COLL_LOCK is not None:
+            try:
+                with _COLL_LOCK:
+                    return _do()
+            except Exception:
+                return _do()
+        return _do()
+    except Exception:
+        return False
+
+
 def set_ini(sec, key, value):
+    if sec in _COLL_FILES:
+        # 商城/图鉴走 sidecar，不进内存/_CONFIG（防回写污染正常库）。
+        # 语义：dict（含空）/JSON 串→存对象；None/空串→删键；不可解析串→跳过（防误清）。
+        try:
+            if value is None or (isinstance(value, str) and value.strip() == ""):
+                op = ("del", None)
+            elif isinstance(value, dict):
+                op = ("set", value)
+            elif isinstance(value, str):
+                c = _coll_coerce(value)
+                op = ("set", c) if c else ("skip", None)
+            else:
+                op = ("skip", None)
+            if op[0] != "skip":
+                if _COLL_LOCK is not None:
+                    try:
+                        with _COLL_LOCK:
+                            if op[0] == "set":
+                                _coll_load(sec)[str(key)] = op[1]
+                            else:
+                                _coll_load(sec).pop(str(key), None)
+                            _coll_write(sec)
+                    except Exception:
+                        if op[0] == "set":
+                            _coll_load(sec)[str(key)] = op[1]
+                        else:
+                            _coll_load(sec).pop(str(key), None)
+                        _coll_write(sec)
+                else:
+                    if op[0] == "set":
+                        _coll_load(sec)[str(key)] = op[1]
+                    else:
+                        _coll_load(sec).pop(str(key), None)
+                    _coll_write(sec)
+        except Exception:
+            pass
+        try:
+            _bump_config_ver()
+        except Exception:
+            pass
+        return
     _CONFIG.setdefault(sec, {})[key] = value if isinstance(value, dict) else str(value)
     try:
         _bump_config_ver()
@@ -1211,7 +1445,9 @@ def save_config():
         # 防截断：内存配置为空时拒绝落盘，避免把有效持久文件清成 {}
         if not isinstance(_CONFIG, dict) or not _CONFIG:
             return
-        flat = _flatten_cfg(_CONFIG)
+        # 商城/图鉴独立 sidecar：文件与镜像同步剥离，不进正常库
+        _persist = {s: kv for s, kv in _CONFIG.items() if s not in _COLL_FILES} if isinstance(_CONFIG, dict) else {}
+        flat = _flatten_cfg(_persist)
         if not flat:
             return
         # 原子落盘：先写临时文件再替换，防中途崩溃留半截文件
@@ -1224,18 +1460,21 @@ def save_config():
     # 同步落盘全量配置到 SQLite kv 表，确保 .db 文件自包含全部配置与用户资产
     try:
         if isinstance(_CONFIG, dict) and _CONFIG:
-            recall_set("sys_config_json", json.dumps(_CONFIG, ensure_ascii=False))
+            _mirror = {s: kv for s, kv in _CONFIG.items() if s not in _COLL_FILES}
+            recall_set("sys_config_json", json.dumps(_mirror, ensure_ascii=False))
     except Exception:
         pass
 
 def load_config_from_db():
-    """从数据库恢复全量配置：若内存配置缺失或为空，从 kv 表补齐"""
+    """从数据库恢复全量配置：若内存配置缺失或为空，从 kv 表补齐（跳过商城/图鉴 sidecar 节）"""
     try:
         raw = recall_get("sys_config_json", "")
         if raw:
             db_cfg = json.loads(raw)
             if isinstance(db_cfg, dict) and db_cfg:
                 for sec, sub in db_cfg.items():
+                    if sec in _COLL_FILES:
+                        continue
                     if isinstance(sub, dict):
                         s = _CONFIG.setdefault(sec, {})
                         for k, v in sub.items():
@@ -1756,6 +1995,10 @@ def wd_cfg_restore():
     """WebDAV 与备份配置 DB 镜像恢复：从数据库 kv 表恢复备份配置，杜绝任何外部重置导致配置丢失。
     仅当内存缺键或为空时回填；内存已有任何非空值（一律视为有效定制，即使撞 schema 默认如'30'）绝不覆盖。
     密钥（地址/用户名/应用密码）走独立文件，不进镜像；此处顺带做一次性迁移。"""
+    try:
+        coll_migrate()
+    except Exception:
+        pass
     try:
         sec = _CONFIG.setdefault("备份配置", {}) if isinstance(_CONFIG, dict) else {}
         if not isinstance(sec, dict):
