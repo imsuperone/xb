@@ -1641,7 +1641,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.7.32"
+        version: res.version || "0.7.33"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -2307,7 +2307,7 @@ function spiritAttrCards(spirits, dropNames, assignMaps) {
         `<input data-sp-spirit="${esc(sn)}" data-s-field="${fk}" value="${esc(it[fk] ?? "")}"${_list} style="width:78px"></div>`;
     });
     return `<div class="sp-card" data-sp="${esc(sn)}">
-      <div class="sp-name">✦ ${esc(sn)}</div>
+      <div class="sp-name">✦ ${esc(sn)} <span style="cursor:pointer;font-size:11px;color:var(--muted)" data-rename-spirit="${esc(sn)}" title="改名">✎</span></div>
       <div class="s-fields">${cells.join("")}
         <button class="s-del" data-del-spirit="${esc(sn)}">移除精灵</button></div>
       <div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap">${_img ? `<button class="ghost sm" data-sp-view="${esc(_img)}">浏览图片</button>` : ""}<button class="ghost sm" data-sp-pick-upload="${esc(sn)}">外置选图</button><button class="ghost sm" data-sp-pick-builtin="${esc(sn)}">内置选图</button></div>
@@ -2322,6 +2322,43 @@ function refreshSpiritViews() {
   try { if (typeof renderShop === "function") renderShop(); } catch (e) {}
 }
 
+// 通用排序：对象按 key 整体上移/下移一位（保持其余顺序），返回是否变动
+function _moveKey(obj, key, dir) {
+  try {
+    const ks = Object.keys(obj || {});
+    const i = ks.indexOf(key);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= ks.length) return false;
+    const t = ks[i]; ks[i] = ks[j]; ks[j] = t;
+    const out = {};
+    ks.forEach((k) => { out[k] = obj[k]; });
+    Object.keys(obj).forEach((k) => { delete obj[k]; });
+    Object.keys(out).forEach((k) => { obj[k] = out[k]; });
+    return true;
+  } catch (e) { return false; }
+}
+
+// 精灵改名：spirits 主键 + 全地图掉落引用 + 进化指向同步更名；返回 ""=成功，否则为错误文案
+function _renameSpirit(oldName, newName) {
+  if (!SPIRIT || !oldName) return "参数缺失";
+  oldName = String(oldName); newName = String(newName == null ? "" : newName).trim();
+  if (!newName) return "新名不能为空";
+  if (newName === oldName) return "";
+  const spirits = SPIRIT.spirits || {};
+  if (!spirits[oldName]) return "原精灵不存在";
+  if (spirits[newName]) return "已存在同名精灵";
+  spirits[newName] = spirits[oldName];
+  delete spirits[oldName];
+  Object.values(SPIRIT.maps || {}).forEach((m) => {
+    if (m && Array.isArray(m.drops)) m.drops = m.drops.map((x) => (String(x) === oldName ? newName : x));
+  });
+  Object.values(spirits).forEach((it) => {
+    if (it && typeof it === "object" && String(it.evolve || "") === oldName) it.evolve = newName;
+  });
+  SPIRIT_DIRTY = true;
+  return "";
+}
+
 // 地图卡片 HTML（图鉴主体与总览精灵页签共用，同一可编辑样式）
 function spiritMapCardsHTML(mapNames, maps, spirits, q) {
   return mapNames.map((mname) => {
@@ -2333,6 +2370,7 @@ function spiritMapCardsHTML(mapNames, maps, spirits, q) {
         <span class="s-mapname">🗺 ${esc(mname)}</span>
         <span class="s-maplv">Lv.${esc(d.lv ?? 1)}</span>
         <span class="s-mapdrop">${esc(drops.join("、"))}</span>
+        <span style="display:inline-flex;gap:2px;margin-left:auto"><button class="ghost sm" data-map-up="${esc(mname)}" title="上移">↑</button><button class="ghost sm" data-map-down="${esc(mname)}" title="下移">↓</button></span>
         <span class="s-arr">${open ? "▾" : "▸"}</span>
       </div>
       <div class="s-mapbody">
@@ -2448,6 +2486,17 @@ function bindSpiritMapCards(root) {
     if (!t) return;
     const maps = _maps();
     const spirits = _spirits();
+    // 地图卡头部 ↑↓（先于 toggle 拦截，否则点排序会误触展开/收起）
+    const mvBtn = t.closest("[data-map-up],[data-map-down]");
+    if (mvBtn && root.contains(mvBtn)) {
+      const mk = mvBtn.hasAttribute("data-map-up") ? mvBtn.dataset.mapUp : mvBtn.dataset.mapDown;
+      if (mk && _moveKey(maps, mk, mvBtn.hasAttribute("data-map-up") ? -1 : 1)) {
+        SPIRIT_DIRTY = true;
+        refreshSpiritViews();
+        toast("已排序，点保存精灵生效", "ok");
+      }
+      return;
+    }
     const tgl = t.closest("[data-map-toggle]");
     if (tgl && root.contains(tgl)) {
       const m = tgl.dataset.mapToggle;
@@ -2475,6 +2524,15 @@ function bindSpiritMapCards(root) {
       SPIRIT_DIRTY = true;
       refreshSpiritViews();
       toast("已移除精灵，点保存精灵生效", "ok");
+    } else if (b.hasAttribute("data-rename-spirit")) {
+      const old = b.dataset.renameSpirit;
+      const nn = await uiPrompt(`精灵「${old}」改名（地图掉落与进化指向同步更新，点保存精灵生效）：`, old, "精灵改名");
+      if (nn === null || nn === undefined) return;
+      if (String(nn).trim() === String(old)) return;
+      const rerr = _renameSpirit(old, nn);
+      if (rerr) { toast(rerr, "bad"); return; }
+      refreshSpiritViews();
+      toast(`已改名「${old}」→「${String(nn).trim()}」，点保存精灵生效`, "ok");
     } else if (b.hasAttribute("data-assign-spirit")) {
       const spName = b.dataset.assignSpirit;
       const card = b.closest(".sp-card");
@@ -3092,6 +3150,7 @@ async function loadPool(skipAtlas = false) {
     }));
     POOL_ATTRS_DIRTY = false;
   } catch (e) {}
+  try { _applyPoolOrder(); } catch (e) {}
   try { renderPoolBox(); } catch (e) {}
   try { if (!skipAtlas && ATLAS_CUR === "weapon") renderAtlas(); } catch (e) {}
 }
@@ -3100,6 +3159,43 @@ function poolCount() {
 }
 let POOL_ATTRS = {};
 let POOL_ATTRS_DIRTY = false;
+let _POOL_ORDER = null;       // {SSR:[...],SR:[...],R:[...]} | null=未加载则按名稳定排
+function _applyPoolOrder() {
+  // 按 weapon_order 排 POOL_WEAPONS：收录的按序，未收录的新文件按名追加，显示稳定不乱跳
+  try {
+    const ord = _POOL_ORDER || {};
+    ["SSR", "SR", "R"].forEach((rar) => {
+      const arr = (POOL_WEAPONS && POOL_WEAPONS[rar]) || [];
+      const want = Array.isArray(ord[rar]) ? ord[rar].map(String) : [];
+      if (!want.length) { arr.sort((a, b) => String(a.name).localeCompare(String(b.name), "zh")); return; }
+      const pos = {};
+      want.forEach((n, i) => { if (!(n in pos)) pos[n] = i; });
+      arr.sort((a, b) => {
+        const pa = (a.name in pos) ? pos[a.name] : 1e9;
+        const pb = (b.name in pos) ? pos[b.name] : 1e9;
+        if (pa !== pb) return pa - pb;
+        return String(a.name).localeCompare(String(b.name), "zh");
+      });
+    });
+  } catch (e) {}
+}
+function _savePoolOrder(rar) {
+  // 从内存数组回写顺序（默认全栏；传 rar 则只写该栏），标脏待 persist
+  try {
+    const o = Object.assign({}, _POOL_ORDER || {});
+    ["SSR", "SR", "R"].forEach((r) => {
+      if (!rar || r === rar) o[r] = ((POOL_WEAPONS && POOL_WEAPONS[r]) || []).map((it) => it.name);
+    });
+    _POOL_ORDER = o;
+  } catch (e) {}
+}
+async function _persistPoolOrder() {
+  // 顺序即时持久化：商城图鉴.weapon_order（JSON 串，与 treasure_effects 同口径，不碰武器文件与属性）
+  const o = _POOL_ORDER || { SSR: [], SR: [], R: [] };
+  const r = await getBridge().apiPost("config/save", { "商城图鉴": { "weapon_order": JSON.stringify(o) } });
+  if (r && r.error) throw new Error(r.error);
+  try { if (CFG && CFG.cur && CFG.cur["商城图鉴"]) CFG.cur["商城图鉴"]["weapon_order"] = (typeof o === "string" ? o : JSON.stringify(o)); } catch (e) {}
+}
 function renderPoolBox(forceOpen=false){
   const box=document.getElementById("poolWeaponBox");
   if(!box) return;
@@ -3716,7 +3812,7 @@ async function renderAtlas(curCfg){
     const mkSec = (title, items, addId, delAttr, sys, extraBtns = "") => {
       let h = `<div style="border:1px solid var(--line);border-radius:var(--radius-xs);padding:8px 10px;background:var(--panel2)"><div style="font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">${title} (${items.length}) <span style="margin-left:auto;display:inline-flex;gap:4px;flex-wrap:wrap">${extraBtns}<button class="ghost sm" id="${addId}">＋ 添加</button></span></div><div style="display:flex;flex-wrap:wrap;gap:5px">`;
       if (!items.length) h += `<span style="color:var(--muted)">暂无</span>`;
-      else h += items.map(n => `<span class="badge badge-primary" style="font-size:11.5px;display:inline-flex;align-items:center;gap:5px;padding:3px 8px">${esc(n)}<span style="cursor:pointer;font-weight:bold" data-atlas-del="${esc(sys||title)}|${esc(n)}" title="删除">×</span></span>`).join("");
+      else h += items.map(n => `<span class="badge badge-primary" style="font-size:11.5px;display:inline-flex;align-items:center;gap:5px;padding:3px 8px">${esc(n)}${(sys || "").includes("坐骑") ? `<span style="cursor:pointer" data-atlas-ride-up="${esc(n)}" title="上移">↑</span><span style="cursor:pointer" data-atlas-ride-down="${esc(n)}" title="下移">↓</span>` : ""}<span style="cursor:pointer;font-weight:bold" data-atlas-del="${esc(sys||title)}|${esc(n)}" title="删除">×</span></span>`).join("");
       h += `</div></div>`;
       return h;
     };
@@ -3724,8 +3820,8 @@ async function renderAtlas(curCfg){
     if (ATLAS_CUR === "weapon") {
       let h = `<div style="border:1px solid var(--line);border-radius:var(--radius-xs);padding:8px 10px;background:var(--panel2)"><div style="font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">抽奖武器池 (${weapons.length}) <span style="margin-left:auto;display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap"><button class="ghost sm" id="btnAtlasSavePoolAttrs">💾 保存属性</button><button class="ghost sm" id="btnAtlasResetPoolAttrs">↩️ 恢复默认</button><select id="atlasPoolRar" style="padding:3px 6px;border-radius:6px">${["SSR", "SR", "R"].map((r) => `<option value="${r}">${r}</option>`).join("")}</select><button class="ghost sm" id="btnAtlasAddWeapon">＋ 上传</button></span></div><div style="display:flex;flex-wrap:wrap;gap:5px">`;
       if (!weapons.length) h += `<span style="color:var(--muted)">暂无</span>`;
-      else h += weapons.map(({ rar, name: n }) => `<span class="badge badge-primary" style="font-size:11.5px;display:inline-flex;align-items:center;gap:5px;padding:3px 8px" title="${esc(rar)}">${esc(rar)}·${esc(n)}<span style="cursor:pointer;font-weight:bold" data-atlas-del="抽奖武器池|${esc(n)}" title="删除文件">×</span></span>`).join("");
-      h += `</div><div class="hint" style="margin-top:6px">文件即池：× 删除文件即时生效；改名/改稀有度请到🛒商城→抽奖武器池</div></div>`;
+      else h += weapons.map(({ rar, name: n }) => `<span class="badge badge-primary" style="font-size:11.5px;display:inline-flex;align-items:center;gap:5px;padding:3px 8px" title="${esc(rar)}">${esc(rar)}·${esc(n)}<span style="cursor:pointer" data-atlas-pool-up="${esc(rar)}|${esc(n)}" title="上移">↑</span><span style="cursor:pointer" data-atlas-pool-down="${esc(rar)}|${esc(n)}" title="下移">↓</span><span style="cursor:pointer;font-weight:bold" data-atlas-del="抽奖武器池|${esc(n)}" title="删除文件">×</span></span>`).join("");
+      h += `</div><div class="hint" style="margin-top:6px">文件即池：× 删除文件即时生效；改名/改稀有度请到🛒商城→抽奖武器池；↑↓ 排序即时保存</div></div>`;
       html += h;
     }
     else if (ATLAS_CUR === "treasure") {
@@ -3751,6 +3847,7 @@ async function renderAtlas(curCfg){
         + `<span style="margin-left:auto;display:inline-flex;gap:4px;flex-wrap:wrap">`
         + `<button class="ghost sm" id="btnAtlasSaveMaps">💾 保存精灵</button>`
         + `<button class="ghost sm" id="btnAtlasResetMaps">↩️ 恢复默认</button>`
+        + `<button class="ghost sm" id="btnAtlasClearMaps">🧹 清空地图</button>`
         + `</span></div>`;
       if (!_names.length) {
         const _bc = (() => { try { return Object.keys((SPIRIT && SPIRIT._builtin && SPIRIT._builtin.maps) || {}).length; } catch (e) { return 0; } })();
@@ -3820,14 +3917,56 @@ async function renderAtlas(curCfg){
           try { if (window._TREAS_EFF) delete window._TREAS_EFF[name]; } catch (e) {}
           await persistTreasure();
           toast("已删除并保存", "ok");
+          renderAtlas();
         } else if (sys.includes("坐骑")) {
           delete SHOP_RIDE[name];
           await persistRideShop();
           toast("已删除并保存", "ok");
+          renderAtlas();
         }
       } catch (e) { toast("删除失败: " + e.message, "bad"); }
-      renderAtlas();
     }));
+    // 图鉴排序委托（绑在 atlasBox 上一次，多次渲染不重复）：坐骑改内存序即时保存，武器顺序即时保存
+    if (!box.dataset.atlasSortBound) {
+      box.dataset.atlasSortBound = "1";
+      box.addEventListener("click", async (e) => {
+        const t = e.target && e.target.closest ? e.target : null;
+        if (!t || !box.contains(t)) return;
+        const upR = t.closest("[data-atlas-ride-up]");
+        const dnR = t.closest("[data-atlas-ride-down]");
+        if (upR || dnR) {
+          const n = upR ? upR.dataset.atlasRideUp : dnR.dataset.atlasRideDown;
+          if (n && _moveKey(SHOP_RIDE, n, upR ? -1 : 1)) {
+            try { await persistRideShop(); toast("已排序并保存", "ok"); }
+            catch (err) { toast("保存失败: " + (err.message || err), "bad"); }
+            renderAtlas();
+          }
+          return;
+        }
+        const upP = t.closest("[data-atlas-pool-up]");
+        const dnP = t.closest("[data-atlas-pool-down]");
+        if (upP || dnP) {
+          const v = upP ? upP.dataset.atlasPoolUp : dnP.dataset.atlasPoolDown;
+          const _parts = String(v || "").split("|");
+          const _rar = _parts[0];
+          const _nm = _parts.slice(1).join("|");
+          const _arr = (POOL_WEAPONS && POOL_WEAPONS[_rar]) || null;
+          if (_arr && _nm) {
+            const _i = _arr.findIndex((it) => it && it.name === _nm);
+            const _j = _i + (upP ? -1 : 1);
+            if (_i >= 0 && _j >= 0 && _j < _arr.length) {
+              const _tmp = _arr[_i]; _arr[_i] = _arr[_j]; _arr[_j] = _tmp;
+              _savePoolOrder(_rar);
+              try { await _persistPoolOrder(); toast("已排序并保存", "ok"); }
+              catch (err) { toast("保存失败: " + (err.message || err), "bad"); }
+              renderAtlas();
+              try { renderPoolBox(true); } catch (err2) {}
+            }
+          }
+          return;
+        }
+      });
+    }
     try {
       // 委托绑在 atlasBox 上（一次，多次渲染不重复），覆盖地图卡与未上架区
       bindSpiritMapCards(box);
@@ -3846,6 +3985,15 @@ async function renderAtlas(curCfg){
     }));
     document.getElementById("btnAtlasSaveMaps")?.addEventListener("click", () => saveSpiritKind("all"));
     document.getElementById("btnAtlasResetMaps")?.addEventListener("click", () => resetSpiritKind("all"));
+    document.getElementById("btnAtlasClearMaps")?.addEventListener("click", async () => {
+      if (!SPIRIT) { toast("请先加载图鉴", "bad"); return; }
+      if (!(await uiConfirm("直接清空全部精灵地图？精灵保留（进未上架区），旧地图不保留（快照可回滚）。", "清空地图"))) return;
+      try {
+        SPIRIT.maps = {};
+        await saveSpiritKind("all");
+        refreshSpiritViews();
+      } catch (e) { toast("清空失败: " + e.message, "bad"); }
+    });
     document.getElementById("btnAtlasAddMap")?.addEventListener("click", async () => {
       if (!SPIRIT) { toast("请先加载图鉴", "bad"); return; }
       const n = await uiPrompt("输入新地图名称：", "", "添加地图");
@@ -3922,6 +4070,11 @@ async function loadShops(skipAtlas = false) {
     else if (!_rr.blank) { SHOP_RIDE = {}; SHOP_RIDE_CUSTOM = true; }
     else { SHOP_RIDE = JSON.parse(JSON.stringify(DEFAULT_RIDE_SHOP)); SHOP_RIDE_CUSTOM = false; }
     if (_rr.corrupt) toast("坐骑商城配置损坏，已载入内置，保存将覆盖", "bad");
+    try {
+      const _te = sec["weapon_order"];
+      if (_te && typeof _te === "object" && !Array.isArray(_te)) _POOL_ORDER = { ..._te };
+      else if (typeof _te === "string" && _te.trim()) { try { const d = JSON.parse(_te); if (d && typeof d === "object") _POOL_ORDER = d; } catch (e) {} }
+    } catch (e) {}
     try {
       const _te = sec["treasure_effects"];
       if (_te && typeof _te === "object" && !Array.isArray(_te)) window._TREAS_EFF = { ..._te };
