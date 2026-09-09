@@ -18,7 +18,7 @@ except ImportError:
     except ImportError:
         import slave  # type: ignore
 
-PLUGIN_VERSION = "0.7.28"
+PLUGIN_VERSION = "0.7.29"
 
 
 def _extract_param(request, key, default=""):
@@ -856,7 +856,7 @@ def _airdrop_batch(targets, add_money, add_stamina, add_tickets):
             ST._DB.commit()
         except Exception:
             try:
-                ST._DB.rollback()
+                ST._safe_rollback()
             except Exception:
                 pass
             raise

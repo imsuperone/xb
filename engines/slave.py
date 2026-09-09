@@ -1864,6 +1864,11 @@ def handle(gid, qq, raw):
     return None
 
 # Fix: table-driven exact (re-added)
+# 已退役查询（v0.7.29 删除）：查询更新/查询版本/查询维护 不再越权转发超管；
+# 查询坐骑/精灵/帮派/冒险/查询地图/查询菜单 仅静默放行，避免奴隶查询截胡其他系统。
+# 注意：变量名刻意避开 _need/_ADMIN_CMDS/_ROUTE_EXACT，调用处用变量引用，
+# 使指令采集器不收录（WebUI 指令页不再出现），行为保持全静默。
+_QUERY_SILENT = ("查询更新", "查询版本", "查询维护", "查询坐骑", "查询精灵", "查询帮派", "查询冒险", "查询地图", "查询菜单")
 _ROUTE_EXACT = {
     "我的信息": lambda gid, qq, target, st, text: cmd_myinfo(gid, qq, st),
     "我要自由": lambda gid, qq, target, st, text: cmd_freedom(gid, qq, st),
@@ -1983,30 +1988,10 @@ def _route_locked(gid, qq, raw):
             return cmd_query(gid, qq, t, st)
         return cmd_myinfo(gid, qq, st)
     if text.startswith("查询"):
-        # 特殊别名：查询更新 / 查询版本 -> 转发到更新检测
-        if text.startswith(("查询更新", "查询版本", "查询 版本")):
-            try:
-                from . import superadmin
-                return superadmin.handle(gid, qq, "检查更新", is_admin=True)
-            except Exception:
-                try:
-                    import superadmin
-                    return superadmin.handle(gid, qq, "检查更新", is_admin=True)
-                except Exception:
-                    pass
-        # 查询维护 -> 转发到超管维护查询
-        if text.startswith(("查询维护", "查询 维护")):
-            try:
-                from . import superadmin
-                return superadmin.handle(gid, qq, "查看维护", is_admin=True)
-            except Exception:
-                try:
-                    import superadmin
-                    return superadmin.handle(gid, qq, "查看维护", is_admin=True)
-                except Exception:
-                    pass
-        # 其他系统指令前缀放行（查询坐骑 / 查询精灵 / 查询帮派 / 查询冒险 / 查询地图），避免截胡
-        if text.startswith(("查询坐骑", "查询 坐骑", "查询精灵", "查询 精灵", "查询帮派", "查询 帮派", "查询冒险", "查询 冒险", "查询地图", "查询 菜单")):
+        # v0.7.29：9 个查询转发/放行全部退役，一律静默（空格无关）。
+        # 此前查询更新/版本以 is_admin=True 越权转发超管（与全静默红线冲突），查询维护同理；
+        # 查询菜单（无空格）/查询 地图（有空格）此前漏放行会误查用户，现一并静默，行为一致。
+        if text.replace(" ", "").startswith(_QUERY_SILENT):
             return None
         # 查询 (不带参数) / 查询我 / 查询自己 -> 直接查看自己的档案
         rest = text[len("查询"):].strip()

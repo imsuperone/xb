@@ -658,7 +658,6 @@ def cmd_redpack(gid, qq, amount, pwd=None):
                 return "亲，您的账户余额不足，无法发红包！"
             if a.int("stamina") < cost_tili:
                 return f"体力不足，发红包需要{cost_tili}体力！"
-            ST._DB.execute("SELECT money FROM wallet WHERE gid=? AND qq=?", (int(gid), int(qq)))
             # 复用 txn_coins_acct 思路：直接操作 DB
             # 扣钱扣体力
             row = ST._DB.execute("SELECT money FROM wallet WHERE gid=? AND qq=?", (int(gid), int(qq))).fetchone()
@@ -678,6 +677,11 @@ def cmd_redpack(gid, qq, amount, pwd=None):
                            (int(gid), int(qq), pwd, amount, int(time.time())))
             ST._safe_commit()
     except Exception:
+        # 先回滚 try 内未提交的半截写入，再走降级重试，避免重复扣钱
+        try:
+            ST._safe_rollback()
+        except Exception:
+            pass
         ST.coins_add(gid, qq, -amount)
         ST.acct_add(gid, qq, "stamina", -cost_tili)
         a.set("redpack_send_time", str(int(time.time())))

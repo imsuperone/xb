@@ -198,7 +198,8 @@ async function callApi(endpoint, data = {}, method = "GET") {
   if (method === "GET") {
     try {
       let res = await _b.apiGet(cleanEp, cleanData);
-      if (!res || (typeof res === "object" && !Object.keys(res).length) || (res && res.status === "error" && res.message && res.message.includes("未找到"))) {
+      // 空数组/空对象是合法结果，直接返回；仅无响应或明确“未找到”才回退 POST，避免双倍请求
+      if (!res || (res && res.status === "error" && res.message && res.message.includes("未找到"))) {
         res = await _b.apiPost(cleanEp, cleanData);
       }
       return res;
@@ -510,7 +511,8 @@ function uiConfirm(msg, rawTitle = "确认操作") {
   return new Promise((resolve) => {
     const modal = document.getElementById("appModal");
     if (!modal) {
-      resolve(window.confirm ? window.confirm(title + "\n\n" + msg.replace(/<[^>]+>/g, "")) : true);
+      try { toast("弹窗不可用，已取消操作", "bad"); } catch (e) {}
+      resolve(false);
       return;
     }
     const closeBtn = document.getElementById("appModalClose");
@@ -567,7 +569,8 @@ function uiPrompt(msg, dflt = "", rawTitle = "请输入") {
   return new Promise((resolve) => {
     const modal = document.getElementById("appModal");
     if (!modal) {
-      resolve(window.prompt ? window.prompt(msg, dflt) : dflt);
+      try { toast("弹窗不可用，已取消操作", "bad"); } catch (e) {}
+      resolve(null);
       return;
     }
     const closeBtn = document.getElementById("appModalClose");
@@ -1112,7 +1115,7 @@ async function loadConfig() {
           row.className = "cfg-row has-checkbox";
           const chk = flagVal(v) ? "checked" : "";
           row.innerHTML = `<label>${esc(it.key)}</label>` +
-            `<div class="chk-wrap"><label class="switch"><input type="checkbox" ${chk} ${attrs}><span class="slider-toggle"></span></label></div>${small}`;
+            `<label class="switch"><input type="checkbox" ${chk} ${attrs}><span class="slider-toggle"></span></label>${small}`;
         } else if (isTextType(it.type) || isListType(it.type)) {
           row.innerHTML = `<label>${esc(it.key)}</label>` +
             `<textarea rows="${isListType(it.type) ? 3 : 2}" ${attrs}>${esc(v)}</textarea>${small}`;
@@ -1145,13 +1148,6 @@ function filterCfg() {
     } else {
       box.style.display = sysMatch ? "" : "none";
     }
-  });
-}
-
-function filterUsers() {
-  const q = (document.getElementById("userSearch").value || "").trim().toLowerCase();
-  document.querySelectorAll("#userBody tr").forEach((tr) => {
-    tr.style.display = !q || tr.textContent.toLowerCase().includes(q) ? "" : "none";
   });
 }
 
@@ -1330,6 +1326,43 @@ async function resetConfig() {
   } catch (e) {
     msg.textContent = "恢复失败: " + e.message;
     msg.classList.add("bad");
+    toast("恢复失败: " + e.message, "bad");
+  }
+}
+
+// ---------- 全部设置恢复默认（必要配置页专属，不动用户数据） ----------
+async function resetAllConfig() {
+  const msg = document.getElementById("saveMsg");
+  // 白名单排除：备份与密钥、用户定制数据不动（只动数值/开关类设置节）
+  const EXCLUDE = new Set(["备份配置", "商城图鉴", "精灵图鉴", "自定义指令配置", "群组开关配置"]);
+  try {
+    if (!CFG || !CFG.schema || !CFG.schema.defaults) { toast("配置尚未加载，请稍后重试", "bad"); return; }
+    const { defaults } = CFG.schema;
+    const payload = {};
+    const secs = new Set();
+    Object.keys(defaults).forEach((k) => {
+      const i = k.indexOf("__");
+      if (i < 0) return;
+      const sec = k.slice(0, i), key = k.slice(i + 2);
+      if (!sec || !key || EXCLUDE.has(sec)) return;
+      if (!payload[sec]) payload[sec] = {};
+      payload[sec][key] = defaults[k];
+      secs.add(sec);
+    });
+    if (!secs.size) { toast("无可恢复配置", "bad"); return; }
+    const secList = [...secs].sort();
+    if (!(await uiConfirm(
+      `将 ${secList.length} 节设置恢复为默认值，将覆盖当前设置（${secList.join("、")}）？\n\n` +
+      `不动：备份配置（含WebDAV地址/账号/自动备份开关/间隔/保留数）、商城图鉴、精灵图鉴、自定义指令、群组开关；\n` +
+      `不动用户数据（钱包/账户/群档案等）；旧数据不保留，保存前已自动快照，可到备份页恢复。`,
+      "全部设置恢复默认"))) return;
+    await getBridge().apiPost("config/save", payload);
+    if (msg) { msg.textContent = "已恢复全部设置默认（备份与用户定制除外）"; msg.className = "msg ok"; }
+    toast("已恢复全部设置默认值", "ok");
+    await loadConfig();
+    try { await loadCommands(); } catch (e) {}
+  } catch (e) {
+    if (msg) { msg.textContent = "恢复失败: " + e.message; msg.className = "msg bad"; }
     toast("恢复失败: " + e.message, "bad");
   }
 }
@@ -1603,7 +1636,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.7.28"
+        version: res.version || "0.7.29"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -2572,7 +2605,7 @@ function renderShop(q = "", forceOpen = false) {
   const names = Object.keys(shop).filter((k) => !q || k.toLowerCase().includes(q));
   const curDetails = body.querySelector("details");
   const wasOpen = curDetails ? curDetails.open : forceOpen;
-  let html = `<details class="panel" style="margin:0"${wasOpen ? " open" : ""}><summary style="cursor:pointer;font-weight:600">🎒 精灵道具商城 (spirit_shop) — ${names.length} 件（点击折叠/展开）${(!SPIRIT_CUSTOM.shop && !SPIRIT_DIRTY && !q) ? " · <span style='color:var(--muted);font-weight:400'>内置默认·未自定义</span>" : ""}</summary>`;
+  let html = `<details class="panel" style="margin:0"${wasOpen ? " open" : ""}><summary style="cursor:pointer;font-weight:600">🎒 精灵道具商城 — ${names.length} 件</summary>`;
   html += `<div class="hint" style="margin-top:8px">类型决定效果：精灵球=收服率%（大师球100必中）/ 等级=奇异甜食+Lv / HP·攻击·防御·特攻·特防=+对应点数 / 进化=进化液。改完点保存道具，只写精灵道具。</div>`;
   html += `<div style="margin-top:8px"><button id="shopAddItemTop" class="ghost sm">＋ 添加精灵道具</button></div>`;
   if (!Object.keys(shop).length && !q) {
@@ -2773,6 +2806,7 @@ document.getElementById("btnSave")?.addEventListener("click", saveConfig);
 document.getElementById("btnAutoBalance")?.addEventListener("click", openAutoBalanceModal);
 document.getElementById("btnAutoBalance2")?.addEventListener("click", openAutoBalanceModal);
 document.getElementById("btnReset")?.addEventListener("click", resetConfig);
+document.getElementById("btnResetAll")?.addEventListener("click", resetAllConfig);
 const rkSel = document.getElementById("rankType");
 rkSel?.addEventListener("change", () => loadRank(rkSel.value));
 document.getElementById("btnRank")?.addEventListener("click", () => loadRank(rkSel ? rkSel.value : "money"));
@@ -3035,7 +3069,7 @@ function renderPoolBox(forceOpen=false){
   const wasOpen=curDetails?curDetails.open:forceOpen;
   const openGroups = {};
   try { box.querySelectorAll("details[data-pool-group]").forEach((d) => { openGroups[d.dataset.poolGroup] = d.open; }); } catch (e) {}
-  let html=`<details class="panel" style="margin:0"${wasOpen?" open":""}><summary style="cursor:pointer;font-weight:600">🎰 抽奖武器池 — ${poolCount()} 件（文件即池，改名/稀有度/删/传即时生效，属性需保存）</summary>`;
+  let html=`<details class="panel" style="margin:0"${wasOpen?" open":""}><summary style="cursor:pointer;font-weight:600">🎰 抽奖武器池 — ${poolCount()} 件</summary>`;
   html+=`<div class="hint" style="margin-top:8px">武器=图片文件本身：改名改文件名，稀有度改所在目录；攻击加成参战、描述进详情，改完点保存武器属性</div>`;
   html+=`<div style="margin-top:8px"><button class="ghost sm" id="btnPoolUploadTop">＋ 添加武器</button></div>`;
   ["SSR","SR","R"].forEach((rar)=>{
@@ -3369,7 +3403,7 @@ function renderShopRideBox(forceOpen = false) {
   // 默认收起；若用户已手动展开或发生增删改，则保持展开
   const curDetails = box.querySelector("details");
   const wasOpen = curDetails ? curDetails.open : forceOpen;
-  let html = `<details class="panel" style="margin:0"${wasOpen ? " open" : ""}><summary style="cursor:pointer;font-weight:600">🐴 坐骑商城 (ride_shop) — ${entries.length} 件（点击折叠/展开）${(SHOP_RIDE_CUSTOM || SHOP_DIRTY) ? "" : " · <span style='color:var(--muted);font-weight:400'>内置默认·未自定义</span>"}</summary>`;
+  let html = `<details class="panel" style="margin:0"${wasOpen ? " open" : ""}><summary style="cursor:pointer;font-weight:600">🐴 坐骑商城 — ${entries.length} 件</summary>`;
   html += `<div class="hint" style="margin-top:8px">每行一个坐骑，支持改名、改价、删、绑图（图片路径如 data/img/rides/企鹅.jpg，留空自动匹配）</div>`;
   html += `<div style="margin-top:8px"><button class="ghost sm" id="btnRideAddTop">＋ 添加坐骑</button></div>`;
   if (!entries.length) {
@@ -4008,7 +4042,7 @@ function renderSpiritUsersTable() {
     <td><span class="badge badge-primary">${r.count || 0} 只</span></td>
     <td>${r.active ? `<span class="badge badge-success">${esc(r.active)}</span>` : '<span style="color:var(--muted)">-</span>'}</td>
     <td>${r.best ? `<span class="badge badge-purple">${esc(r.best)}</span>` : '<span style="color:var(--muted)">-</span>'}</td>
-    <td><span class="badge badge-warning">Lv.${r.max_level || 0}</span></td>
+    <td><span class="badge badge-warn">Lv.${r.max_level || 0}</span></td>
     <td><span style="font-weight:700;color:var(--text)">${(r.total_power || 0).toLocaleString()}</span></td>
     <td><span class="badge badge-primary">${r.bag_count || 0} 件</span></td>
   </tr>`).join("");
