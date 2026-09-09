@@ -68,7 +68,8 @@ aiall.md
 # 发行包（本地三端同步，不进 GitHub）
 *.zip
 
-# 自检脚本（本地跑，不进 GitHub；发行包同样排除）
+# 本地自检/内部文件（本地跑，永不进 GitHub；发行包同样排除）
+scripts/
 verify_plugin.py
 
 # 隐私与运行时文件（绝不进仓库）
