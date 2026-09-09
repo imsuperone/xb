@@ -23,7 +23,7 @@ async def handle_analytics_overview(request):
 
     def _work():
         if ST._DB is None:
-            return {"ok": True, "summary": {}, "tiers": [], "activity_24h": []}
+            return {"ok": True, "summary": {}}
 
         _lock = getattr(ST, "_LOCK", None)
         if _lock is not None:
@@ -38,22 +38,7 @@ async def handle_analytics_overview(request):
             total_users_count = int(row[1]) if row and row[1] is not None else 0
             total_groups_count = int(row[2]) if row and row[2] is not None else 0
 
-            # 2. 财富阶层分布 (贫困 <1k, 小康 1k-10k, 富裕 10k-100k, 巨富 >100k)
-            cur.execute("""
-                SELECT
-                    SUM(CASE WHEN money < 10000 THEN 1 ELSE 0 END),
-                    SUM(CASE WHEN money >= 10000 AND money < 50000 THEN 1 ELSE 0 END),
-                    SUM(CASE WHEN money >= 50000 AND money < 200000 THEN 1 ELSE 0 END),
-                    SUM(CASE WHEN money >= 200000 THEN 1 ELSE 0 END)
-                FROM wallet
-            """)
-            row = cur.fetchone()
-            tier_poor = int(row[0]) if row and row[0] is not None else 0
-            tier_mid = int(row[1]) if row and row[1] is not None else 0
-            tier_rich = int(row[2]) if row and row[2] is not None else 0
-            tier_whale = int(row[3]) if row and row[3] is not None else 0
-
-            # 3. 银行储蓄与签到人次统计：SQL 侧聚合（原逐行 json.loads，百万行即秒级）
+            # 2. 银行储蓄与签到人次统计：SQL 侧聚合（原逐行 json.loads，百万行即秒级）
             #    语义与旧循环一致：deposit 按行取整累加；sign 取 sign_count 回退 total_sign_days；
             #    精灵仅统计数组/对象形态（JSON 字符串形态与旧逻辑同样计 0），spirits 优先于 bag_spirits；
             #    非法 JSON/非对象行整行跳过（旧 json.loads 抛错即跳过）；NULL data 视作 {}。
@@ -82,7 +67,7 @@ async def handle_analytics_overview(request):
             total_sign_count = int(row[2]) if row and row[2] is not None else 0
             total_spirits_count = int(row[3]) if row and row[3] is not None else 0
 
-            # 4. 奴隶生态与总身价统计：SQL 侧聚合（原 groups 全表逐行解析）
+            # 3. 奴隶生态与总身价统计：SQL 侧聚合（原 groups 全表逐行解析）
             #    非法 JSON/非对象/NULL 行按旧逻辑处理（NULL 视作 {} 计默认身价，其余跳过）
             default_init_price = ST.cfgi("费用配置", "初始身价", 500) if hasattr(ST, "cfgi") else 500
             cur.execute("""
@@ -108,12 +93,6 @@ async def handle_analytics_overview(request):
         total_economy_pool = total_wallet_money + total_bank_deposit
         avg_money_per_user = int(total_economy_pool / max(1, total_users_count))
 
-        # 5. 24小时活跃时段分布统计
-        activity_curve = [
-            {"hour": f"{h:02d}:00", "count": int((h**1.2 % 7 + (15 if 19 <= h <= 23 or 11 <= h <= 13 else 3)) * max(1, total_users_count/5))}
-            for h in range(24)
-        ]
-
         result = {
             "ok": True,
             "summary": {
@@ -129,14 +108,7 @@ async def handle_analytics_overview(request):
                 "total_slaves_count": total_slaves_count,
                 "total_masters_count": total_masters_count,
                 "total_spirits_count": total_spirits_count
-            },
-            "tiers": [
-                {"tier": "poor", "label": "初入江湖 (<1万)", "count": tier_poor, "color": "#94A3B8"},
-                {"tier": "mid", "label": "小康之家 (1万-5万)", "count": tier_mid, "color": "#3B82F6"},
-                {"tier": "rich", "label": "富甲一方 (5万-20万)", "count": tier_rich, "color": "#10B981"},
-                {"tier": "whale", "label": "富可敌国 (>20万)", "count": tier_whale, "color": "#F59E0B"}
-            ],
-            "activity_24h": activity_curve
+            }
         }
         return result
 

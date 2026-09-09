@@ -1,6 +1,6 @@
 # 小白机器人 (astrbot_plugin_xbbot) — 全代码架构文档 (aiall.md)
 
-> 版本：`v0.7.33` ｜ 对象：想从头到尾看懂这份代码的人（函数行号仍以 v0.7.28 为准，v0.7.29~33  printing 偏移：slave.py 查询块 -15 行、app.js +150 行、game.py +25 行左右）
+> 版本：`v0.7.34` ｜ 对象：想从头到尾看懂这份代码的人（函数行号仍以 v0.7.28 为准，v0.7.29~34  printing 偏移：slave.py 查询块 -15 行、app.js +80 行、game.py +25 行左右）
 > 规模：103 个文件，文本约 3.4 万行（图片等二进制除外）
 > 定位：AstrBot 群互动大插件（奴隶/签到/银行/娱乐/私聊/精灵/坐骑/超管/帮派/冒险 10 引擎 + WebUI 管理台）
 > 配套文档：`AIINFO.md`（状态卡：十二红线+铁律+交付流程，红线唯一出处）、`AIREADME.md`（交接手册：分层/存储/指令/数值/隔离矩阵/版本史）
@@ -35,7 +35,7 @@ astrbot_plugin_xbbot/
 │   ├── logger.py          # 194行：xb.log 日志引擎（2MB轮转）
 │   ├── en_map.py          # 194行：中英键映射（中文存英文，提高DB效率，显示仍中文）
 │   └── api/               # Web API 薄路由层（68接口，耗时走 asyncio.to_thread）
-│       ├── analytics.py   # 149行：大屏聚合
+│       ├── analytics.py   # 大屏聚合（KPI 三表汇总；v0.7.34 起删金字塔/伪曲线）
 │       ├── backup.py      # 749行：备份/恢复/快照/体检/WebDAV全套
 │       ├── config_api.py  # 577行：配置读写 + 三档智能平衡 + 漂移检测
 │       ├── game.py        # 929行：奴隶/精灵画像 + 图鉴CRUD + 武器池文件管理
@@ -237,10 +237,10 @@ dispatch 是旧导入兼容垫片（重导出探针表+超管列表）。test_ha
 | 文件 | 接口与函数 | 作用 |
 |---|---|---|
 | `stats.py` | `stats`→`handle_stats:18`（异步）、`rank`→`handle_rank:54`（异步） | 总览聚合（小库兜底重算存款）/ 5 维排行（昵称批量预取防 N+1，fetch_card 已移除） |
-| `analytics.py` | `analytics/overview`→`handle_analytics_overview:16`（异步+3 秒缓存） | 大屏：三表 SQL 聚合（钱包/银行/奴隶/签到/精灵）+ 财富四阶 + 伪 24h 曲线 |
+| `analytics.py` | `analytics/overview`→`handle_analytics_overview:16`（异步+3 秒缓存） | 大屏 KPI：三表 SQL 聚合（钱包/银行/奴隶/签到/精灵），v0.7.34 起无金字塔/曲线 |
 | `users.py` | `users`→`handle_users:49`（异步）/`user/edit:119`/`user/clear:567`/`user/export:??`/`user/import`/`users/export:234`/`users/import`/`clean_left`/`airdrop:661`（集目标+批量双异步） | 分页列表 / 单改（差值语义）/ 单导（b64）/ 全量导 / 退群清理（平台活名单为准）/ 单清 / 空投（单事务批量+脏缓存降级逐发） |
 | `groups.py` | `groups/list:12`（异步）/`toggle:47`/`delete:86` | 总开关 + 按群开关列表/切换/删除 |
-| `config_api.py` | `config/schema:20`/`get:39`/`save:59`、`commands`、`config/auto_balance:437`（备份+校准双异步）、`config/balance_state` | schema 下发 / 配置读写（WebDAV 密钥分流：密码留空=不变）/ 指令采集 / **三档智能平衡**（标准/休闲/硬核+真备份+身价联动校准）/ 漂移检测（13 签名键） |
+| `config_api.py` | `config/schema:20`/`get:39`/`save:59`、`commands`、`config/auto_balance:437`（备份+校准双异步）、`config/balance_state` | schema 下发 / 配置读写（WebDAV 密钥分流：密码留空=不变）/ 指令采集 / **三档智能平衡**（标准/休闲/硬核+真备份+身价联动校准）/ 漂移检测（12 签名键，抽武器花费因出厂混合态不进抽检） |
 | `game.py`（3 重接口 v0.7.30 起异步，其余同步毫秒级） | `slave/users:23`/`calibrate:139`、`spirit/users:197`、`spirits:308`、`spirits/save:336`、`gacha/weapons:414`、`weapons/pool`+`rename/move/delete/upload/img/attrs/replace_path` | 奴隶画像（身价≤0 自动补）/ 校准 / 精灵画像（战力公式）/ 图鉴三键读写（入库清洗脏条目）/ 武器名对照 / **池文件管理**（改名/移稀有度/删除/上传/单图预览/属性另存/内置选图） |
 | `images.py` | `list:36`（异步）/`upload:74`/`delete`/`rename`/`mkdir`/`copy`/`thumb`/`export:291`（异步） | 插件根为牢笼的文件库；上传 base64 双受理；预览单张≤200KB；导出 zip 硬排除备份/DB/密钥 |
 | `backup.py` | `backups/list:40`/`restore:86`（异步）/`delete`/`export:164`（异步）/`doctor:261`（双异步）/`prune`、快照 3 个、`backup/webdav/*` 5 个×2 前缀（异步）、`admin/clear:214`（异步，需双重确认） | 列表禁自动触发 / 热恢复清三缓存 / 体检锁内只查+VACUUM 锁外 60 秒熔断 / 远端下载验 SQLite 魔数+归档 |
@@ -400,7 +400,7 @@ dispatch 是旧导入兼容垫片（重导出探针表+超管列表）。test_ha
 
 | Tab | 内容 |
 |---|---|
-| 概览大屏 | 6 KPI + 财富金字塔 + 24h 曲线 + 快捷配置 + 空投/校准/体检/更新 |
+| 概览大屏 | 6 KPI + 快捷配置 + 空投/校准/体检/更新（v0.7.34 起无金字塔/曲线） |
 | 排行榜 | 5 维度 |
 | 用户管理 | 8 维排序 + 单改/单清/导入导出/空投/清退群 |
 | 奴隶用户 / 精灵用户 | 身价档案 / 精灵战力档案 |

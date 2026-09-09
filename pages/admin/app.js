@@ -405,10 +405,6 @@ function downloadBase64File(base64Data, filename) {
   }
 }
 
-function downloadBlob(blob, filename) {
-  triggerDownload(blob, filename);
-}
-
 function _formatModalText(msg) {
   if (!msg) return "";
   if (msg.includes("<div") || msg.includes("<strong") || msg.includes("<span") || msg.includes("<br")) {
@@ -1641,7 +1637,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.7.33"
+        version: res.version || "0.7.34"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -2866,12 +2862,11 @@ async function resetSpiritKind(kind) {
 }
 
 async function exportSpirits() {
-  // 导出与导入同一套格式：干净的 {spirits, maps, shop}
+  // 导出与导入同一套格式：干净的 {spirits, maps, shop}；走统一导出通道（自动下载+弹窗手动兜底）
   try {
     const data = SPIRIT || await getBridge().apiGet("spirits");
     const clean = { spirits: (data && data.spirits) || {}, maps: (data && data.maps) || {}, shop: (data && data.shop) || {} };
-    const blob = new Blob([JSON.stringify(clean, null, 2)], { type: "application/json" });
-    downloadBlob(blob, "xbbot_spirit_" + Date.now() + ".json");
+    triggerExportResult({ filename: "xbbot_spirit_" + Date.now() + ".json", mime: "application/json;charset=utf-8", rawText: JSON.stringify(clean, null, 2) });
     toast("图鉴已导出", "ok");
   } catch (e) { toast("导出失败: " + e.message, "bad"); }
 }
@@ -4142,12 +4137,12 @@ async function saveShops() {
 }
 
 async function exportShops() {
+  // 商城导出（仅坐骑 ride_shop，与导入同口径）；走统一导出通道（自动下载+弹窗手动兜底）
   try {
     const cur = await getBridge().apiGet("config/get");
     const sec = (cur || {})["商城图鉴"] || {};
     const payload = { ride_shop: sec["ride_shop"] || "" };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    downloadBlob(blob, `xbbot_shop_${Date.now()}.json`);
+    triggerExportResult({ filename: `xbbot_shop_${Date.now()}.json`, mime: "application/json;charset=utf-8", rawText: JSON.stringify(payload, null, 2) });
   } catch (e) { toast("导出失败: " + e.message, "bad"); }
 }
 async function importShops() {
@@ -4659,8 +4654,7 @@ document.getElementById("btnWebDAVRefreshFiles")?.addEventListener("click", () =
 document.getElementById("btnBackupExport")?.addEventListener("click", async () => {
   try {
     const data = await getBridge().apiGet("users/export", {});
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    downloadBlob(blob, `xbbot_backup_export_${Date.now()}.json`);
+    triggerExportResult({ filename: `xbbot_backup_export_${Date.now()}.json`, mime: "application/json;charset=utf-8", rawText: JSON.stringify(data, null, 2) });
   } catch(e){ toast("导出失败: "+e.message, "bad"); }
 });
 let _backupSearchTimer = null;
@@ -4921,7 +4915,6 @@ async function loadAnalytics() {
     const res = await getBridge().apiGet("analytics/overview");
     if (!res || !res.ok) return;
 
-    CURRENT_ANALYTICS_DATA = res;
     const sum = res.summary || {};
     const fmt = (n) => Number(n || 0).toLocaleString();
 
@@ -4936,74 +4929,9 @@ async function loadAnalytics() {
     if (el("anaSlaveCount")) el("anaSlaveCount").textContent = `奴隶: ${sum.total_slaves_count || 0} 人 / 奴隶主: ${sum.total_masters_count || 0} 人`;
     if (el("anaSignCount")) el("anaSignCount").textContent = `${fmt(sum.total_sign_count)} 次`;
     if (el("anaSignRate")) el("anaSignRate").textContent = `活跃度: 稳健`;
-    
-
-    // 渲染 SVG 财富阶层金字塔柱状图
-    renderTierChart(res.tiers || []);
-
-    // 渲染 24 小时群活跃折线图
-    renderActivityChart(res.activity_24h || []);
   } catch(e) {
     console.error("loadAnalytics error:", e);
   }
-}
-
-function renderTierChart(tiers) {
-  const container = document.getElementById("chartTierContainer");
-  if (!container) return;
-  const maxCount = Math.max(...tiers.map(t => t.count), 1);
-  const total = tiers.reduce((s, t) => s + t.count, 0) || 1;
-
-  let barsHtml = `<div style="width:100%;display:flex;flex-direction:column;gap:8px">`;
-  tiers.forEach(t => {
-    const pct = ((t.count / total) * 100).toFixed(1);
-    const barWidth = Math.max(8, (t.count / maxCount) * 100);
-    barsHtml += `
-      <div>
-        <div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:3px">
-          <span style="color:var(--text);font-weight:600">${esc(t.label)}</span>
-          <span style="color:var(--muted)">${t.count} 人 (${pct}%)</span>
-        </div>
-        <div style="width:100%;height:10px;background:var(--panel);border-radius:5px;overflow:hidden">
-          <div style="width:${barWidth}%;height:100%;background:${t.color};border-radius:5px;transition:width 0.6s ease"></div>
-        </div>
-      </div>
-    `;
-  });
-  barsHtml += `</div>`;
-  container.innerHTML = barsHtml;
-}
-
-function renderActivityChart(activity) {
-  const container = document.getElementById("chartActivityContainer");
-  if (!container || !activity.length) return;
-
-  const w = 320, h = 130;
-  const maxVal = Math.max(...activity.map(a => a.count), 1);
-  const pts = activity.map((a, i) => {
-    const x = (i / (activity.length - 1)) * (w - 20) + 10;
-    const y = h - 20 - (a.count / maxVal) * (h - 40);
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(" ");
-
-  const firstX = 10, lastX = w - 10;
-  const fillPath = `M ${firstX},${h - 20} L ${pts.replace(/ /g, " L ")} L ${lastX},${h - 20} Z`;
-
-  container.innerHTML = `
-    <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:100%;overflow:visible">
-      <defs>
-        <linearGradient id="actGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#3B82F6" stop-opacity="0.4"/>
-          <stop offset="100%" stop-color="#3B82F6" stop-opacity="0.0"/>
-        </linearGradient>
-      </defs>
-      <path d="${fillPath}" fill="url(#actGrad)"/>
-      <polyline fill="none" stroke="#3B82F6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" points="${pts}"/>
-      <text x="10" y="${h - 4}" fill="var(--muted)" font-size="9.5">00:00</text>
-      <text x="${w/2 - 12}" y="${h - 4}" fill="var(--muted)" font-size="9.5">12:00</text>
-      <text x="${w - 32}" y="${h - 4}" fill="var(--muted)" font-size="9.5">23:00</text>
-    </svg>
-  `;
 }
 
 // ==================== 3. 批量全员 / 定向群福利空投 ====================
