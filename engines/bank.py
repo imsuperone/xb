@@ -787,6 +787,17 @@ def cmd_recv_red(gid, qq, pwd):
     ST.acct_add(gid, qq, "charm", gain_meili + base_meili)
     a.set("redpack_code", pwd)
     ST.acct_save(gid, qq)
+    # 降级同样扣减余量，防多人超发（与主路径同 SQL；失败仅记过，下次领取仍受余量检查约束）
+    try:
+        with ST._LOCK:
+            if total - got <= 0:
+                ST._DB.execute("DELETE FROM redpacks WHERE gid=? AND pwd=?", (int(gid), str(pwd)))
+            else:
+                ST._DB.execute("UPDATE redpacks SET amount=? WHERE gid=? AND pwd=?",
+                               (total - got, int(gid), str(pwd)))
+            ST._safe_commit()
+    except Exception:
+        pass
     return f"恭喜！你抢到了 {got}{ST.coin_name()}，魅力+{gain_meili + base_meili}！"
 
 
@@ -908,14 +919,17 @@ def cmd_jailbreak(gid, qq):
 
 
 def cmd_go_jail(gid, qq):
-    """我要进监狱: 主动入狱10分钟，增加体力，每日限5次"""
+    """我要进监狱: 主动入狱10分钟，增加体力，每日限N次（银行配置.进监狱次数）"""
     a = _acct(gid, qq)
     if _check_jail(a):
         return "您已在监狱中，无需再次入狱！"
     key = f"jailgo_{gid}_{qq}_{dt.date.today()}"
     cnt = int(ST.recall_get(key, "0") or 0)
-    if cnt >= 5:
-        return "亲，您今日主动入狱次数已达上限(5次)！"
+    lim = ST.cfgi("银行配置", "进监狱次数", 8)
+    if lim <= 0:
+        lim = 8
+    if cnt >= lim:
+        return f"亲，您今日主动入狱次数已达上限({lim}次)！"
     add_stam = ST.cfgi("银行配置", "进监狱增加体力", 10)
     if add_stam <= 0:
         add_stam = 10
@@ -924,7 +938,7 @@ def cmd_go_jail(gid, qq):
     ST.recall_set(key, str(cnt + 1))
     ST.acct_save(gid, qq)
     left = 10
-    return f"成功入狱{left}分钟！获得{add_stam}点体力，今日已入狱{cnt+1}/5次，好好反省吧！"
+    return f"成功入狱{left}分钟！获得{add_stam}点体力，今日已入狱{cnt+1}/{lim}次，好好反省吧！"
 
 
 def cmd_sell_slave(gid, qq, target):

@@ -276,6 +276,16 @@
         "type": "int",
         "description": "",
         "default": -200
+      },
+      "买入身价上涨": {
+        "type": "float",
+        "description": "买下奴隶成交身价上涨倍率",
+        "default": 1.35
+      },
+      "赎身花费倍率": {
+        "type": "float",
+        "description": "赎身/自赎花费=身价×倍率",
+        "default": 1.1
       }
     }
   },
@@ -341,6 +351,16 @@
         "type": "int",
         "description": "我要自由冷却(分钟)",
         "default": 30
+      },
+      "祈福间隔": {
+        "type": "int",
+        "description": "祈福冷却(分钟)",
+        "default": 3
+      },
+      "释放间隔": {
+        "type": "int",
+        "description": "释放奴隶冷却(分钟)",
+        "default": 1
       }
     }
   },
@@ -356,6 +376,11 @@
         "type": "int",
         "description": "",
         "default": 20
+      },
+      "折磨成功率": {
+        "type": "int",
+        "description": "折磨成功概率%",
+        "default": 88
       }
     }
   },
@@ -750,6 +775,11 @@
         "type": "int",
         "description": "劫狱魅力减少",
         "default": 0
+      },
+      "进监狱次数": {
+        "type": "int",
+        "description": "每日主动进监狱次数上限",
+        "default": 8
       }
     }
   },

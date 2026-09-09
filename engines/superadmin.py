@@ -324,6 +324,18 @@ def cmd_clear(gid, qq, arg):
             except Exception:
                 pass
         ST.flush_all()
+        # 清空后帮派缓存即时失效，避免列表/排行残留已删成员（15 秒窗口）
+        try:
+            from . import guild as _gd
+            if hasattr(_gd, "_invalidate_guild_cache"):
+                _gd._invalidate_guild_cache(gid)
+        except Exception:
+            try:
+                import guild as _gd2
+                if hasattr(_gd2, "_invalidate_guild_cache"):
+                    _gd2._invalidate_guild_cache(gid)
+            except Exception:
+                pass
         return f"已彻底清空 <{_name(t)}> 的所有数据（包含奴隶、精灵与礼包状态，可重新领取新手礼包）。"
     return "未知操作。"
 
@@ -449,10 +461,10 @@ def _version():
                 except Exception:
                     pass
         if not ver:
-            ver = "0.7.31"
+            ver = "0.7.32"
         return f"小白版本：{ver}"
     except Exception:
-        return "小白版本：0.7.31"
+        return "小白版本：0.7.32"
 
 # ---- 统一入口（测试指令仅超管，WebUI可配但不显示于MENU，已删 个人信息） ----
 # 注意：凡 handle() 响应的别名必须同步进本表；非超管命中一律静默 None（BY DESIGN，见 AIINFO）

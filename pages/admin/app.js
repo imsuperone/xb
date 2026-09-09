@@ -278,7 +278,7 @@ function showExportModal({ filename, blob, blobUrl, rawText, base64Data }) {
 
   if (content) content.innerHTML = actionsHtml;
 
-  const saveBtn = document.getElementById("btnModalSaveFile");
+  const saveBtn = document.getElementById("btnModalSaveFileLink");
   if (saveBtn) {
     saveBtn.onclick = (e) => {
       e.preventDefault();
@@ -1641,7 +1641,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.7.31"
+        version: res.version || "0.7.32"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -1876,11 +1876,6 @@ function _bindCmdListOnce() {
       d.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }
   }, true);
-  el.addEventListener("input", (e) => {
-    if (e.target && e.target.matches && e.target.matches("[data-wake]")) {
-      CMD_CFG_WAKE_DIRTY = true;
-    }
-  });
   const exp = document.getElementById("btnCmdExpandAll");
   if (exp) exp.addEventListener("click", () => {
     document.querySelectorAll("#cmdList details.cmd-block").forEach((d) => { d.open = true; });
@@ -1976,8 +1971,6 @@ async function loadCommands() {
     err("commands: " + e.message);
   }
 }
-let CMD_CFG_WAKE_DIRTY = false;
-
 function cmdAliasesFor(cmd) {
   const cust = CMD_CFG["自定义指令配置"] || {};
   return Object.keys(cust).filter((t) => cust[t] && cust[t].command === cmd && t !== cmd);
@@ -1999,10 +1992,10 @@ function openCmdEditor() {
   const admBox = document.getElementById("cmdModalAdmin");
   if (admBox) admBox.checked = (((CMD_CFG["指令权限配置"] || {})[effKey] || "").trim() === "超管");
   // 删除按钮: 仅编辑已有自定义指令时显示
-  const delBtn = document.getElementById("btnCmdModalDelete");
+  const delBtn = document.getElementById("cmdModalDel");
   if (delBtn) delBtn.style.display = (sys === "自定义" && !isNew) ? "" : "none";
   document.getElementById("cmdModalTitle").textContent = isNew ? "添加自定义指令" : ("编辑指令 · " + curCmd);
-  (document.getElementById("cmdModalSysBadge") || document.getElementById("cmdModalSys")).textContent = isNew ? "自定义指令" : sys;
+  (document.getElementById("cmdModalSysBadge") || document.getElementById("cmdModalSys") || {}).textContent = isNew ? "自定义指令" : sys;
   // 触发词: 可编辑(| 分隔多个); 内置指令默认=指令名(+已有别名)
   const nameInp = document.getElementById("cmdModalName");
   nameInp.value = isNew ? "" : [curCmd, ...cmdAliasesFor(curCmd)].join("|");
@@ -2760,7 +2753,7 @@ async function saveSpiritKind(kind, silent = false) {
   const msg = document.getElementById("spiritMsg");
   if (!SPIRIT) {
     if (!silent) toast("请先加载图鉴", "bad");
-    return !!silent;
+    return false; // 加载失败时如实返回失败，全部保存据此告警，不误报成功
   }
   if (!["all", "shop"].includes(kind)) return false;
   try {
@@ -3516,6 +3509,7 @@ function renderShopRideBox(forceOpen = false) {
     const tab=document.getElementById("tab-imgs"); if(tab) tab.classList.add("on");
     await loadImages("data/img/rides");
     // 在根目录顶部显示绑定提示（仅图片可选）
+    const _oldTip = document.getElementById("shopPickTip"); if (_oldTip) _oldTip.remove();
     const tip=document.createElement("div"); tip.id="shopPickTip"; tip.style="background:var(--accSoft);border:1px solid var(--acc);padding:8px 12px;border-radius:8px;margin-bottom:10px";
     tip.innerHTML=`<b>为坐骑 "${esc(k)}" 选择内置图：</b> 坐骑目录 data/img/rides（png/jpg/gif等），然后 <button class="ghost sm" id="btnShopPickConfirm">确定绑定</button> <button class="ghost sm" id="btnShopPickCancel">取消</button>`;
     const panel=document.querySelector("#tab-imgs .panel"); if(panel) panel.prepend(tip);

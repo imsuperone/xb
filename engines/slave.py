@@ -1988,10 +1988,10 @@ def _route_locked(gid, qq, raw):
             return cmd_query(gid, qq, t, st)
         return cmd_myinfo(gid, qq, st)
     if text.startswith("查询"):
-        # v0.7.29：9 个查询转发/放行全部退役，一律静默（空格无关）。
+        # v0.7.29：9 个查询转发/放行全部退役，一律静默（空白无关，含全角/制表符）。
         # 此前查询更新/版本以 is_admin=True 越权转发超管（与全静默红线冲突），查询维护同理；
         # 查询菜单（无空格）/查询 地图（有空格）此前漏放行会误查用户，现一并静默，行为一致。
-        if text.replace(" ", "").startswith(_QUERY_SILENT):
+        if _re.sub(r"\s+", "", text).startswith(_QUERY_SILENT):
             return None
         # 查询 (不带参数) / 查询我 / 查询自己 -> 直接查看自己的档案
         rest = text[len("查询"):].strip()
