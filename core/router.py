@@ -415,7 +415,7 @@ def _custom_cmd(raw, store):
         sec = store._CONFIG.get(_CUSTOM_SEC) if hasattr(store, "_CONFIG") else None
         if not isinstance(sec, dict):
             return None, raw
-        raw = str(raw or "")
+        raw = str(raw or "").strip()
         hit = None
         try:
             _cmds = _custom_idx(store).get("cmds") or ()
@@ -467,6 +467,22 @@ def _cmd_disabled(raw, store):
         if _dis:
             for k in _dis:
                 if raw_n.startswith(_norm_cmd(k)):
+                    # 最长优先：若存在更长的已知指令键同样前缀命中且未被禁用，则不拦截
+                    # （如禁“签到”不应误杀“签到系统”菜单）
+                    try:
+                        _sec_all = store._CONFIG.get(_DISABLE_SEC) if hasattr(store, "_CONFIG") else None
+                        if isinstance(_sec_all, dict):
+                            _kl = len(_norm_cmd(k))
+                            for _ak in _sec_all.keys():
+                                _ak = str(_ak)
+                                if not _ak or len(_norm_cmd(_ak)) <= _kl:
+                                    continue
+                                if raw_n.startswith(_norm_cmd(_ak)):
+                                    _av = str(_sec_all[_ak]).strip()
+                                    if not (_av == "假" or _av.lower() in ("0", "false")):
+                                        return None
+                    except Exception:
+                        pass
                     return k
             return None
         sec = store._CONFIG.get(_DISABLE_SEC) if hasattr(store, "_CONFIG") else None
@@ -481,6 +497,18 @@ def _cmd_disabled(raw, store):
                 continue
             if raw_n.startswith(_norm_cmd(k)) and (hit is None or len(_norm_cmd(k)) > len(_norm_cmd(hit))):
                 hit = k
+        if hit is not None:
+            try:
+                _hl = len(_norm_cmd(hit))
+                for _ak, _av in sec.items():
+                    _ak = str(_ak)
+                    if not _ak or len(_norm_cmd(_ak)) <= _hl:
+                        continue
+                    if raw_n.startswith(_norm_cmd(_ak)):
+                        if not (str(_av).strip() == "假" or str(_av).strip().lower() in ("0", "false")):
+                            return None
+            except Exception:
+                pass
         return hit
     except Exception:
         return None
@@ -499,6 +527,20 @@ def _cmd_need_admin(raw, store):
         if _adm:
             for k in _adm:
                 if raw_n.startswith(_norm_cmd(k)):
+                    # 同禁用：更长的非超管指令键优先（如“签到系统”所有人 vs “签到”超管时不误静默）
+                    try:
+                        _sec_all = store._CONFIG.get(_PERM_SEC) if hasattr(store, "_CONFIG") else None
+                        if isinstance(_sec_all, dict):
+                            _kl = len(_norm_cmd(k))
+                            for _ak in _sec_all.keys():
+                                _ak = str(_ak)
+                                if not _ak or len(_norm_cmd(_ak)) <= _kl:
+                                    continue
+                                if raw_n.startswith(_norm_cmd(_ak)):
+                                    if str(_sec_all[_ak]).strip() != _ADMIN_ONLY:
+                                        return None
+                    except Exception:
+                        pass
                     return k
             return None
         sec = store._CONFIG.get(_PERM_SEC) if hasattr(store, "_CONFIG") else None
@@ -511,6 +553,18 @@ def _cmd_need_admin(raw, store):
                 continue
             if raw_n.startswith(_norm_cmd(k)) and (hit is None or len(_norm_cmd(k)) > len(_norm_cmd(hit))):
                 hit = k
+        if hit is not None:
+            try:
+                _hl = len(_norm_cmd(hit))
+                for _ak, _av in sec.items():
+                    _ak = str(_ak)
+                    if not _ak or len(_norm_cmd(_ak)) <= _hl:
+                        continue
+                    if raw_n.startswith(_norm_cmd(_ak)):
+                        if str(_av).strip() != _ADMIN_ONLY:
+                            return None
+            except Exception:
+                pass
         return hit
     except Exception:
         return None

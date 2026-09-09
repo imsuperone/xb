@@ -613,12 +613,31 @@ def cmd_rob_zone(gid, qq):
         if loot <= 0:
             return "银行金库暂时空虚，打劫失败，下次再来！"
     # P1: 双人同时打劫同一victim时TOCTOU双花，同事务原子划转
+    # 失败时按现余额重算loot再试一次，防扣少发多凭空印钱
     try:
-        if hasattr(ST, "txn_two_wallets") and ST.txn_two_wallets(gid, victim, qq, loot):
-            pass
-        else:
-            ST.coins_add(gid, victim, -loot)
-            ST.coins_add(gid, qq, loot)
+        _done = bool(hasattr(ST, "txn_two_wallets") and ST.txn_two_wallets(gid, victim, qq, loot))
+        if not _done:
+            try:
+                _cur_v = int(ST.coins_get(gid, victim) or 0)
+            except Exception:
+                _cur_v = 0
+            # 保底路径（victim原为0）允许银行垫付，不重算；否则按现余额钳制
+            _was_bailout = False
+            try:
+                _was_bailout = (loot > 0 and _cur_v <= 0)
+            except Exception:
+                pass
+            if not _was_bailout:
+                loot = min(_cur_v, loot)
+                if loot <= 0:
+                    a.set("rob_bank_time", _now_s())
+                    ST.acct_save(gid, qq)
+                    return "银行金库暂时空虚，打劫失败，下次再来！"
+                if hasattr(ST, "txn_two_wallets") and ST.txn_two_wallets(gid, victim, qq, loot):
+                    _done = True
+            if not _done:
+                ST.coins_add(gid, victim, -loot)
+                ST.coins_add(gid, qq, loot)
     except Exception:
         ST.coins_add(gid, victim, -loot)
         ST.coins_add(gid, qq, loot)
@@ -788,13 +807,28 @@ def cmd_recv_red(gid, qq, pwd):
     a.set("redpack_code", pwd)
     ST.acct_save(gid, qq)
     # 降级同样扣减余量，防多人超发（与主路径同 SQL；失败仅记过，下次领取仍受余量检查约束）
+    # 并发双抢：最终扣减前重读现余量并钳制got，空包直接返回，防超发印钱
     try:
         with ST._LOCK:
-            if total - got <= 0:
+            try:
+                _row2 = ST._DB.execute("SELECT amount FROM redpacks WHERE gid=? AND pwd=?", (int(gid), str(pwd))).fetchone() if ST._DB is not None else None
+                _cur_total = int(_row2[0]) if _row2 else 0
+            except Exception:
+                _cur_total = total
+            if _cur_total <= 0:
+                try:
+                    ST._DB.execute("DELETE FROM redpacks WHERE gid=? AND pwd=?", (int(gid), str(pwd)))
+                    ST._safe_commit()
+                except Exception:
+                    pass
+                return f"恭喜！你抢到了 {got}{ST.coin_name()}，魅力+{gain_meili + base_meili}！"
+            if got > _cur_total:
+                got = _cur_total
+            if _cur_total - got <= 0:
                 ST._DB.execute("DELETE FROM redpacks WHERE gid=? AND pwd=?", (int(gid), str(pwd)))
             else:
                 ST._DB.execute("UPDATE redpacks SET amount=? WHERE gid=? AND pwd=?",
-                               (total - got, int(gid), str(pwd)))
+                               (_cur_total - got, int(gid), str(pwd)))
             ST._safe_commit()
     except Exception:
         pass
@@ -1018,8 +1052,25 @@ def cmd_sell_slave(gid, qq, target):
     a.set("rob_time", _now_s())
     if random.random() * 100 < prob:
         loot = min(ST.coins_get(gid, target), random.randint(lo, hi))
-        ST.coins_add(gid, target, -loot)
-        ST.coins_add(gid, qq, loot)
+        if loot <= 0:
+            return "亲，对方是个穷光蛋，无法对他实施打劫！"
+        try:
+            if hasattr(ST, "txn_two_wallets") and ST.txn_two_wallets(gid, target, qq, loot):
+                pass
+            else:
+                try:
+                    _cur_v = int(ST.coins_get(gid, target) or 0)
+                except Exception:
+                    _cur_v = 0
+                loot = min(_cur_v, loot)
+                if loot <= 0:
+                    return "亲，对方是个穷光蛋，无法对他实施打劫！"
+                if not (hasattr(ST, "txn_two_wallets") and ST.txn_two_wallets(gid, target, qq, loot)):
+                    ST.coins_add(gid, target, -loot)
+                    ST.coins_add(gid, qq, loot)
+        except Exception:
+            ST.coins_add(gid, target, -loot)
+            ST.coins_add(gid, qq, loot)
         tn = _disp_name(target, gid)
         return f"打劫成功！你从 {tn} 处劫走{loot}{ST.coin_name()}！"
     ST.acct_add(gid, qq, "charm", -meli)

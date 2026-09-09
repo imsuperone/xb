@@ -895,7 +895,15 @@ def _join_game(gid, qq, kind, label):
         return "您是开局者，无需加入！"
     start = ST.recall_get(f"{kind}_start_{gid}", "0")
     try:
-        if int(time.time()) - int(start) >= 30:
+        try:
+            _lt = int(ST.recall_get(f"{kind}_last_time_{gid}", "0") or 0)
+        except Exception:
+            _lt = 0
+        try:
+            _st = int(start or "0")
+        except Exception:
+            _st = 0
+        if int(time.time()) - max(_st, _lt) >= 30:
             return "开局已超过30秒，无法加入，请等待下一局！"
     except Exception:
         pass
@@ -975,7 +983,12 @@ def _play(gid, qq, text):
             try:
                 start_val = S.recall_get(f"{kind}_start_{gid}", "0")
                 start_ts = int(start_val or "0")
-                if start_ts <= 0 or (int(time.time()) - start_ts) > 30:
+                try:
+                    _lt = int(S.recall_get(f"{kind}_last_time_{gid}", "0") or 0)
+                except Exception:
+                    _lt = 0
+                effective_ts = max(start_ts, _lt)
+                if effective_ts <= 0 or (int(time.time()) - effective_ts) > 30:
                     S.recall_set(f"{kind}_{gid}_{owner}", "")
                     S.recall_set(f"{kind}_owner_{gid}", "")
                     S.recall_set(f"{kind}_players_{gid}", "")
@@ -1017,7 +1030,12 @@ def _play(gid, qq, text):
             try:
                 start_val = S.recall_get(f"guessnum_start_{gid}", "0")
                 start_ts = int(start_val or "0")
-                if start_ts <= 0 or (int(time.time()) - start_ts) > 30:
+                try:
+                    _lt = int(S.recall_get(f"guessnum_last_time_{gid}", "0") or 0)
+                except Exception:
+                    _lt = 0
+                effective_ts = max(start_ts, _lt)
+                if effective_ts <= 0 or (int(time.time()) - effective_ts) > 30:
                     S.recall_set(f"guessnum_{gid}_{owner}", "")
                     S.recall_set(f"guessnum_owner_{gid}", "")
                     S.recall_set(f"guessnum_players_{gid}", "")
@@ -1055,7 +1073,12 @@ def _play(gid, qq, text):
             try:
                 start_val = S.recall_get(f"game24_start_{gid}", "0")
                 start_ts = int(start_val or "0")
-                if start_ts <= 0 or (int(time.time()) - start_ts) > 30:
+                try:
+                    _lt = int(S.recall_get(f"game24_last_time_{gid}", "0") or 0)
+                except Exception:
+                    _lt = 0
+                effective_ts = max(start_ts, _lt)
+                if effective_ts <= 0 or (int(time.time()) - effective_ts) > 30:
                     S.recall_set(f"game24_{gid}_{owner}", "")
                     S.recall_set(f"game24_owner_{gid}", "")
                     S.recall_set(f"game24_players_{gid}", "")

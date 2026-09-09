@@ -81,6 +81,11 @@ if _logger_layer:
 
 def _err(msg, code=500):
     try:
+        from .core.api.helpers import _err as _h_err
+        return _h_err(msg, code)
+    except Exception:
+        pass
+    try:
         return _orig_error_response(msg, code)
     except TypeError:
         try:
@@ -89,6 +94,11 @@ def _err(msg, code=500):
             return json_response({"error": msg, "code": code})
 
 def _raw_file_response(data_bytes, filename):
+    try:
+        from .core.api.helpers import _raw_file_response as _h_raw
+        return _h_raw(data_bytes, filename)
+    except Exception:
+        pass
     try:
         from aiohttp.web import Response as AioResponse  # type: ignore
         return AioResponse(body=data_bytes, headers={"Content-Disposition": f'attachment; filename="{filename}"', "Content-Type": "application/octet-stream"})
@@ -109,7 +119,7 @@ def _raw_file_response(data_bytes, filename):
 PLUGIN_ID = "astrbot_plugin_xbbot"
 PLUGIN_DESC = "小白(奴/签/银/娱/私/灵/骑/超管/帮派/冒险+主菜单+WebUI), 现代SQLite存储"
 PLUGIN_AUTHOR = "Light"
-PLUGIN_VERSION = "0.7.43"
+PLUGIN_VERSION = "0.7.44"
 PLUGIN_REPO = "https://github.com/imsuperone/xb"
 
 # 消息处理定长线程池：突发千群不再打爆默认无限池，与 ST._LOCK 串行叠加可控
@@ -967,21 +977,3 @@ class XbBot(Star):
 
     async def page_logs_export(self, request=None, *args, **kwargs):
         return await self._call_api("core.api.logs", "handle_logs_export", "logs export", request, args, mode="req")
-
-    def _backup_base(self):
-        try:
-            from .core.api.backup import _backup_base as _bb
-            return _bb(os.path.dirname(os.path.abspath(__file__)))
-        except Exception:
-            return ST.BACKUP_DIR or os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "backups")
-
-    def _safe_backup(self, rel):
-        try:
-            from .core.api.backup import _safe_backup as _sb
-            return _sb(rel, self._backup_base())
-        except Exception:
-            base = self._backup_base()
-            p = os.path.abspath(os.path.join(base, str(rel or "").strip()))
-            if p != base and not p.startswith(base + os.sep):
-                return None
-            return p

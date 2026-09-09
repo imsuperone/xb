@@ -338,31 +338,33 @@ def _load_spirit_data():
 
 
 async def handle_spirits_get(request):
-    data = _load_spirit_data()
-    # 下发原始配置 + 内置基线：前端如实展示“未自定义/已自定义”，空即内置回退
-    try:
-        raw = {k: _raw_spirit_cfg(k) for k in ("spirits", "maps", "shop")}
-        data = dict(data)
-        data["_raw"] = raw
+    def _work():
+        data = _load_spirit_data()
+        # 下发原始配置 + 内置基线：前端如实展示“未自定义/已自定义”，空即内置回退
         try:
+            raw = {k: _raw_spirit_cfg(k) for k in ("spirits", "maps", "shop")}
+            data = dict(data)
+            data["_raw"] = raw
             try:
-                from ...engines import spirit_data as _SDB  # type: ignore
-            except ImportError:
-                import spirit_data as _SDB  # type: ignore
-            data["_builtin"] = {
-                "spirits": dict(getattr(_SDB, "SPIRITS", {}) or {}),
-                "maps": dict(getattr(_SDB, "MAPS", {}) or {}),
-                "shop": dict(getattr(_SDB, "SHOP", {}) or {}),
+                try:
+                    from ...engines import spirit_data as _SDB  # type: ignore
+                except ImportError:
+                    import spirit_data as _SDB  # type: ignore
+                data["_builtin"] = {
+                    "spirits": dict(getattr(_SDB, "SPIRITS", {}) or {}),
+                    "maps": dict(getattr(_SDB, "MAPS", {}) or {}),
+                    "shop": dict(getattr(_SDB, "SHOP", {}) or {}),
+                }
+            except Exception:
+                data["_builtin"] = {"spirits": {}, "maps": {}, "shop": {}}
+            data["_meta"] = {
+                "configured": {k: bool(raw.get(k)) for k in ("spirits", "maps", "shop")},
+                "builtin": {k: len((data.get("_builtin") or {}).get(k) or {}) for k in ("spirits", "maps", "shop")},
             }
         except Exception:
-            data["_builtin"] = {"spirits": {}, "maps": {}, "shop": {}}
-        data["_meta"] = {
-            "configured": {k: bool(raw.get(k)) for k in ("spirits", "maps", "shop")},
-            "builtin": {k: len((data.get("_builtin") or {}).get(k) or {}) for k in ("spirits", "maps", "shop")},
-        }
-    except Exception:
-        pass
-    return json_response(data)
+            pass
+        return json_response(data)
+    return await asyncio.to_thread(_work)
 
 
 async def handle_spirits_save(request):
@@ -445,37 +447,39 @@ async def handle_spirits_save(request):
 
 async def handle_gacha_weapons(request):
     """抽奖武器池（img/gacha SSR/SR/R 文件名去扩展名；附精确图片路径供自动匹配预览）"""
-    try:
+    def _work():
         try:
-            from ...engines import slave as _sl
-        except ImportError:
-            import slave as _sl  # type: ignore
-        try:
-            _base = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
-        except Exception:
-            _base = ""
-        out, img = {}, {}
-        for rar in ("SSR", "SR", "R"):
             try:
-                names = []
-                for p in (_sl._gacha_pool(rar) or []):
-                    try:
-                        nm = _os.path.splitext(_os.path.basename(p))[0]
-                        names.append(nm)
+                from ...engines import slave as _sl
+            except ImportError:
+                import slave as _sl  # type: ignore
+            try:
+                _base = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+            except Exception:
+                _base = ""
+            out, img = {}, {}
+            for rar in ("SSR", "SR", "R"):
+                try:
+                    names = []
+                    for p in (_sl._gacha_pool(rar) or []):
                         try:
-                            rp = _os.path.relpath(p, _base).replace(_os.sep, "/") if _base else ""
-                            if rp and not rp.startswith(".."):
-                                img.setdefault(nm, rp)
+                            nm = _os.path.splitext(_os.path.basename(p))[0]
+                            names.append(nm)
+                            try:
+                                rp = _os.path.relpath(p, _base).replace(_os.sep, "/") if _base else ""
+                                if rp and not rp.startswith(".."):
+                                    img.setdefault(nm, rp)
+                            except Exception:
+                                pass
                         except Exception:
                             pass
-                    except Exception:
-                        pass
-                out[rar] = sorted(set(names))
-            except Exception:
-                out[rar] = []
-        return json_response({"ok": True, "pool": out, "img": img})
-    except Exception as e:
-        return _err(f"gacha weapons failed: {e}", 500)
+                    out[rar] = sorted(set(names))
+                except Exception:
+                    out[rar] = []
+            return json_response({"ok": True, "pool": out, "img": img})
+        except Exception as e:
+            return _err(f"gacha weapons failed: {e}", 500)
+    return await asyncio.to_thread(_work)
 
 
 _POOL_RARS = ("SSR", "SR", "R")
@@ -1005,12 +1009,18 @@ async def handle_pool_upload(request):
             if replace:
                 _pool_write_file(rar, stem, data, ext)
                 return json_response({"ok": True, "name": stem, "rar": rar})
-            dst = _os.path.join(_pool_dir(rar), stem + ext)
-            if _os.path.exists(dst):
-                return _err("同名文件已存在", 400)
-            with open(dst, "wb") as w:
-                w.write(data)
-            _pool_bust(rar)
+            # 非覆盖：同stem任意扩展名视为已存在，防同名异扩展孤儿堆积
+            try:
+                _d = _pool_dir(rar)
+                for _fn in _os.listdir(_d):
+                    try:
+                        if _os.path.splitext(_fn)[0] == stem and _os.path.isfile(_os.path.join(_d, _fn)):
+                            return _err("同名文件已存在", 400)
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+            _pool_write_file(rar, stem, data, ext)
             return json_response({"ok": True, "name": stem, "rar": rar})
         except Exception as e:
             return _err(f"pool upload failed: {e}", 500)

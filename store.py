@@ -1140,6 +1140,7 @@ def merge_from(db_path):
     if not os.path.isfile(db_path):
         return 0
     n = 0
+    src = None
     try:
         src = sqlite3.connect(db_path)
         with _LOCK:
@@ -1164,10 +1165,19 @@ def merge_from(db_path):
                     for r in rows:
                         _DB.execute("INSERT OR IGNORE INTO groups VALUES(?,?,?)", r)
                         n += 1
-            _DB.commit()
-        src.close()
+            _safe_commit()
     except Exception:
-        pass
+        try:
+            _safe_rollback()
+        except Exception:
+            pass
+        # n保留已统计数调用方仅记数，不抛（写入降级禁裸抛）
+    finally:
+        try:
+            if src is not None:
+                src.close()
+        except Exception:
+            pass
     return n
 
 # ==================== 8. 运行期配置写 ====================

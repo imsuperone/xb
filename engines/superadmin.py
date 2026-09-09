@@ -4,7 +4,6 @@
 数据级可测: 群列表/应用统计/账户管理(扣钱/充值/清空)
 平台操作: 禁言/踢人 通过 AstrBot 适配器 call_action 执行(见 main._do_platform)
 """
-import json
 import os
 import re
 
@@ -94,11 +93,8 @@ def _acct(gid, qq):
     return ST.acct(gid, qq)
 
 
-def _j(data):
-    try:
-        return json.loads(data or "{}")
-    except Exception:
-        return {}
+# 检查更新60s进程缓存：引擎跑在_XB_EXEC线程池，同步urllib约10s，连点即占满12 worker
+_VER_CACHE = {"t": 0.0, "info": None}
 
 
 # ---- 群列表 / 应用统计 ----
@@ -447,10 +443,10 @@ def _version():
                 except Exception:
                     pass
         if not ver:
-            ver = "0.7.43"
+            ver = "0.7.44"
         return f"小白版本：{ver}"
     except Exception:
-        return "小白版本：0.7.43"
+        return "小白版本：0.7.44"
 
 # ---- 统一入口（测试指令仅超管，WebUI可配但不显示于MENU，已删 个人信息） ----
 # 注意：凡 handle() 响应的别名必须同步进本表；非超管命中一律静默 None（BY DESIGN，见 AIINFO）
@@ -533,12 +529,26 @@ def handle(gid, qq, raw, is_admin=False):
         try:
             info = None
             try:
-                from ..core.api import updater
-                info = updater.check_latest_version()
-            except Exception:
+                import time as _t_ver
+                _now = _t_ver.time()
+                if _VER_CACHE.get("info") is not None and (_now - float(_VER_CACHE.get("t") or 0)) < 60:
+                    info = _VER_CACHE.get("info")
+                else:
+                    raise ValueError("cache-miss")
+            except ValueError:
                 try:
-                    from core.api import updater
+                    from ..core.api import updater
                     info = updater.check_latest_version()
+                except Exception:
+                    try:
+                        from core.api import updater
+                        info = updater.check_latest_version()
+                    except Exception:
+                        pass
+                try:
+                    import time as _t_ver2
+                    _VER_CACHE["t"] = _t_ver2.time()
+                    _VER_CACHE["info"] = info
                 except Exception:
                     pass
 

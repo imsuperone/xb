@@ -507,7 +507,7 @@ async def handle_config_auto_balance(request):
                     if _sidx is not None:
                         _sidx(_idx)  # 统一走 5 份上限 + 孤儿行清理
                     else:
-                        ST.recall_set("cfgsnap__index", json.dumps(_idx[:19], ensure_ascii=False))
+                        ST.recall_set("cfgsnap__index", json.dumps(_idx[:5], ensure_ascii=False))
                     pre_snapshot = _new_name
         except Exception:
             pass
