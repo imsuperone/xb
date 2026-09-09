@@ -52,6 +52,7 @@ async def handle_slave_users(request):
                         _o = ""
                     if _o:
                         _owner_cnt[_o] = _owner_cnt.get(_o, 0) + 1
+                _fixed = False
                 for qq in _all_secs:
                     if not qq.isdigit(): continue
                     u = slave.U(st, qq)
@@ -60,6 +61,7 @@ async def handle_slave_users(request):
                         p = default_init_price
                         u["price"] = str(p)
                         st.mark_dirty(qq)
+                        _fixed = True
                     seen.add((gid, str(qq)))
                     out.append({
                         "gid": gid,
@@ -88,7 +90,11 @@ async def handle_slave_users(request):
                             "price": p, "owner": "", "owner_name": "",
                             "protect": "", "slaves": 0, "weapons": "", "treasures": ""
                         })
-                slave.save(gid)
+                if _fixed:
+                    try:
+                        slave.save(gid)
+                    except Exception:
+                        pass
             else:
                 gids = set()
                 if ST._DB:
@@ -102,6 +108,7 @@ async def handle_slave_users(request):
                 for g in gids:
                     try:
                         st = slave.state(g)
+                        _g_fixed = False
                         _all_secs = [s for s in st.sections() if s.isdigit()]
                         _owner_cnt = {}
                         for _s in _all_secs:
@@ -119,6 +126,7 @@ async def handle_slave_users(request):
                                 p = default_init_price
                                 u["price"] = str(p)
                                 st.mark_dirty(qq)
+                                _g_fixed = True
                             seen.add((g, str(qq)))
                             out.append({
                                 "gid": g,
@@ -132,7 +140,11 @@ async def handle_slave_users(request):
                                 "weapons": u.get("weapon", ""),
                                 "treasures": u.get("treasure", ""),
                             })
-                        slave.save(g)
+                        if _g_fixed:
+                            try:
+                                slave.save(g)
+                            except Exception:
+                                pass
                     except Exception:
                         continue
 

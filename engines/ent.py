@@ -371,6 +371,11 @@ def _clean_expired_game(gid, max_seconds=30):
                 last_time = int(ST.recall_get(f"chain_last_time_{gid}", "0") or 0)
             except Exception:
                 last_time = 0
+        else:
+            try:
+                last_time = int(ST.recall_get(f"{kind}_last_time_{gid}", "0") or 0)
+            except Exception:
+                last_time = 0
         effective_ts = max(start_ts, last_time)
         # effective_ts <= 0 属于脏数据/孤儿锁，或者距离开局/最后互动超过 max_seconds，均清理
         if effective_ts <= 0 or (now - effective_ts) > max_seconds:
@@ -378,6 +383,7 @@ def _clean_expired_game(gid, max_seconds=30):
             ST.recall_set(f"{kind}_owner_{gid}", "")
             ST.recall_set(f"{kind}_players_{gid}", "")
             ST.recall_set(f"{kind}_start_{gid}", "")
+            ST.recall_set(f"{kind}_last_time_{gid}", "")
             if owner:
                 ST.recall_set(f"{kind}_{gid}_{owner}", "")
             if kind == "chain":
@@ -420,6 +426,11 @@ def _check_single_game(gid, new_label, sender_qq=None):
             if kind == "chain":
                 try:
                     last_time = int(ST.recall_get(f"chain_last_time_{gid}", "0") or 0)
+                except Exception:
+                    last_time = 0
+            else:
+                try:
+                    last_time = int(ST.recall_get(f"{kind}_last_time_{gid}", "0") or 0)
                 except Exception:
                     last_time = 0
             # 开局者重开、或者超过30秒无互动、或者无有效owner残留，均直接瞬时刷新重开
@@ -572,6 +583,7 @@ def _start_24(gid, qq):
     ST.recall_set(f"game24_{gid}_{qq}", "|".join(map(str, nums)))
     ST.recall_set(f"game24_owner_{gid}", str(qq))
     ST.recall_set(f"game24_start_{gid}", str(int(time.time())))
+    ST.recall_set(f"game24_last_time_{gid}", str(int(time.time())))
     ST.recall_set(f"game24_players_{gid}", "")
     _set_active_game(gid, "二四点")
     return ("🃏 二四点开始！用 + - * / 和括号把下面 4 个数算出 24：\r\n"
@@ -720,6 +732,7 @@ def handle(gid, qq, raw):
         ST.recall_set(f"trick_{gid}_{qq}", a)
         ST.recall_set(f"trick_owner_{gid}", str(qq))
         ST.recall_set(f"trick_start_{gid}", str(int(time.time())))
+        ST.recall_set(f"trick_last_time_{gid}", str(int(time.time())))
         ST.recall_set(f"trick_players_{gid}", "")
         _set_active_game(gid, "急转弯")
         return "🤔 急转弯：" + q + "\r\n回复你的答案！（其他玩家30秒内发送【加入急转弯】加入）"
@@ -734,6 +747,7 @@ def handle(gid, qq, raw):
         ST.recall_set(f"miri_{gid}_{qq}", a)
         ST.recall_set(f"miri_owner_{gid}", str(qq))
         ST.recall_set(f"miri_start_{gid}", str(int(time.time())))
+        ST.recall_set(f"miri_last_time_{gid}", str(int(time.time())))
         ST.recall_set(f"miri_players_{gid}", "")
         _set_active_game(gid, "猜字谜")
         return "🔤 字谜：" + q + "\r\n回复你的答案！（其他玩家30秒内发送【加入字谜】加入）"
@@ -748,6 +762,7 @@ def handle(gid, qq, raw):
         ST.recall_set(f"guessnum_{gid}_{qq}", str(n))
         ST.recall_set(f"guessnum_owner_{gid}", str(qq))
         ST.recall_set(f"guessnum_start_{gid}", str(int(time.time())))
+        ST.recall_set(f"guessnum_last_time_{gid}", str(int(time.time())))
         ST.recall_set(f"guessnum_players_{gid}", "")
         _set_active_game(gid, "猜数")
         return ("🎲 猜数开始！我心中想了一个 1-100 之间的数字，\r\n"
@@ -764,6 +779,7 @@ def handle(gid, qq, raw):
         ST.recall_set(f"quiz_{gid}_{qq}", a)
         ST.recall_set(f"quiz_owner_{gid}", str(qq))
         ST.recall_set(f"quiz_start_{gid}", str(int(time.time())))
+        ST.recall_set(f"quiz_last_time_{gid}", str(int(time.time())))
         ST.recall_set(f"quiz_players_{gid}", "")
         _set_active_game(gid, "答题")
         return "❓ 答题开始！" + q + "\r\n回复你的答案！（其他玩家30秒内发送【加入答题】加入）"
@@ -899,7 +915,7 @@ def _quit_game(gid, qq, kind, label):
         # 开局者退出=结束整局
         ST.recall_set(f"{kind}_owner_{gid}", "")
         ST.recall_set(f"{kind}_players_{gid}", "")
-        for k in (f"{kind}_{gid}_{qq}", f"{kind}_start_{gid}"):
+        for k in (f"{kind}_{gid}_{qq}", f"{kind}_start_{gid}", f"{kind}_last_time_{gid}"):
             ST.recall_set(k, "")
         return f"你已退出{label}，对局结束！"
     if str(qq) in players:
@@ -964,12 +980,17 @@ def _play(gid, qq, text):
                     S.recall_set(f"{kind}_owner_{gid}", "")
                     S.recall_set(f"{kind}_players_{gid}", "")
                     S.recall_set(f"{kind}_start_{gid}", "")
+                    S.recall_set(f"{kind}_last_time_{gid}", "")
                     S.recall_set(f"ent_game_{gid}", "")
                     continue
             except Exception:
                 pass
             if not _is_player(gid, qq, kind):
                 continue
+            try:
+                S.recall_set(f"{kind}_last_time_{gid}", str(int(time.time())))
+            except Exception:
+                pass
             ans = S.recall_get(f"{kind}_{gid}_{owner}")
             if not ans:
                 continue
@@ -980,6 +1001,7 @@ def _play(gid, qq, text):
                 S.recall_set(f"{kind}_owner_{gid}", "")
                 S.recall_set(f"{kind}_players_{gid}", "")
                 S.recall_set(f"{kind}_start_{gid}", "")
+                S.recall_set(f"{kind}_last_time_{gid}", "")
                 S.recall_set(f"ent_game_{gid}", "")
                 # 奖励（全量可配，默认值保持旧行为）
                 cfg_prefix = _LABEL_CFG.get(label, label)
@@ -1000,11 +1022,16 @@ def _play(gid, qq, text):
                     S.recall_set(f"guessnum_owner_{gid}", "")
                     S.recall_set(f"guessnum_players_{gid}", "")
                     S.recall_set(f"guessnum_start_{gid}", "")
+                    S.recall_set(f"guessnum_last_time_{gid}", "")
                     S.recall_set(f"ent_game_{gid}", "")
                     owner = None
             except Exception:
                 pass
         if owner and _is_player(gid, qq, "guessnum"):
+            try:
+                S.recall_set(f"guessnum_last_time_{gid}", str(int(time.time())))
+            except Exception:
+                pass
             g = S.recall_get(f"guessnum_{gid}_{owner}")
             if g and text.strip().isdigit():
                 v = int(text.strip())
@@ -1014,6 +1041,7 @@ def _play(gid, qq, text):
                     S.recall_set(f"guessnum_owner_{gid}", "")
                     S.recall_set(f"guessnum_players_{gid}", "")
                     S.recall_set(f"guessnum_start_{gid}", "")
+                    S.recall_set(f"guessnum_last_time_{gid}", "")
                     S.recall_set(f"ent_game_{gid}", "")
                     coin = S.cfgi("娱乐配置", "猜数奖励金币", 188)
                     meili = S.cfgi("娱乐配置", "猜数奖励魅力", 2)
@@ -1032,6 +1060,7 @@ def _play(gid, qq, text):
                     S.recall_set(f"game24_owner_{gid}", "")
                     S.recall_set(f"game24_players_{gid}", "")
                     S.recall_set(f"game24_start_{gid}", "")
+                    S.recall_set(f"game24_last_time_{gid}", "")
                     S.recall_set(f"ent_game_{gid}", "")
                     owner = None
             except Exception:
@@ -1048,6 +1077,10 @@ def _play(gid, qq, text):
                 # 非数字/非相关数字则放行
                 pass
             else:
+                try:
+                    S.recall_set(f"game24_last_time_{gid}", str(int(time.time())))
+                except Exception:
+                    pass
                 g = S.recall_get(f"game24_{gid}_{owner}", "")
                 # 兼容旧单人键
                 if not g:
@@ -1067,6 +1100,7 @@ def _play(gid, qq, text):
                                 S.recall_set(f"game24_owner_{gid}", "")
                                 S.recall_set(f"game24_players_{gid}", "")
                                 S.recall_set(f"game24_start_{gid}", "")
+                                S.recall_set(f"game24_last_time_{gid}", "")
                                 S.recall_set(f"ent_game_{gid}", "")
                                 coin = S.cfgi("娱乐配置", "二四点奖励金币", 128)
                                 meili = S.cfgi("娱乐配置", "二四点奖励魅力", 1)

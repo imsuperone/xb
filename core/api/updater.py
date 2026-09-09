@@ -40,7 +40,7 @@ def _get_local_version(plugin_base=""):
                     return line.split(":", 1)[1].strip().strip('"').strip("'")
     except Exception:
         pass
-    return "0.7.37"
+    return "0.7.39"
 
 
 def _parse_version_tuple(v_str):
@@ -56,7 +56,7 @@ def _parse_version_tuple(v_str):
         nums.append(0)
     major, minor, patch = nums[0], nums[1], nums[2]
     # 历史遗留版本 0.10.x ~ 0.68.x 归属旧纪元
-    if major == 0 and 10 <= minor <= 69:
+    if major == 0 and 10 <= minor <= 68:
         epoch = 0
     else:
         epoch = 1

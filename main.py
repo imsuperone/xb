@@ -109,8 +109,15 @@ def _raw_file_response(data_bytes, filename):
 PLUGIN_ID = "astrbot_plugin_xbbot"
 PLUGIN_DESC = "小白(奴/签/银/娱/私/灵/骑/超管/帮派/冒险+主菜单+WebUI), 现代SQLite存储"
 PLUGIN_AUTHOR = "Light"
-PLUGIN_VERSION = "0.7.37"
+PLUGIN_VERSION = "0.7.39"
 PLUGIN_REPO = "https://github.com/imsuperone/xb"
+
+# 消息处理定长线程池：突发千群不再打爆默认无限池，与 ST._LOCK 串行叠加可控
+try:
+    from concurrent.futures import ThreadPoolExecutor as _TPE
+    _XB_EXEC = _TPE(max_workers=12, thread_name_prefix="xb-msg")
+except Exception:
+    _XB_EXEC = None
 
 # 复用 router 的主菜单，保持单源
 try:
@@ -643,7 +650,7 @@ class XbBot(Star):
                     except Exception:
                         pass
                 return r
-            reply = await asyncio.get_running_loop().run_in_executor(None, _run_handle_and_welcome)
+            reply = await asyncio.get_running_loop().run_in_executor(_XB_EXEC, _run_handle_and_welcome)
             if reply:
                 if _logger_layer:
                     try:

@@ -1,5 +1,19 @@
 # 更新日志
 
+## v0.7.39
+- ⚡ **导出双发收敛**：`exportAllUsers`/`exportImages` 手写 `apiGet→apiPost` 改单次 `callApi(GET)`。
+- 🗑️ **死按钮删除**：`btnBackupExport` 无 DOM（仅 `btnBackupExportSel` 存在），整段删。
+- 🧹 **娱乐清场补齐**：答题/猜数/二四点胜局与超时同步清 `last_time`，KV 不留僵尸。
+
+## v0.7.38
+- 🐞 **纪元阈值修正**：`updater` 0.69 误判旧纪元，收敛至 0.68。
+- 🎮 **娱乐自愈补齐**：答题/字谜/急转弯/猜数/二四点开局埋 `last_time`、作答续命、退出清零；持续答题不再被误判闲置顶号。
+- ⚡ **主循环限流**：`run_in_executor` 换定长 12 线程池，突发千群可控。
+- 🗄️ **读放大收敛**：`slave/users` 仅修复脏身价才落盘，无修复零写。
+- 🗑️ **模拟器死绑定删除**：`index.html` 无 DOM、`sendSimulatorCommand` 未定义、双处重复绑定，删干净+空投防重。
+- ⚡ **WebUI 提速**：日志单次 `callApi`、7 搜索框 200ms 防抖、表格行 `content-visibility`、武器缩略 `lazy`。
+- 🧪 **测试对齐现状**：`bridge.download` 改 `triggerDownload` 链、`_dispatch` 窗口 2000→8000、群管鉴权白名单 `platform`。
+
 ## v0.7.37
 - 🗑️ **总览改名+去刷新按钮**：全群数据总览；KPI 随页签加载，手动刷新按钮与其重复绑定一并删除。
 - 🗑️ **删补偿指令**：与银行转账重复，路由/函数/三表/手配/菜单/预设死键全清（打赏上限/间隔保留可调）。

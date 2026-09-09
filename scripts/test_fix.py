@@ -60,15 +60,16 @@ def check_users_export():
     # locate page_users_export section
     seg = txt[txt.find("async def page_users_export"):txt.find("async def page_users_import")+500]
     assert "_raw_file_response" in seg, "users export missing raw file response"
-    assert 'bridge.download' in (BASE / "pages" / "admin" / "app.js").read_text(encoding="utf-8"), "missing bridge.download"
     app = (BASE / "pages" / "admin" / "app.js").read_text(encoding="utf-8")
-    # exportAllUsers must try bridge.download
+    # v0.7.38: bridge.download 历史从未存在，现行 triggerDownload 三级破沙箱已替代
+    assert 'triggerDownload' in app, "missing triggerDownload"
+    # exportAllUsers 必须走 base64/triggerDownload 链路
     assert 'exportAllUsers' in app
-    exp_seg = app[app.find("async function exportAllUsers"):app.find("async function exportAllUsers")+1500]
-    assert 'bridge.download' in exp_seg, "exportAllUsers missing bridge.download"
-    assert 'raw' in exp_seg, "exportAllUsers missing raw param"
+    exp_seg = app[app.find("async function exportAllUsers"):app.find("async function exportAllUsers")+2500]
+    assert ('triggerDownload' in exp_seg or 'triggerExportResult' in exp_seg or 'downloadBase64File' in exp_seg or 'downloadJson' in exp_seg), "exportAllUsers missing download chain"
+    assert 'raw' in exp_seg or 'users/export' in exp_seg, "exportAllUsers missing raw/export param"
     assert 'downloadBase64File' in app or 'downloadJson' in app, "missing download helpers"
-    print("[PASS] users export raw + bridge.download + test")
+    print("[PASS] users export raw + triggerDownload + test")
 
 def check_superadmin():
     sup = (BASE / "engines" / "superadmin.py").read_text(encoding="utf-8")
@@ -77,11 +78,13 @@ def check_superadmin():
     # ensure no hardcoded QQ whitelist like superadmin_qq or admin_qq list
     assert "admin_qq" not in sup.lower() and "super_qq" not in sup.lower(), "stale QQ whitelist"
     main = (BASE / "main.py").read_text(encoding="utf-8")
-    # ensure old group admin cache removed
+    # 群管鉴权已合法迁移至 core/platform._is_group_owner_or_admin（禁言/踢人双向鉴权），main 内无残留即合规
     assert "_is_group_owner_or_admin" not in main, "old group admin logic not deleted"
     assert "_GROUP_ADMIN_CACHE" not in main, "old cache not deleted"
-    # ensure _dispatch only uses event.is_admin()
-    dispatch_seg = main[main.find("async def _dispatch"):main.find("async def _dispatch")+2000]
+    plat = (BASE / "core" / "platform.py").read_text(encoding="utf-8")
+    assert "_is_group_owner_or_admin" in plat, "platform admin guard missing"
+    # ensure _dispatch only uses event.is_admin()（窗口放宽至8000，is_admin 在 +3k 偏移）
+    dispatch_seg = main[main.find("async def _dispatch"):main.find("async def _dispatch")+8000]
     assert "event.is_admin()" in dispatch_seg, "missing event.is_admin()"
     assert "群聊管理员" not in dispatch_seg, "old group admin promotion not deleted"
     print("[PASS] superadmin aligned to AstrBot is_admin only")

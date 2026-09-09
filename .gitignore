@@ -59,3 +59,19 @@ Desktop.ini
 temp/
 tmp/
 data/temp/
+
+# 内部交接文档（本地保留，不进 GitHub）
+AIINFO.md
+AIREADME.md
+aiall.md
+
+# 发行包（本地三端同步，不进 GitHub）
+*.zip
+
+# 隐私与运行时文件（绝不进仓库）
+webdav_secret.json
+**/webdav_secret.json
+.xb_last_backup.json
+.xb_backup.busy
+.xb_backup.lock
+data/backups/

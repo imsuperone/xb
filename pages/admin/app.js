@@ -1638,12 +1638,8 @@ async function exportAllUsers() {
   const filename = `xbbot_users_all_${Date.now()}.json`;
   toast("正在导出全量用户数据...", "ok");
   try {
-    let res = null;
-    try {
-      res = await getBridge().apiGet("users/export");
-    } catch(e) {
-      res = await getBridge().apiPost("users/export", {});
-    }
+    // 单次 callApi（GET空结果不再回退POST，失败兜底在callApi内）
+    const res = await callApi("users/export", {}, "GET");
     if (!res) throw new Error("接口无响应");
     if (res.error || res.msg) throw new Error(res.error || res.msg);
 
@@ -1663,7 +1659,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.7.37"
+        version: res.version || "0.7.39"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -2961,15 +2957,21 @@ document.querySelectorAll(".harrow[data-cat]").forEach((btn) =>
 );
 ["cfgSearch", "userSearch", "cmdSearch", "imgSearch", "slaveSearch", "spiritUserSearch", "groupsSearch"].forEach((id) => {
   const el = document.getElementById(id);
-  if (el) el.addEventListener("input", () => {
-    if (id === "cfgSearch") filterCfg();
-    else if (id === "userSearch") filterUsers();
-    else if (id === "cmdSearch") filterCmds();
-    else if (id === "slaveSearch") renderSlaveTable();
-    else if (id === "spiritUserSearch") renderSpiritUsersTable();
-    else if (id === "groupsSearch") renderGroupsTable();
-    else if (IMG_CACHE && IMG_CACHE.dir !== undefined) renderImages(IMG_CACHE);
-  });
+  if (el) {
+    let _t = null;
+    el.addEventListener("input", () => {
+      if (_t) clearTimeout(_t);
+      _t = setTimeout(() => {
+        if (id === "cfgSearch") filterCfg();
+        else if (id === "userSearch") filterUsers();
+        else if (id === "cmdSearch") filterCmds();
+        else if (id === "slaveSearch") renderSlaveTable();
+        else if (id === "spiritUserSearch") renderSpiritUsersTable();
+        else if (id === "groupsSearch") renderGroupsTable();
+        else if (IMG_CACHE && IMG_CACHE.dir !== undefined) renderImages(IMG_CACHE);
+      }, 200);
+    });
+  }
 });
 const lb = document.getElementById("lightbox");
 if (lb) lb.addEventListener("click", closeLightbox);
@@ -3006,12 +3008,8 @@ async function exportImages() {
   const defaultFn = (filename === "root" ? `xbbot_root_${Date.now()}.zip` : `${filename}.zip`);
   toast("正在打包导出文件/目录，请稍候...", "ok");
   try {
-    let r = null;
-    try {
-      r = await getBridge().apiGet("images/export", { path: p });
-    } catch(e) {
-      r = await getBridge().apiPost("images/export", { path: p });
-    }
+    // 单次 callApi（GET空结果不再回退POST，失败兜底在callApi内）
+    const r = await callApi("images/export", { path: p }, "GET");
     if (!r) throw new Error("接口无响应");
     if (r.error || r.msg) throw new Error(r.error || r.msg);
 
@@ -3237,7 +3235,7 @@ function renderPoolBox(forceOpen=false){
       const _ext=((it.file||"").split(".").pop()||"").toLowerCase();
       const _kb=(it.size!=null)?Math.max(1,Math.round(it.size/1024))+"KB":"";
       const pv = it.thumb
-        ? `<img src="${esc(it.thumb)}" data-pool-thumb="${esc(name)}" style="width:36px;height:36px;object-fit:cover;border:1px solid var(--line);border-radius:6px;cursor:zoom-in" title="点击放大" onerror="this.style.display='none'">`
+        ? `<img loading="lazy" decoding="async" src="${esc(it.thumb)}" data-pool-thumb="${esc(name)}" style="width:36px;height:36px;object-fit:cover;border:1px solid var(--line);border-radius:6px;cursor:zoom-in" title="点击放大" onerror="this.style.display='none'">`
         : `<span data-pool-thumb="${esc(name)}" style="display:inline-flex;align-items:center;cursor:zoom-in" title="点击放大"><span class="badge" style="font-size:11px" title="${esc(it.file||name)}">${esc(_ext||"?")}${_kb?" · "+_kb:""}</span></span>`;
       const pa = (POOL_ATTRS && POOL_ATTRS[name]) || { atk: 0, desc: "" };
       const _paAtk = Math.max(0, Number(pa.atk) || 0);
@@ -3269,7 +3267,7 @@ function renderPoolBox(forceOpen=false){
           if (!thumb || (r && r.error)) return;
           it.thumb = thumb;
           const slot = box.querySelector(`[data-pool-item="${CSS.escape(rar + "|" + it.name)}"] [data-pool-thumb]`);
-          if (slot) slot.outerHTML = `<img src="${esc(thumb)}" data-pool-thumb="${esc(it.name)}" style="width:36px;height:36px;object-fit:cover;border:1px solid var(--line);border-radius:6px;cursor:zoom-in" title="点击放大" onerror="this.style.display='none'">`;
+          if (slot) slot.outerHTML = `<img loading="lazy" decoding="async" src="${esc(thumb)}" data-pool-thumb="${esc(it.name)}" style="width:36px;height:36px;object-fit:cover;border:1px solid var(--line);border-radius:6px;cursor:zoom-in" title="点击放大" onerror="this.style.display='none'">`;
         }).catch(() => {});
       });
     });
@@ -4704,12 +4702,6 @@ async function loadRemoteWebDAVFiles(fromCache) {
   }
 }
 document.getElementById("btnWebDAVRefreshFiles")?.addEventListener("click", () => loadRemoteWebDAVFiles());
-document.getElementById("btnBackupExport")?.addEventListener("click", async () => {
-  try {
-    const data = await getBridge().apiGet("users/export", {});
-    triggerExportResult({ filename: `xbbot_backup_export_${Date.now()}.json`, mime: "application/json;charset=utf-8", rawText: JSON.stringify(data, null, 2) });
-  } catch(e){ toast("导出失败: "+e.message, "bad"); }
-});
 let _backupSearchTimer = null;
 document.getElementById("backupSearch")?.addEventListener("input", () => {
   if (_backupSearchTimer) clearTimeout(_backupSearchTimer);
@@ -4861,10 +4853,9 @@ async function saveBackupCfg() {
 }
 document.getElementById("btnBackupCfgSave")?.addEventListener("click", saveBackupCfg);
 document.getElementById("btnSlaveRefresh")?.addEventListener("click", loadSlaveUsers);
-document.getElementById("slaveSearch")?.addEventListener("input", renderSlaveTable);
+// slaveSearch/spiritUserSearch 已在上方统一200ms防抖，此处只留排序即时触发
 document.getElementById("slaveSort")?.addEventListener("change", renderSlaveTable);
 document.getElementById("btnSpiritUsersRefresh")?.addEventListener("click", loadSpiritUsers);
-document.getElementById("spiritUserSearch")?.addEventListener("input", renderSpiritUsersTable);
 document.getElementById("spiritUserSort")?.addEventListener("change", renderSpiritUsersTable);
 
 // 表头点击快速排序事件委托
@@ -5069,17 +5060,7 @@ async function openAirdropModal() {
   modal.className = "show";
 }
 
-// 绑定新模块事件监听
-document.getElementById("btnSimSend")?.addEventListener("click", () => sendSimulatorCommand());
-document.getElementById("simInput")?.addEventListener("keydown", (e) => { if (e.key === "Enter") sendSimulatorCommand(); });
-document.getElementById("btnSimClear")?.addEventListener("click", () => {
-  const box = document.getElementById("simChatBox");
-  if (box) box.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px;margin:10px 0">🤖 对话记录已清空 · 请输入指令继续调试</div>';
-});
-document.querySelectorAll("[data-sim-cmd]").forEach(btn => {
-  btn.addEventListener("click", () => sendSimulatorCommand(btn.dataset.simCmd));
-});
-document.getElementById("btnUsersAirdrop")?.addEventListener("click", openAirdropModal);
+// 绑定新模块事件监听（模拟器页签已下线，死绑定已删；空投按钮加防重）
 
 // Tab 切换时自动加载大屏数据
 const origInitNav = typeof initNav === "function" ? initNav : null;
@@ -5107,15 +5088,8 @@ document.getElementById("btnSlaveCalibrate")?.addEventListener("click", calibrat
 
 // 确保新模块在 DOM 加载完毕后自动绑定
 function initNewModules() {
-  document.getElementById("btnSimSend")?.addEventListener("click", () => sendSimulatorCommand());
-  document.getElementById("simInput")?.addEventListener("keydown", (e) => { if (e.key === "Enter") sendSimulatorCommand(); });
-  document.getElementById("btnSimClear")?.addEventListener("click", () => {
-    const box = document.getElementById("simChatBox");
-    if (box) box.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px;margin:10px 0">🤖 对话记录已清空 · 请输入指令继续调试</div>';
-  });
-  document.querySelectorAll("[data-sim-cmd]").forEach(btn => {
-    btn.addEventListener("click", () => sendSimulatorCommand(btn.dataset.simCmd));
-  });
+  const _air = document.getElementById("btnUsersAirdrop");
+  if (_air && !_air.dataset.bound) { _air.dataset.bound = "1"; _air.addEventListener("click", openAirdropModal); }
   document.getElementById("btnCmdAddCustomTop")?.addEventListener("click", () => {
     const inner = document.getElementById("btnCmdAddCustom");
     if (inner) { inner.click(); return; }
@@ -5123,7 +5097,6 @@ function initNewModules() {
     openCmdEditor();
   });
   document.getElementById("btnDbDoctorOv")?.addEventListener("click", runDbDoctor);
-  document.getElementById("btnUsersAirdrop")?.addEventListener("click", openAirdropModal);
 }
 
 if (document.readyState === "loading") {
@@ -5419,20 +5392,8 @@ async function loadLogs(isAuto = false) {
     const kw = (document.getElementById("logsSearch")?.value || "").trim();
     const params = { limit: "500", level: lvl, keyword: kw };
 
-    let res = null;
-    try {
-      res = await getBridge().apiGet("logs", params);
-    } catch (apiErr) {
-      try {
-        res = await getBridge().apiPost("logs", params);
-      } catch (postErr) {}
-    }
-
-    if (!res || res.status === "error") {
-      try {
-        res = await callApi("logs", params, "GET");
-      } catch (callErr) {}
-    }
+    // 单次 callApi（GET空结果不再回退POST，防双倍请求；失败仅一次POST兜底在callApi内）
+    const res = await callApi("logs", params, "GET");
 
     const data = (res && (res.result || res.data || res)) || {};
     const logsList = Array.isArray(data.logs) ? data.logs : (Array.isArray(res) ? res : []);
