@@ -70,6 +70,7 @@ aiall.md
 
 # 自检脚本（本地跑，不进 GitHub；发行包同样排除）
 scripts/
+verify_plugin.py
 
 # 隐私与运行时文件（绝不进仓库）
 webdav_secret.json
