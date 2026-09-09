@@ -1175,20 +1175,25 @@ async function openAutoBalanceModal() {
   if (title) title.textContent = "游戏奖励 / 惩罚 / 概率 · 智能数值平衡";
   if (inputWrap) inputWrap.style.display = "none";
 
+  // 档位以 balance_state 逐档推断为准：出厂种子实为休闲数值但标记缺省 standard，
+  // 直接读标记会 perpetual 误报偏离；推断命中哪档就预选哪档，只报真偏离
   let activeMode = "standard";
-  try {
-    const cfg = await getBridge().apiGet("config/get");
-    const m = (cfg && (cfg._active_balance_mode || (cfg["设置"] && cfg["设置"]["平衡模式"]))) || "standard";
-    activeMode = ["standard", "casual", "hardcore"].includes(m) ? m : "standard";
-  } catch (e) { activeMode = "standard"; }
   let _driftInfo = "";
   try {
     const st = await getBridge().apiGet("config/balance_state").catch(() => null);
-    if (st && st.ok && st.mismatch > 0) {
-      const _names = (st.mismatches || []).map((x) => x.key).join("、");
-      _driftInfo = `<div style="font-size:12px;color:var(--warn);background:var(--warnSoft);border:1px solid var(--warn);border-radius:8px;padding:8px 10px;margin-bottom:12px">⚠️ 当前数值已偏离${activeMode}档（${st.mismatch}项不符${_names ? "：" + esc(_names) : ""}），可重选一键覆盖，或去指令页逐项手调。</div>`;
+    if (st && st.ok && st.mode && ["standard", "casual", "hardcore"].includes(st.mode)) {
+      activeMode = st.mode;
+      if (st.mismatch > 0) {
+        const _names = (st.mismatches || []).map((x) => x.key).join("、");
+        const _mlabel = ((typeof BALANCE_MODE_META !== "undefined" && BALANCE_MODE_META[activeMode]) || {}).label || activeMode;
+        _driftInfo = `<div style="font-size:12px;color:var(--warn);background:var(--warnSoft);border:1px solid var(--warn);border-radius:8px;padding:8px 10px;margin-bottom:12px">⚠️ 当前数值已偏离${_mlabel}（${st.mismatch}项不符${_names ? "：" + esc(_names) : ""}），可重选一键覆盖，或去指令页逐项手调。</div>`;
+      }
+    } else {
+      const cfg = await getBridge().apiGet("config/get");
+      const m = (cfg && (cfg._active_balance_mode || (cfg["设置"] && cfg["设置"]["平衡模式"]))) || "standard";
+      activeMode = ["standard", "casual", "hardcore"].includes(m) ? m : "standard";
     }
-  } catch (e) {}
+  } catch (e) { activeMode = "standard"; }
 
   content.innerHTML = `
     <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5">
@@ -1636,7 +1641,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.7.30"
+        version: res.version || "0.7.31"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -1837,11 +1842,62 @@ const CMD_DEFAULT_REPLY = {
 };
 
 let CMD_EDIT = { sys: "", cmd: "", isNew: false, mapCmd: "" };   // 当前模态框编辑的 系统/指令
+let _CMD_CUST = {};          // 当次渲染的自定义指令节（供委托点击读取）
+let _CMD_LIST_BOUND = false; // #cmdList 事件委托只绑一次，渲染不再逐行绑定
+
+function _bindCmdListOnce() {
+  const el = document.getElementById("cmdList");
+  if (!el || _CMD_LIST_BOUND) return;
+  _CMD_LIST_BOUND = true;
+  el.addEventListener("click", (e) => {
+    const addBtn = e.target.closest("#btnCmdAddCustom");
+    if (addBtn && el.contains(addBtn)) {
+      CMD_EDIT = { sys: "自定义", cmd: "", isNew: true, mapCmd: "" };
+      openCmdEditor();
+      return;
+    }
+    const a = e.target.closest("a.cmd-tag");
+    if (!a || !el.contains(a)) return;
+    CMD_EDIT.sys = a.dataset.sys;
+    CMD_EDIT.cmd = a.dataset.cmd;
+    CMD_EDIT.isNew = false;
+    if (a.dataset.sys === "自定义") {
+      const ce = (_CMD_CUST[a.dataset.cmd] || {});
+      CMD_EDIT.mapCmd = (typeof ce === "object" && ce) ? (ce.command || "") : "";
+    } else {
+      CMD_EDIT.mapCmd = a.dataset.cmd;
+    }
+    openCmdEditor();
+  });
+  // toggle 不冒泡，用捕获在容器层统一接
+  el.addEventListener("toggle", (e) => {
+    const d = e.target;
+    if (d && d.matches && d.matches("details.cmd-block") && d.open) {
+      d.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  }, true);
+  el.addEventListener("input", (e) => {
+    if (e.target && e.target.matches && e.target.matches("[data-wake]")) {
+      CMD_CFG_WAKE_DIRTY = true;
+    }
+  });
+  const exp = document.getElementById("btnCmdExpandAll");
+  if (exp) exp.addEventListener("click", () => {
+    document.querySelectorAll("#cmdList details.cmd-block").forEach((d) => { d.open = true; });
+  });
+  const col = document.getElementById("btnCmdCollapseAll");
+  if (col) col.addEventListener("click", () => {
+    document.querySelectorAll("#cmdList details.cmd-block").forEach((d) => { d.open = false; });
+  });
+}
 
 async function loadCommands() {
   try {
-    const cmds = await getBridge().apiGet("commands");
-    const cur = await getBridge().apiGet("config/get");
+    // 双接口并行（此前串行 2 RTT）
+    const [cmds, cur] = await Promise.all([
+      getBridge().apiGet("commands"),
+      getBridge().apiGet("config/get")
+    ]);
     CMD_CFG = cur || {};
     const wakeSec = CMD_CFG["唤醒词配置"] || {};
     const custSec = CMD_CFG["自定义指令配置"] || {};
@@ -1852,6 +1908,12 @@ async function loadCommands() {
     const isOff = (v) => v === "假" || v === "0" || v === "false";
     const isOn = (v) => v === undefined || !isOff(v);
     const el = document.getElementById("cmdList");
+    if (!el) return;
+    // 重渲染前记住展开态，渲染后恢复（保存后不再全部收起）
+    let _openSys = null;
+    try {
+      _openSys = new Set([...el.querySelectorAll("details.cmd-block[open]")].map((d) => d.dataset.sys));
+    } catch (e) { _openSys = new Set(); }
     KNOWN_CMDS = new Set();
     CMD_ENG = {};
     Object.entries(cmds).forEach(([eng, arr]) => (arr || []).forEach((c) => {
@@ -1902,39 +1964,13 @@ async function loadCommands() {
         `<div class="cmd-tags">${customTags || '<span class="hint">暂无。新建：纯自定义（触发词→回复）或绑定已有引擎指令作别名。</span>'}</div>` +
         `<div class="toolbar" style="margin-top:8px"><button id="btnCmdAddCustom" class="ghost sm">＋ 添加自定义指令</button></div>` +
       `</details>`;
-    el.querySelectorAll("a.cmd-tag").forEach((a) =>
-      a.addEventListener("click", () => {
-        CMD_EDIT.sys = a.dataset.sys;
-        CMD_EDIT.cmd = a.dataset.cmd;
-        CMD_EDIT.isNew = false;
-        if (a.dataset.sys === "自定义") {
-          const e = (custSec[a.dataset.cmd] || {});
-          CMD_EDIT.mapCmd = (typeof e === "object" && e) ? (e.command || "") : "";
-        } else {
-          CMD_EDIT.mapCmd = a.dataset.cmd;
-        }
-        openCmdEditor();
-      }));
-    el.querySelectorAll("details.cmd-block").forEach((d) =>
-      d.addEventListener("toggle", () => {
-        // 打开时滚动到该块(避免长页脱靶)
-        if (d.open) d.scrollIntoView({ block: "nearest", behavior: "smooth" });
-      }));
-    el.querySelectorAll("[data-wake]").forEach((inp) =>
-      inp.addEventListener("input", () => { CMD_CFG_WAKE_DIRTY = true; }));
-    const addCustom = document.getElementById("btnCmdAddCustom");
-    if (addCustom) addCustom.addEventListener("click", () => {
-      CMD_EDIT = { sys: "自定义", cmd: "", isNew: true, mapCmd: "" };
-      openCmdEditor();
-    });
-    const exp = document.getElementById("btnCmdExpandAll");
-    const col = document.getElementById("btnCmdCollapseAll");
-    if (exp) exp.addEventListener("click", () => {
-      el.querySelectorAll("details.cmd-block").forEach((d) => { d.open = true; });
-    });
-    if (col) col.addEventListener("click", () => {
-      el.querySelectorAll("details.cmd-block").forEach((d) => { d.open = false; });
-    });
+    _CMD_CUST = custSec || {};
+    if (_openSys && _openSys.size) {
+      el.querySelectorAll("details.cmd-block").forEach((d) => {
+        if (_openSys.has(d.dataset.sys)) d.open = true;
+      });
+    }
+    _bindCmdListOnce();
     try { refreshBalanceBadges(); } catch (e) {}
   } catch (e) {
     err("commands: " + e.message);
@@ -2174,7 +2210,7 @@ const SPIRIT_FIELDS = [
 ];
 const SHOP_FIELDS = [["price", "价格"], ["attr", "类型"], ["effect", "效果"]];
 const SHOP_ATTR_OPTS = ["精灵球", "等级", "HP", "攻击", "防御", "特攻", "特防", "进化"];
-const SHOP_ATTR_HELP = { "精灵球": "收服率%（大师球100必中）", "等级": "奇异甜食+Lv数", "HP": "吐司类+生命", "攻击": "+攻击", "防御": "+防御", "特攻": "+特攻", "特防": "+特防", "进化": "进化液=1" };
+const SHOP_ATTR_HELP = { "精灵球": "收服率%", "等级": "奇异甜食+Lv数", "HP": "吐司类+生命", "攻击": "+攻击", "防御": "+防御", "特攻": "+特攻", "特防": "+特防", "进化": "进化液=1" };
 
 async function loadSpirits() {
   try {
@@ -2606,8 +2642,8 @@ function renderShop(q = "", forceOpen = false) {
   const curDetails = body.querySelector("details");
   const wasOpen = curDetails ? curDetails.open : forceOpen;
   let html = `<details class="panel" style="margin:0"${wasOpen ? " open" : ""}><summary style="cursor:pointer;font-weight:600">🎒 精灵道具商城 — ${names.length} 件</summary>`;
-  html += `<div class="hint" style="margin-top:8px">类型决定效果：精灵球=收服率%（大师球100必中）/ 等级=奇异甜食+Lv / HP·攻击·防御·特攻·特防=+对应点数 / 进化=进化液。改完点保存道具，只写精灵道具。</div>`;
-  html += `<div style="margin-top:8px"><button id="shopAddItemTop" class="ghost sm">＋ 添加精灵道具</button></div>`;
+  html += `<div class="hint" style="margin-top:8px">类型决定效果：精灵球=收服率% / 等级=奇异甜食+Lv / HP·攻击·防御·特攻·特防=+对应点数 / 进化=进化液。改完点保存道具，只写精灵道具。</div>`;
+  html += `<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button id="shopAddItemTop" class="ghost sm">＋ 添加精灵道具</button><button id="btnShopSpiritSave" class="ghost sm">💾 保存道具</button><button id="btnShopSpiritReset" class="ghost sm">↩️ 恢复默认</button></div>`;
   if (!Object.keys(shop).length && !q) {
     html += `<div class="hint" style="margin:8px 0">当前无自定义道具，运行中使用内置 ${_spiritBuiltinCount("shop")} 件`
       + ` <button class="ghost sm" id="btnSpiritUseBuiltinShop">载入内置为起点</button></div>`;
@@ -2627,7 +2663,7 @@ function renderShop(q = "", forceOpen = false) {
         `<button class="s-del" data-del-key="${esc(key)}" style="margin-left:auto">删除</button></div>`;
     });
   }
-  html += `<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button id="btnShopSpiritSave" class="ghost sm">💾 保存道具</button><button id="btnShopSpiritReset" class="ghost sm">↩️ 恢复默认</button></div></details>`;
+  html += `</details>`;
   body.innerHTML = html;
   document.getElementById("btnSpiritUseBuiltinShop")?.addEventListener("click", () => {
     if (_spiritLoadBuiltin("shop")) { renderShop(q, true); toast("已载入内置道具，点保存道具生效", "ok"); }
@@ -2686,7 +2722,7 @@ function openShopItemAddModal(q) {
         <div style="flex:1"><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">效果：</label>
           <input id="shopAddEffect" type="number" value="10" style="width:100%;padding:6px 10px;border-radius:8px"></div>
       </div>
-      <div class="hint" id="shopAddHelp">精灵球=收服率%（大师球100必中）；等级=+Lv；HP/攻击/防御/特攻/特防=+点数；进化=1</div>
+      <div class="hint" id="shopAddHelp">精灵球=收服率%；等级=+Lv；HP/攻击/防御/特攻/特防=+点数；进化=1</div>
     </div>`;
   document.getElementById("shopAddAttr")?.addEventListener("change", (e) => {
     const v = e.target.value;
@@ -2717,13 +2753,16 @@ function openShopItemAddModal(q) {
 }
 
 const SPIRIT_KIND_LABEL = { maps: "地图", spirits: "属性", shop: "道具", all: "精灵" };
-async function saveSpiritKind(kind) {
+async function saveSpiritKind(kind, silent = false) {
   // 按系统保存：直接存 SPIRIT 状态（输入即时写回，与过滤/视图无关，杜绝搜后保存丢数据）
   // maps+spirits 已合并为 all 一键保存，避免只存一半丢形象图；shop 独立保存
   if (kind === "maps" || kind === "spirits") kind = "all";
   const msg = document.getElementById("spiritMsg");
-  if (!SPIRIT) { toast("请先加载图鉴", "bad"); return; }
-  if (!["all", "shop"].includes(kind)) return;
+  if (!SPIRIT) {
+    if (!silent) toast("请先加载图鉴", "bad");
+    return !!silent;
+  }
+  if (!["all", "shop"].includes(kind)) return false;
   try {
     const payload = kind === "all" ? { maps: SPIRIT.maps || {}, spirits: SPIRIT.spirits || {} } : { shop: SPIRIT.shop || {} };
     const r = await getBridge().apiPost("spirits/save", payload);
@@ -2732,11 +2771,17 @@ async function saveSpiritKind(kind) {
     else SPIRIT_CUSTOM[kind] = true;
     SPIRIT_DIRTY = false;
     const label = kind === "all" ? "精灵" : SPIRIT_KIND_LABEL[kind];
-    if (msg) { msg.className = "msg ok"; msg.textContent = label + "已保存"; }
-    toast(label + "已保存", "ok");
+    if (!silent) {
+      if (msg) { msg.className = "msg ok"; msg.textContent = label + "已保存"; }
+      toast(label + "已保存", "ok");
+    }
+    return true;
   } catch (e) {
-    if (msg) { msg.className = "msg bad"; msg.textContent = "保存失败: " + e.message; }
-    toast("保存失败: " + e.message, "bad");
+    if (!silent) {
+      if (msg) { msg.className = "msg bad"; msg.textContent = "保存失败: " + e.message; }
+      toast("保存失败: " + e.message, "bad");
+    }
+    return false;
   }
 }
 async function resetSpiritKind(kind) {
@@ -3071,7 +3116,7 @@ function renderPoolBox(forceOpen=false){
   try { box.querySelectorAll("details[data-pool-group]").forEach((d) => { openGroups[d.dataset.poolGroup] = d.open; }); } catch (e) {}
   let html=`<details class="panel" style="margin:0"${wasOpen?" open":""}><summary style="cursor:pointer;font-weight:600">🎰 抽奖武器池 — ${poolCount()} 件</summary>`;
   html+=`<div class="hint" style="margin-top:8px">武器=图片文件本身：改名改文件名，稀有度改所在目录；攻击加成参战、描述进详情，改完点保存武器属性</div>`;
-  html+=`<div style="margin-top:8px"><button class="ghost sm" id="btnPoolUploadTop">＋ 添加武器</button></div>`;
+  html+=`<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button class="ghost sm" id="btnPoolUploadTop">＋ 添加武器</button><button class="ghost sm" id="btnPoolAttrsSave">💾 保存武器属性</button><button class="ghost sm" id="btnPoolAttrsReset">↩️ 恢复默认</button></div>`;
   ["SSR","SR","R"].forEach((rar)=>{
     const items=(POOL_WEAPONS&&POOL_WEAPONS[rar])||[];
     const open = openGroups[rar] !== undefined ? openGroups[rar] : false;
@@ -3099,7 +3144,7 @@ function renderPoolBox(forceOpen=false){
     });
     html+=`</details>`;
   });
-  html+=`<div style="margin-top:10px;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="ghost sm" id="btnPoolAttrsSave">💾 保存武器属性</button><button class="ghost sm" id="btnPoolAttrsReset">↩️ 恢复默认</button></div></details>`;
+  html += `</details>`;
   box.innerHTML=html;
   // 分区展开时懒加载图片预览（自动匹配，展开才取，不卡首屏）
   box.querySelectorAll("details[data-pool-group]").forEach((d) => {
@@ -3244,7 +3289,7 @@ function renderPoolBox(forceOpen=false){
   document.getElementById("btnPoolAttrsReset")?.addEventListener("click", () => resetPoolAttrs());
   document.getElementById("btnPoolUploadTop")?.addEventListener("click", ()=>openPoolAddModal("SSR"));
 }
-async function savePoolAttrs() {
+async function savePoolAttrs(silent = false) {
   try {
     const clean = {};
     Object.entries(POOL_ATTRS || {}).forEach(([k, v]) => {
@@ -3255,8 +3300,9 @@ async function savePoolAttrs() {
     const r = await getBridge().apiPost("weapons/pool/attrs", { attrs: clean });
     if (r && r.error) throw new Error(r.error);
     POOL_ATTRS_DIRTY = false;
-    toast("武器属性已保存", "ok"); await loadPool();
-  } catch (e) { toast("保存失败: " + e.message, "bad"); }
+    if (!silent) { toast("武器属性已保存", "ok"); await loadPool(); }
+    return true;
+  } catch (e) { if (!silent) toast("保存失败: " + e.message, "bad"); return false; }
 }
 async function resetPoolAttrs() {
   if (!(await uiConfirm("直接清空全部武器自定义属性（攻击加成/描述）？文件不受影响，旧数据不保留。", "恢复默认"))) return;
@@ -3405,7 +3451,7 @@ function renderShopRideBox(forceOpen = false) {
   const wasOpen = curDetails ? curDetails.open : forceOpen;
   let html = `<details class="panel" style="margin:0"${wasOpen ? " open" : ""}><summary style="cursor:pointer;font-weight:600">🐴 坐骑商城 — ${entries.length} 件</summary>`;
   html += `<div class="hint" style="margin-top:8px">每行一个坐骑，支持改名、改价、删、绑图（图片路径如 data/img/rides/企鹅.jpg，留空自动匹配）</div>`;
-  html += `<div style="margin-top:8px"><button class="ghost sm" id="btnRideAddTop">＋ 添加坐骑</button></div>`;
+  html += `<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button class="ghost sm" id="btnRideAddTop">＋ 添加坐骑</button><button class="ghost sm" id="btnRideSaveTop">💾 保存坐骑</button><button class="ghost sm" id="btnRideReset">↩️ 恢复默认</button></div>`;
   if (!entries.length) {
     html += `<div class="hint" style="margin:8px 0">当前为空，运行时使用内置坐骑（${Object.keys(DEFAULT_RIDE_SHOP).length} 种）；可添加或恢复默认</div>`;
   }
@@ -3424,7 +3470,7 @@ function renderShopRideBox(forceOpen = false) {
       `<div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${showImg ? `<button class="ghost sm" data-ride-view="${esc(showImg)}">浏览图片</button>` : `<span style="color:var(--muted);font-size:11px">无图</span>`}<button class="ghost sm" data-ride-pick="${esc(name)}">外置选图</button><button class="ghost sm" data-ride-pick-builtin="${esc(name)}">内置选图</button><button class="s-del" data-ride-del="${esc(name)}">删除</button></div>` +
       `</div>`;
   });
-  html += `<div style="margin-top:8px"><button class="ghost sm" id="btnRideReset">↩️ 恢复默认</button></div></details>`;
+  html += `</details>`;
   box.innerHTML = html;
   box.querySelectorAll("[data-ride-name]").forEach(inp => inp.addEventListener("change", (e) => {
     const old = e.target.closest("[data-ride-item]").dataset.rideItem;
@@ -3451,12 +3497,12 @@ function renderShopRideBox(forceOpen = false) {
   box.querySelectorAll("[data-ride-del]").forEach(b => b.addEventListener("click", async () => {
     const k = b.dataset.rideDel;
     const _last = Object.keys(SHOP_RIDE).length <= 1;
-    if (!(await uiConfirm("确认删除坐骑 \"" + k + "\"？（需点击上方「保存商城图鉴」生效）" + (_last ? "\n\n注意：这是最后一只，删光后运行时自动使用内置坐骑。" : ""), "删除坐骑"))) return;
+    if (!(await uiConfirm("确认删除坐骑 \"" + k + "\"？（需点击「保存坐骑」生效）" + (_last ? "\n\n注意：这是最后一只，删光后运行时自动使用内置坐骑。" : ""), "删除坐骑"))) return;
     delete SHOP_RIDE[k];
     SHOP_DIRTY = true;
     syncShopRaw();
     renderShopRideBox(true);
-    toast("已删除坐骑，请点击上方「保存商城图鉴」持久化", "ok");
+    toast("已删除坐骑，请点击「保存坐骑」持久化", "ok");
   }));
   box.querySelectorAll("[data-ride-pick-builtin]").forEach(b=> b.addEventListener("click", async ()=>{
     const k=b.dataset.ridePickBuiltin;
@@ -3519,6 +3565,8 @@ function renderShopRideBox(forceOpen = false) {
   }));
   const addBtn = document.getElementById("btnRideAddTop");
   if (addBtn) addBtn.addEventListener("click", () => openRideAddModal());
+  const rideSaveBtn = document.getElementById("btnRideSaveTop");
+  if (rideSaveBtn) rideSaveBtn.addEventListener("click", () => saveRideOnly());
   const resetBtn = document.getElementById("btnRideReset");
   if (resetBtn) resetBtn.addEventListener("click", async () => {
     if (!(await uiConfirm("直接恢复坐骑商城为内置默认？旧数据不保留。", "恢复默认"))) return;
@@ -3560,7 +3608,7 @@ function openRideAddModal() {
       <div><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:3px">图片（坐骑目录 data/img/rides，可选，留空自动匹配）：</label>
         <input id="rideAddImg" style="width:100%;padding:6px 10px;border-radius:8px" placeholder="data/img/rides/xxx.jpg">
         <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap"><button class="ghost sm" id="rideAddPickUpload">外置选图（本地上传）</button><button class="ghost sm" id="rideAddPickBuiltin">内置选图（坐骑目录）</button><button class="ghost sm" id="rideAddPreview">浏览图片</button><span id="rideAddImgTip" style="font-size:11.5px;color:var(--muted)">未选择</span></div></div>
-      <div class="hint">保存后记得点商城页「保存」持久化；图片也可在列表中用“外置选图/内置选图”绑定</div>
+      <div class="hint">保存后记得点「保存坐骑」持久化；图片也可在列表中用“外置选图/内置选图”绑定</div>
     </div>`;
   let _RIDE_ADD_FILE = null;
   const _rideSetTip = (t) => { const el = document.getElementById("rideAddImgTip"); if (el) el.textContent = t; };
@@ -3897,7 +3945,8 @@ async function loadShops(skipAtlas = false) {
     if (msg) { msg.textContent = "加载失败: " + e.message; msg.classList.add("bad"); }
   }
 }
-async function saveShops() {
+async function saveRideOnly(silent = false) {
+  // 坐骑单独保存：只写 商城图鉴.ride_shop，不碰武器/精灵/宝物
   const msg = document.getElementById("shopMsg");
   try {
     const cleanRide = {};
@@ -3907,17 +3956,41 @@ async function saveShops() {
         else cleanRide[k] = v;
       } else cleanRide[k] = v;
     });
-    // 商城页顶部保存只存坐骑：武器=池文件即时生效，精灵道具由下方保存道具独立保存，互不串写
-    const payload = { "商城图鉴": { "ride_shop": JSON.stringify(cleanRide) } };
-    await getBridge().apiPost("config/save", payload);
+    await getBridge().apiPost("config/save", { "商城图鉴": { "ride_shop": JSON.stringify(cleanRide) } });
     SHOP_DIRTY = false;
     SHOP_RIDE_CUSTOM = true;
-    if (msg) { msg.textContent = "坐骑商城已保存"; msg.classList.add("ok"); }
-    toast("坐骑商城已保存", "ok");
     syncShopRaw();
+    if (!silent) {
+      if (msg) { msg.textContent = "坐骑商城已保存"; msg.classList.add("ok"); }
+      toast("坐骑商城已保存", "ok");
+    }
+    return true;
   } catch (e) {
-    if (msg) { msg.textContent = "保存失败: " + e.message; msg.classList.add("bad"); }
-    toast("保存失败: " + e.message, "bad");
+    if (!silent) {
+      if (msg) { msg.textContent = "保存失败: " + e.message; msg.classList.add("bad"); }
+      toast("保存失败: " + e.message, "bad");
+    }
+    return false;
+  }
+}
+
+async function saveShops() {
+  // 顶部全部保存：坐骑 + 武器属性 + 精灵道具，各存各的范围，互不串写
+  const msg = document.getElementById("shopMsg");
+  if (msg) msg.className = "msg";
+  const okRide = await saveRideOnly(true);
+  const okPool = await savePoolAttrs(true);
+  const okShop = await saveSpiritKind("shop", true);
+  const bad = [];
+  if (!okRide) bad.push("坐骑");
+  if (!okPool) bad.push("武器属性");
+  if (!okShop) bad.push("精灵道具");
+  if (!bad.length) {
+    if (msg) { msg.textContent = "商城已全部保存（坐骑/武器属性/精灵道具）"; msg.classList.add("ok"); }
+    toast("商城已全部保存（坐骑/武器属性/精灵道具）", "ok");
+  } else {
+    if (msg) { msg.textContent = "部分保存失败：" + bad.join("、"); msg.classList.add("bad"); }
+    toast("部分保存失败：" + bad.join("、"), "bad");
   }
 }
 

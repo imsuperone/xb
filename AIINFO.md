@@ -5,11 +5,11 @@
 | 属性 | 值 |
 | :--- | :--- |
 | 插件 | `astrbot_plugin_xbbot`（小白统一模块） |
-| 当前版本 | `v0.7.30` |
+| 当前版本 | `v0.7.31` |
 | 作者 | Light (`faxlight@faxt.top`) |
 | 仓库 | `https://github.com/imsuperone/xb`（main） |
 | 主目录 | `astrbot_plugins/astrbot_plugin_xbbot` |
-| 发行包 | `astrbot_plugin_xbbot_v0.7.30.zip`（仓库根 / astrbot_plugins / backup 三端同步） |
+| 发行包 | `astrbot_plugin_xbbot_v0.7.31.zip`（仓库根 / astrbot_plugins / backup 三端同步） |
 | 依赖 | AstrBot >= 3.4.0，Python >= 3.10 |
 | 规模 | 41 模块 / 29 节 901 配置项 / 68 Web API / app.js 约 5370 行 / 179 DOM（0 重复） |
 | 本卡与手册 | 根与插件目录各一份，内容同步；改一处必须同步另一处 |
@@ -46,7 +46,7 @@ python -X utf8 scripts/stress_24h.py
 node --check pages/admin/app.js
 ```
 
-发版：三端 zip（`Temp/opencode/pack_xb0714.py` 改 VER 后跑，排除 `.git/.github/__pycache__/*.pyc/*.db*/data/backups`，内容为插件目录顶层平铺）→ 同步 根/`astrbot_plugins`/`backup` → `git add -A; git commit; git push origin main; git tag vx.y.z -f; git push origin vx.y.z -f`。纯文档提交可只 push 不移动 tag/zip。
+发版：三端 zip（`Temp/opencode/pack_xb0714.py` 改 VER 后跑，排除 `.git/.github/__pycache__/*.pyc/*.db*/data/backups` **+ 顶层文档（AIINFO/AIREADME/aiall/CHANGELOG/README）+ `scripts/`**，内容为插件目录顶层平铺）→ 同步 根/`astrbot_plugins`/`backup` → `git add -A; git commit; git push origin main; git tag vx.y.z -f; git push origin vx.y.z -f`。纯文档提交可只 push 不移动 tag/zip。
 
 ## 🗂️ 文件职责
 

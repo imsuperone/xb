@@ -1,6 +1,6 @@
 # 小白机器人 (astrbot_plugin_xbbot) — 全代码架构文档 (aiall.md)
 
-> 版本：`v0.7.30` ｜ 对象：想从头到尾看懂这份代码的人（函数行号仍以 v0.7.28 为准，v0.7.29~30  printing 偏移：slave.py 查询块 -15 行、app.js +40 行、game.py +25 行左右）
+> 版本：`v0.7.31` ｜ 对象：想从头到尾看懂这份代码的人（函数行号仍以 v0.7.28 为准，v0.7.29~31  printing 偏移：slave.py 查询块 -15 行、app.js +80 行、game.py +25 行左右）
 > 规模：103 个文件，文本约 3.4 万行（图片等二进制除外）
 > 定位：AstrBot 群互动大插件（奴隶/签到/银行/娱乐/私聊/精灵/坐骑/超管/帮派/冒险 10 引擎 + WebUI 管理台）
 > 配套文档：`AIINFO.md`（状态卡：十二红线+铁律+交付流程，红线唯一出处）、`AIREADME.md`（交接手册：分层/存储/指令/数值/隔离矩阵/版本史）
@@ -423,7 +423,7 @@ dispatch 是旧导入兼容垫片（重导出探针表+超管列表）。test_ha
 - **Tab 调度**：`bindTabs:897`（懒加载一次，概览每次重刷）、`TAB_LOADERS:710`（14 页→加载器映射）、`main:731`。
 - **总览/排行/用户/群聊/日志/大屏**：`loadStats:973`、`loadRank:1337`、`loadUsers:1383`（8 维排序+单改单清导入导出空投）、`loadGroups:636`、`loadLogs:5182`（3 秒轮询，v0.7.30 起无变化跳过重渲染）、`loadAnalytics:4665`、`openAutoBalanceModal:1168`（三档弹窗，X/背景可关、失败可重试）、`saveConfig:1276`、`resetConfig:1304`（只动本页渲染节）、`resetAllConfig`（v0.7.29 新增：跨节恢复数值/开关设置，白名单排除备份/商城/图鉴/自定义/群开关，不动用户数据）。
 - **指令页**：`loadCommands:1799`（分系统渲染 ●/🔒）、`openCmdEditor:1902`（启用+超管锁+触发词+映射+回复+数值）、`renderCmdNums:1944`（手配表优先，否则按系统关键词精准匹配前 6）、`saveCmdEditor:1978`（收开关+唤醒词+自定义+启用/权限/回复+数值）、`CMD_NUMS:1683`（40+ 手配）、`CMD_ENG/ENG_NUM_SECTIONS`（所属系统映射）。
-- **商城三栏**：`renderShopRideBox:3348`（改名改价绑图，添加置顶，保存只写 ride_shop）、`renderPoolBox:3011`（SSR/SR/R 折叠+懒加载缩略，添加置顶）、`renderShop:2553`（道具类型下拉，添加置顶）、`loadShops:3813`（单次图鉴渲染）、`savePoolAttrs`、`openRideAddModal/openPoolAddModal/openShopItemAddModal/openSpiritAddModal`（四个添加弹窗，内外双上传）。三栏标题 v0.7.29 起只留“X商城 — N 件”。
+- **商城三栏**：`renderShopRideBox:3348`（改名改价绑图，添加置顶，保存只写 ride_shop）、`renderPoolBox:3011`（SSR/SR/R 折叠+懒加载缩略，添加置顶）、`renderShop:2553`（道具类型下拉，添加置顶）、`loadShops:3813`（单次图鉴渲染）、`savePoolAttrs`、`openRideAddModal/openPoolAddModal/openShopItemAddModal/openSpiritAddModal`（四个添加弹窗，内外双上传）。三栏标题 v0.7.29 起只留“X商城 — N 件”；保存/恢复 v0.7.31 起与添加同栏置顶，坐骑独立小保存（`saveRideOnly`），顶部 `saveShops` 为全部保存（三栏各存各的）。
 - **图鉴**：`loadSpirits:2101`（三态合并）、`renderAtlas:3594`（四分类总览）、`bindSpiritMapCards:2275`（整块事件委托一次绑定）、`saveSpiritKind/resetSpiritKind`（地图属性合并存、道具独立）。
 - **备份**：`loadBackups:4001`、`renderBackups:4020`、`btnBackupNow`（立即冷备）、WebDAV 测试/上传/远端分页/恢复/删除、保留数一键修剪。
 - **根目录**：`loadImages:755`、`renderImages`（内置选图模式）、`showLightbox` 看图。

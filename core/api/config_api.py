@@ -413,24 +413,36 @@ _BALANCE_SIG_KEYS = (
 
 
 async def handle_balance_state(request):
-    """平衡档位真实状态：标记档 + 抽检签名键是否与预设一致，防徽标与实际两张皮"""
+    """平衡档位真实状态：逐档推断最佳匹配，防徽标与实际两张皮。
+    规则：空=未自定义=运行时用内置，缺键不计偏离；三档取 mismatch 最少者；
+    并列优先当前标记档，其次 standard。"""
     try:
         cfg = getattr(ST, "_CONFIG", {}) or {}
-        mode = str(cfg.get("_active_balance_mode") or (cfg.get("设置") or {}).get("平衡模式") or "standard").strip() or "standard"
-        if mode not in PRESETS:
-            mode = "standard"
-        preset = PRESETS[mode]
-        mismatches = []
-        for sec, key in _BALANCE_SIG_KEYS:
-            try:
-                cur = ST.cfg(sec, key, "")
-                want = preset.get(sec, {}).get(key, "")
-                if str(cur) != str(want):
-                    mismatches.append({"sec": sec, "key": key, "cur": str(cur), "preset": str(want)})
-            except Exception:
-                continue
-        return json_response({"ok": True, "mode": mode, "checked": len(_BALANCE_SIG_KEYS),
-                              "mismatch": len(mismatches), "mismatches": mismatches[:8]})
+        marked = str(cfg.get("_active_balance_mode") or (cfg.get("设置") or {}).get("平衡模式") or "").strip()
+        if marked not in PRESETS:
+            marked = ""
+        results = {}
+        for mode, preset in PRESETS.items():
+            mm = []
+            for sec, key in _BALANCE_SIG_KEYS:
+                try:
+                    cur = ST.cfg(sec, key, "")
+                    if cur == "":
+                        continue  # 缺键=未自定义，不计偏离
+                    want = preset.get(sec, {}).get(key, "")
+                    if str(cur) != str(want):
+                        mm.append({"sec": sec, "key": key, "cur": str(cur), "preset": str(want)})
+                except Exception:
+                    continue
+            results[mode] = mm
+        _tiebreak = marked or "standard"
+        best = sorted(PRESETS.keys(),
+                      key=lambda m: (len(results[m]), 0 if m == _tiebreak else 1, 0 if m == "standard" else 1))[0]
+        mismatches = results[best]
+        return json_response({"ok": True, "mode": best, "marked": marked or "standard",
+                              "checked": len(_BALANCE_SIG_KEYS),
+                              "mismatch": len(mismatches), "mismatches": mismatches[:8],
+                              "modes": {m: len(results[m]) for m in PRESETS}})
     except Exception as e:
         return _err(f"balance state failed: {e}", 500)
 
