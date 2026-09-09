@@ -1636,7 +1636,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.7.29"
+        version: res.version || "0.7.30"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -5176,6 +5176,7 @@ setTimeout(() => { checkVersionUpdate(true); }, 1500);
 // ---------- 插件运行日志 ----------
 let LOGS_CACHE = [];
 let LOGS_TIMER = null;
+let _LOGS_SIG = "";
 
 function parseLogLine(raw) {
   // Line format: [YYYY-MM-DD HH:MM:SS] [LEVEL] msg
@@ -5237,6 +5238,10 @@ async function loadLogs(isAuto = false) {
     const data = (res && (res.result || res.data || res)) || {};
     const logsList = Array.isArray(data.logs) ? data.logs : (Array.isArray(res) ? res : []);
 
+    // 内容无变化跳过重渲染：日志只追加，长度+首尾行一致即视为无更新，省 500 行 DOM 重建
+    const _sig = logsList.length + "|" + (logsList[0] || "") + "|" + (logsList[logsList.length - 1] || "");
+    if (isAuto && _sig === _LOGS_SIG) return true;
+    _LOGS_SIG = _sig;
     LOGS_CACHE = logsList;
     renderLogs(LOGS_CACHE);
 

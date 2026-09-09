@@ -5,6 +5,8 @@ GET  /{PLUGIN_ID}/logs        - 分页/过滤获取最近日志行
 POST /{PLUGIN_ID}/logs/clear  - 清空日志
 GET  /{PLUGIN_ID}/logs/export - 导出日志文件
 """
+import asyncio
+import functools
 import os
 import datetime
 try:
@@ -30,7 +32,9 @@ async def handle_logs_get(request=None):
         except Exception:
             limit = 200
 
-        data = logger.get_logs(limit=limit, level=level, keyword=keyword)
+        # 日志文件读 + 正则过滤走线程池，不堵消息循环
+        data = await asyncio.to_thread(
+            functools.partial(logger.get_logs, limit=limit, level=level, keyword=keyword))
         return json_response({
             "status": "ok",
             "result": data,
@@ -46,7 +50,7 @@ async def handle_logs_get(request=None):
 
 async def handle_logs_clear(request=None):
     try:
-        ok = logger.clear_logs()
+        ok = await asyncio.to_thread(logger.clear_logs)
         if ok:
             return json_response({"status": "ok", "message": "插件日志已清空"})
         else:
@@ -58,11 +62,14 @@ async def handle_logs_clear(request=None):
 async def handle_logs_export(request=None):
     try:
         log_path = logger.get_log_file_path()
-        if os.path.isfile(log_path):
-            with open(log_path, "r", encoding="utf-8", errors="replace") as f:
-                content_str = f.read()
-        else:
-            content_str = ""
+
+        def _work():
+            if os.path.isfile(log_path):
+                with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+                    return f.read()
+            return ""
+
+        content_str = await asyncio.to_thread(_work)
 
         ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"xb_logs_{ts}.log"

@@ -24,7 +24,10 @@ API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
 _LAST_CHECK_RES = None
 _LAST_CHECK_TIME = 0.0
-_CHECK_CACHE_TTL = 10.0  # 10秒短缓存防频繁请求 GitHub 触发 RateLimit
+_CHECK_CACHE_TTL = 300.0  # 成功结果缓存 5 分钟：版本不变时不再打 GitHub，防 RateLimit
+_CHECK_FAIL_TTL = 60.0  # 失败结果缓存 1 分钟：网络故障时不再每点每试
+_CHECK_RUNNING_SINCE = 0.0  # 在途检测开始时间戳（>0 表示有检测正在跑，并发请求共享结果，防惊群）
+_CHECK_RUNNING_TTL = 30.0  # 在途超时：拥有者超过此时长未回即视为死亡，等候者自行接管
 
 
 def _get_local_version(plugin_base=""):
@@ -37,7 +40,7 @@ def _get_local_version(plugin_base=""):
                     return line.split(":", 1)[1].strip().strip('"').strip("'")
     except Exception:
         pass
-    return "0.7.29"
+    return "0.7.30"
 
 
 def _parse_version_tuple(v_str):
@@ -73,22 +76,19 @@ def check_latest_version(plugin_base=""):
         "Accept": "application/vnd.github.v3+json"
     }
 
-    # 1. 优先尝试检测 main 分支 metadata.yaml（带时间戳穿透 CDN 缓存，多镜像加速容灾）
+    # 1. 优先尝试检测 main 分支 metadata.yaml（多镜像加速容灾；3 镜像×2 秒=最坏 6 秒，
+    # 加 Releases 4 秒共 10 秒，低于前端 20 秒熔断；慢代理镜像已剔除）
     main_ver = ""
     ts = int(time.time())
     raw_meta_urls = [
         f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/metadata.yaml",
-        f"https://ghproxy.net/https://raw.githubusercontent.com/{GITHUB_REPO}/main/metadata.yaml",
-        f"https://mirror.ghproxy.com/https://raw.githubusercontent.com/{GITHUB_REPO}/main/metadata.yaml",
-        f"https://raw.gitmirror.com/{GITHUB_REPO}/main/metadata.yaml",
         f"https://cdn.jsdelivr.net/gh/{GITHUB_REPO}@main/metadata.yaml?_t={ts}",
-        f"https://fastly.jsdelivr.net/gh/{GITHUB_REPO}@main/metadata.yaml?_t={ts}",
-        f"https://testingcf.jsdelivr.net/gh/{GITHUB_REPO}@main/metadata.yaml?_t={ts}"
+        f"https://fastly.jsdelivr.net/gh/{GITHUB_REPO}@main/metadata.yaml?_t={ts}"
     ]
     for url in raw_meta_urls:
         try:
             req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, timeout=3) as resp:
+            with urllib.request.urlopen(req, timeout=2) as resp:
                 if resp.status == 200:
                     txt = resp.read().decode("utf-8")
                     for line in txt.splitlines():
@@ -159,21 +159,44 @@ def check_latest_version(plugin_base=""):
 
 async def handle_version_check(request=None, plugin_base=""):
     """从云端检测是否有最新 Release 或 main 分支版本（完全异步化，绝不阻塞主事件循环）"""
-    global _LAST_CHECK_RES, _LAST_CHECK_TIME
-    now = time.time()
-    if _LAST_CHECK_RES is not None and (now - _LAST_CHECK_TIME) < _CHECK_CACHE_TTL:
-        return no_cache_response(json_response(_LAST_CHECK_RES))
-
+    global _LAST_CHECK_RES, _LAST_CHECK_TIME, _CHECK_RUNNING_SINCE
     import asyncio
+    now = time.time()
+    # 成功/失败分级缓存
+    if _LAST_CHECK_RES is not None:
+        _failed = bool(_LAST_CHECK_RES.get("detect_error") or _LAST_CHECK_RES.get("error"))
+        _ttl = _CHECK_FAIL_TTL if _failed else _CHECK_CACHE_TTL
+        if (now - _LAST_CHECK_TIME) < _ttl:
+            return no_cache_response(json_response(_LAST_CHECK_RES))
+    # 在途共享：已有检测在跑则等候结果（8 秒），防并发惊群打 GitHub
+    _t0 = now
+    if _CHECK_RUNNING_SINCE > 0 and (now - _CHECK_RUNNING_SINCE) < _CHECK_RUNNING_TTL:
+        try:
+            for _ in range(16):
+                await asyncio.sleep(0.5)
+                if _LAST_CHECK_TIME > _t0 and _LAST_CHECK_RES is not None:
+                    return no_cache_response(json_response(_LAST_CHECK_RES))
+                if _CHECK_RUNNING_SINCE <= 0:
+                    break
+        except Exception:
+            pass
+        now = time.time()
+        if _LAST_CHECK_RES is not None and (now - _LAST_CHECK_TIME) < _CHECK_CACHE_TTL:
+            return no_cache_response(json_response(_LAST_CHECK_RES))
+    # 成为拥有者执行检测
+    _CHECK_RUNNING_SINCE = time.time()
     try:
-        res = await asyncio.to_thread(check_latest_version, plugin_base)
-    except Exception as e:
-        res = {
-            "current_version": _get_local_version(plugin_base),
-            "latest_version": _get_local_version(plugin_base),
-            "has_update": False,
-            "error": str(e)
-        }
-    _LAST_CHECK_RES = res
-    _LAST_CHECK_TIME = now
+        try:
+            res = await asyncio.to_thread(check_latest_version, plugin_base)
+        except Exception as e:
+            res = {
+                "current_version": _get_local_version(plugin_base),
+                "latest_version": _get_local_version(plugin_base),
+                "has_update": False,
+                "error": str(e)
+            }
+        _LAST_CHECK_RES = res
+        _LAST_CHECK_TIME = time.time()
+    finally:
+        _CHECK_RUNNING_SINCE = 0.0
     return no_cache_response(json_response(res))

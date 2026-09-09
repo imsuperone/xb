@@ -16,10 +16,11 @@ except ImportError:
 
 ROLES = ("帮主", "护法", "成员")
 
-# 缓存：gid -> {gname -> [ (qq,g) ] }  5秒 TTL，避免每次全表扫
+# 缓存：gid -> {gname -> [ (qq,g) ] }  15秒 TTL，避免每次全表扫
+# （成员变更经 _save_member 主动失效；精灵战力本就按 TTL 快照，15 秒 stale 可接受）
 _GUILD_MEMBERS_CACHE = {}
 _GUILD_MEMBERS_TS = {}
-_GUILD_TTL = 5.0
+_GUILD_TTL = 15.0
 
 def _invalidate_guild_cache(gid):
     try:
@@ -60,7 +61,7 @@ def _save_member(gid, qq, g):
 
 
 def _members(gid, gname):
-    """返回 群内加入该帮派的 qq 列表(含各自 帮派字段) — 5秒缓存避免全表扫"""
+    """返回 群内加入该帮派的 qq 列表(含各自 帮派字段) — 15秒缓存避免全表扫"""
     gid_s = str(gid)
     now = time.time()
     # 尝试缓存：gid -> 全量 (qq, guild) 列表

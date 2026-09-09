@@ -579,8 +579,11 @@ def cmd_rob_zone(gid, qq):
         ST._ensure_db()
         if ST._DB is not None:
             with ST._LOCK:
+                # 有界随机候选：ORDER BY RANDOM() LIMIT 8 再按 str 过滤自己。
+                # 等价性：8 个名额中自己至多占 1 个，大群必含他人；候选均匀故最终受害人仍均匀；
+                # 小群（≤8 人）一次取全，与原来全表 DISTINCT 结果一致（wallet 主键已保证唯一）。
                 rows = ST._DB.execute(
-                    "SELECT DISTINCT qq FROM wallet WHERE gid=?", (int(gid),)).fetchall()
+                    "SELECT qq FROM wallet WHERE gid=? ORDER BY RANDOM() LIMIT 8", (int(gid),)).fetchall()
             wins = [q for q in (r[0] for r in rows)
                     if str(q) != str(qq)]
     except Exception:

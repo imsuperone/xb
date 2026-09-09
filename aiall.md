@@ -1,6 +1,6 @@
 # 小白机器人 (astrbot_plugin_xbbot) — 全代码架构文档 (aiall.md)
 
-> 版本：`v0.7.29` ｜ 对象：想从头到尾看懂这份代码的人（函数行号仍以 v0.7.28 为准，v0.7.29  printing 偏移：slave.py 查询块 -15 行、app.js +30 行左右）
+> 版本：`v0.7.30` ｜ 对象：想从头到尾看懂这份代码的人（函数行号仍以 v0.7.28 为准，v0.7.29~30  printing 偏移：slave.py 查询块 -15 行、app.js +40 行、game.py +25 行左右）
 > 规模：103 个文件，文本约 3.4 万行（图片等二进制除外）
 > 定位：AstrBot 群互动大插件（奴隶/签到/银行/娱乐/私聊/精灵/坐骑/超管/帮派/冒险 10 引擎 + WebUI 管理台）
 > 配套文档：`AIINFO.md`（状态卡：十二红线+铁律+交付流程，红线唯一出处）、`AIREADME.md`（交接手册：分层/存储/指令/数值/隔离矩阵/版本史）
@@ -45,7 +45,7 @@ astrbot_plugin_xbbot/
 │       ├── legacy.py      # 698行：旧库导入（db/ini/json/zip四态）
 │       ├── logs.py        # 76行：日志查看/清空/导出
 │       ├── stats.py       # 144行：总览 + 排行榜
-│       ├── updater.py     # 179行：在线更新检测（纪元算法隔离旧版）
+│       ├── updater.py     # 在线更新检测（纪元算法隔离旧版；v0.7.30 起 3 镜像+在途共享+分级缓存）
 │       └── users.py       # 875行：用户增删改查 + 空投
 ├── engines/               # 业务引擎层（只读 store，不碰 core/pages）
 │   ├── slave.py           # 2281行：奴隶买卖RPG + 抽奖 + 排行 + 昵称中枢（最大文件）
@@ -241,12 +241,12 @@ dispatch 是旧导入兼容垫片（重导出探针表+超管列表）。test_ha
 | `users.py` | `users`→`handle_users:49`（异步）/`user/edit:119`/`user/clear:567`/`user/export:??`/`user/import`/`users/export:234`/`users/import`/`clean_left`/`airdrop:661`（集目标+批量双异步） | 分页列表 / 单改（差值语义）/ 单导（b64）/ 全量导 / 退群清理（平台活名单为准）/ 单清 / 空投（单事务批量+脏缓存降级逐发） |
 | `groups.py` | `groups/list:12`（异步）/`toggle:47`/`delete:86` | 总开关 + 按群开关列表/切换/删除 |
 | `config_api.py` | `config/schema:20`/`get:39`/`save:59`、`commands`、`config/auto_balance:437`（备份+校准双异步）、`config/balance_state` | schema 下发 / 配置读写（WebDAV 密钥分流：密码留空=不变）/ 指令采集 / **三档智能平衡**（标准/休闲/硬核+真备份+身价联动校准）/ 漂移检测（13 签名键） |
-| `game.py`（全同步，大群慎点） | `slave/users:23`/`calibrate:139`、`spirit/users:197`、`spirits:308`、`spirits/save:336`、`gacha/weapons:414`、`weapons/pool`+`rename/move/delete/upload/img/attrs/replace_path` | 奴隶画像（身价≤0 自动补）/ 校准 / 精灵画像（战力公式）/ 图鉴三键读写（入库清洗脏条目）/ 武器名对照 / **池文件管理**（改名/移稀有度/删除/上传/单图预览/属性另存/内置选图） |
+| `game.py`（3 重接口 v0.7.30 起异步，其余同步毫秒级） | `slave/users:23`/`calibrate:139`、`spirit/users:197`、`spirits:308`、`spirits/save:336`、`gacha/weapons:414`、`weapons/pool`+`rename/move/delete/upload/img/attrs/replace_path` | 奴隶画像（身价≤0 自动补）/ 校准 / 精灵画像（战力公式）/ 图鉴三键读写（入库清洗脏条目）/ 武器名对照 / **池文件管理**（改名/移稀有度/删除/上传/单图预览/属性另存/内置选图） |
 | `images.py` | `list:36`（异步）/`upload:74`/`delete`/`rename`/`mkdir`/`copy`/`thumb`/`export:291`（异步） | 插件根为牢笼的文件库；上传 base64 双受理；预览单张≤200KB；导出 zip 硬排除备份/DB/密钥 |
 | `backup.py` | `backups/list:40`/`restore:86`（异步）/`delete`/`export:164`（异步）/`doctor:261`（双异步）/`prune`、快照 3 个、`backup/webdav/*` 5 个×2 前缀（异步）、`admin/clear:214`（异步，需双重确认） | 列表禁自动触发 / 热恢复清三缓存 / 体检锁内只查+VACUUM 锁外 60 秒熔断 / 远端下载验 SQLite 魔数+归档 |
 | `legacy.py`（全同步，大包慎点） | `import/legacy:334` | 旧库导入：db/ini/json/zip 四态，群号 QQ 推断，中英键翻译，文件读兼容各种编码 |
-| `logs.py` | `logs:20`/`clear:47`/`export:58` | 日志分页查 / 清 / 导出（JSON 包文本） |
-| `updater.py` | `version/check:160`（异步+10 秒缓存） | 双通道（7 源码镜像+Releases API）择优 + **纪元算法**（0.7.x 恒大于旧版） |
+| `logs.py`（v0.7.30 起异步） | `logs:20`/`clear:47`/`export:58` | 日志分页查 / 清 / 导出（JSON 包文本） |
+| `updater.py` | `version/check:160`（异步+成功 5 分钟/失败 1 分钟缓存+在途共享，v0.7.30 起） | 双通道（3 源码镜像+Releases API，最坏 10 秒）择优 + **纪元算法**（0.7.x 恒大于旧版） |
 
 ---
 
@@ -310,7 +310,7 @@ dispatch 是旧导入兼容垫片（重导出探针表+超管列表）。test_ha
 | `cmd_force_withdraw` | 391 | 强取：无息、不重置计时，原子到账 |
 | `cmd_transfer` | 414 | 转账：@昵称/CQ/QQ/纯名全兼容归一，最小 50、耗体力 2、单笔上限 1 千亿，接收方爆 cap 截断 |
 | `cmd_gamble` | 488 | 赌博：100~10 万、耗体力 10、日 5 次，成功率 60% 赢 1.8 倍，败扣魅力 20、50% 蹲 5 分钟，同事务 |
-| `cmd_rob_zone` | 566 | 打劫银行：耗体力 5、间隔 10 分钟，本群随机受害人，成功率 70%，抢 6000~12000，败罚 500+魅力 3+蹲 5 分钟 |
+| `cmd_rob_zone` | 566 | 打劫银行：耗体力 5、间隔 10 分钟，本群随机受害人（v0.7.30 起有界 `RANDOM() LIMIT 8`+自过滤，仍均匀），成功率 70%，抢 6000~12000，败罚 500+魅力 3+蹲 5 分钟 |
 | `cmd_sell_slave` | 923 | 打劫个人（名存实亡的老名字）：双方余额门槛+体力 20+CD，成功率 65%，抢 1000~10 万 |
 | `cmd_redpack` | 627 | 发红包：2000~1 千亿、耗体力 2、间隔 60 秒，口令随机 5 位或自定义 |
 | `cmd_recv_red` | 699 | 抢红包：禁自抢/重复，耗体力 1，抢总额 1/20~1/3，魅力+11 |
@@ -368,7 +368,7 @@ dispatch 是旧导入兼容垫片（重导出探针表+超管列表）。test_ha
 
 ### 4.7 `guild.py`（640行）——帮派
 
-帮派列表/排行/我的帮派/创建（限 12 字，耗钱体魅）/加入（限 30 人）/邀请/同意/退出（帮主须先出让）/成员列表/贡献（转帮贡）/修筑/福利（日一次）/帮战（战力比+日 5 次）/管理全套。数据寄存在成员账户里聚合，5 秒成员缓存。
+帮派列表/排行/我的帮派/创建（限 12 字，耗钱体魅）/加入（限 30 人）/邀请/同意/退出（帮主须先出让）/成员列表/贡献（转帮贡）/修筑/福利（日一次）/帮战（战力比+日 5 次）/管理全套。数据寄存在成员账户里聚合，15 秒成员缓存（v0.7.30 起；成员变更主动失效）。
 
 ### 4.8 `adventure.py`（322行）+ `adventure_text.py`（167行）——文字冒险
 
@@ -421,7 +421,7 @@ dispatch 是旧导入兼容垫片（重导出探针表+超管列表）。test_ha
 - **桥接**：`getBridge:26`（桥优先+fetch 回退+前缀缓存）、`callApi:187`（GET 失败回退 POST）、`postFile:879`（base64 直传）、`uploadImage:885`、`triggerDownload:330`（三级下载破沙箱）。
 - **弹窗**：`toast:166`、`uiAlert:453`、`uiConfirm:504`（危险词自动红按钮）、`uiPrompt:562`。
 - **Tab 调度**：`bindTabs:897`（懒加载一次，概览每次重刷）、`TAB_LOADERS:710`（14 页→加载器映射）、`main:731`。
-- **总览/排行/用户/群聊/日志/大屏**：`loadStats:973`、`loadRank:1337`、`loadUsers:1383`（8 维排序+单改单清导入导出空投）、`loadGroups:636`、`loadLogs:5182`（3 秒轮询）、`loadAnalytics:4665`、`openAutoBalanceModal:1168`（三档弹窗，X/背景可关、失败可重试）、`saveConfig:1276`、`resetConfig:1304`（只动本页渲染节）、`resetAllConfig`（v0.7.29 新增：跨节恢复数值/开关设置，白名单排除备份/商城/图鉴/自定义/群开关，不动用户数据）。
+- **总览/排行/用户/群聊/日志/大屏**：`loadStats:973`、`loadRank:1337`、`loadUsers:1383`（8 维排序+单改单清导入导出空投）、`loadGroups:636`、`loadLogs:5182`（3 秒轮询，v0.7.30 起无变化跳过重渲染）、`loadAnalytics:4665`、`openAutoBalanceModal:1168`（三档弹窗，X/背景可关、失败可重试）、`saveConfig:1276`、`resetConfig:1304`（只动本页渲染节）、`resetAllConfig`（v0.7.29 新增：跨节恢复数值/开关设置，白名单排除备份/商城/图鉴/自定义/群开关，不动用户数据）。
 - **指令页**：`loadCommands:1799`（分系统渲染 ●/🔒）、`openCmdEditor:1902`（启用+超管锁+触发词+映射+回复+数值）、`renderCmdNums:1944`（手配表优先，否则按系统关键词精准匹配前 6）、`saveCmdEditor:1978`（收开关+唤醒词+自定义+启用/权限/回复+数值）、`CMD_NUMS:1683`（40+ 手配）、`CMD_ENG/ENG_NUM_SECTIONS`（所属系统映射）。
 - **商城三栏**：`renderShopRideBox:3348`（改名改价绑图，添加置顶，保存只写 ride_shop）、`renderPoolBox:3011`（SSR/SR/R 折叠+懒加载缩略，添加置顶）、`renderShop:2553`（道具类型下拉，添加置顶）、`loadShops:3813`（单次图鉴渲染）、`savePoolAttrs`、`openRideAddModal/openPoolAddModal/openShopItemAddModal/openSpiritAddModal`（四个添加弹窗，内外双上传）。三栏标题 v0.7.29 起只留“X商城 — N 件”。
 - **图鉴**：`loadSpirits:2101`（三态合并）、`renderAtlas:3594`（四分类总览）、`bindSpiritMapCards:2275`（整块事件委托一次绑定）、`saveSpiritKind/resetSpiritKind`（地图属性合并存、道具独立）。
