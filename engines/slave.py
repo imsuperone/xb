@@ -1943,6 +1943,15 @@ def _route_locked(gid, qq, raw):
                 m = _re2.search(r"(\d{5,12})", text)
                 if m:
                     t = m.group(1)
+                else:
+                    _nm_cand = text[len("我的信息 "):].strip().lstrip("@").strip()
+                    if _nm_cand:
+                        try:
+                            _t_cand = find_qq_by_name(gid, _nm_cand)
+                        except Exception:
+                            _t_cand = None
+                        if _t_cand:
+                            t = str(_t_cand)
         if t:
             return cmd_query(gid, qq, t, st)
         return cmd_myinfo(gid, qq, st)

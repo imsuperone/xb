@@ -225,38 +225,38 @@ def _extract_transfer_target(raw, gid=None):
     返回 (target_qq_or_None, remaining_text)
     """
     raw = str(raw or "")
+    target = None
     # 1) ST.parse_at
     try:
         t, rem = ST.parse_at(raw)
         if t:
-            return str(t), rem.strip()
+            target = str(t)
     except Exception:
         pass
-    # 2) CQ code
-    m = re.search(r"\[CQ:at,qq=(\d+)[^\]]*\]", raw)
-    if m:
-        rem = re.sub(r"\[CQ:at,qq=\d+[^\]]*\]", "", raw).strip()
-        return m.group(1), rem
-    # 3) @QQ number
-    m = re.search(r"@\s*(\d{5,12})", raw)
-    if m:
-        rem = re.sub(r"@\s*\d{5,12}", "", raw, count=1).strip()
-        return m.group(1), rem
-    # 4) @name via slave.NOTE_NAMES
-    m = re.search(r"@\s*([^@\s，,]+)", raw)
-    if m:
-        name = m.group(1).strip()
-        qq = _resolve_qq_from_name(name, gid)
-        if qq:
-            rem = re.sub(r"@\s*[^@\s，,]+", "", raw, count=1).strip()
-            return str(qq), rem
-    # 5) 纯QQ字符串兜底 (由调用方决定是否使用，这里也尝试返回以兼容)
-    # 仅当 raw 中包含独立的 5-12位数字且没有@时，视为候选
-    m = re.search(r"\b(\d{5,12})\b", raw)
-    if m:
-        # 调用方会在 handle 中对转账等指令再启用此兜底；这里返回供 cmd_transfer 内部使用
-        # 保持返回但不强制去除，避免误伤金额；只在明确需要时使用
-        pass
+    if not target:
+        # 2) CQ code
+        m = re.search(r"\[CQ:at,qq=(\d+)[^\]]*\]", raw)
+        if m:
+            target = m.group(1)
+        else:
+            # 3) @QQ number
+            m = re.search(r"@\s*(\d{5,12})", raw)
+            if m:
+                target = m.group(1)
+            elif gid:
+                # 4) @name via slave.NOTE_NAMES
+                m = re.search(r"@\s*([^@\s，,]+)", raw)
+                if m:
+                    name = m.group(1).strip()
+                    qq = _resolve_qq_from_name(name, gid)
+                    if qq:
+                        target = str(qq)
+    if target:
+        # 清除 CQ 码与残留的 @昵称/@QQ 标记，返回纯净的正文指令与金额
+        rem = re.sub(r"\[CQ:at,qq=\d+[^\]]*\]", "", raw)
+        rem = re.sub(r"@\s*\S+", "", rem).strip()
+        rem = re.sub(r"\s+", " ", rem)
+        return target, rem.strip()
     return None, raw.strip()
 
 
@@ -497,27 +497,49 @@ def cmd_gamble(gid, qq, amount):
     cs = ST.cfgi("银行配置", "赌博消耗体力", 10)
     if a.int("stamina") < cs:
         return "亲，您的体力不足，无法进行赌博！"
+    # 总资产保底 10000：现金+存款 <= 10000 拒绝；下注后总资产 < 10000 拒绝
+    cur_cash_pre = ST.coins_get(gid, qq)
+    cur_dep_pre = a.int("deposit")
+    total_pre = cur_cash_pre + cur_dep_pre
+    if total_pre <= 10000:
+        return f"亲，您的总资产（现金+存款）不足10000{ST.coin_name()}，无法参与赌博！必须保留至少10000保底生活费！"
+    if total_pre - amount < 10000:
+        max_bet = max(0, total_pre - 10000)
+        return (f"亲，赌博后总资产必须保有至少10000{ST.coin_name()}保底生活费！"
+                f"您当前总资产为{total_pre}{ST.coin_name()}，本次最多可下注{max_bet}{ST.coin_name()}！")
+    if cur_cash_pre < amount:
+        return f"亲，您的现金不足，无法进行赌博（不可直接透支银行存款下注，请先前往银行取款）！"
     lim = ST.cfgi("银行配置", "赌博限定次数", 5)
     cnt = int(ST.recall_get("gamble_%s_%s_%s" % (gid, qq, dt.date.today()), "0") or 0)
     if cnt >= lim:
         return "亲，您今日赌博次数已达上限，无法再进行赌博！"
-    if ST.coins_get(gid, qq) < amount:
-        return f"亲，您的{ST.coin_name()}不足，无法进行赌博！"
     meli = ST.cfgi("银行配置", "赌博魅力减少", 20)
     jail_mins = ST.cfgi("银行配置", "赌博关押时间", 5)
     prob = ST.cfgi("银行配置", "赌博成功概率", 60)
-    ST.recall_set("gamble_%s_%s_%s" % (gid, qq, dt.date.today()), str(cnt + 1))
     gain = int(amount * 1.8)
     # 原子化：钱包+体力+魅力 同事务，避免半成功通胀
     try:
         with ST._LOCK:
             cur = ST.coins_get(gid, qq)
+            a2 = ST.acct(gid, qq)
+            cur_dep = a2.int("deposit")
+            total_assets = cur + cur_dep
+            if total_assets <= 10000:
+                return f"亲，您的总资产（现金+存款）不足10000{ST.coin_name()}，无法参与赌博！必须保留至少10000保底生活费！"
+            if total_assets - amount < 10000:
+                max_bet = max(0, total_assets - 10000)
+                return (f"亲，赌博后总资产必须保有至少10000{ST.coin_name()}保底生活费！"
+                        f"您当前总资产为{total_assets}{ST.coin_name()}，本次最多可下注{max_bet}{ST.coin_name()}！")
             if cur < amount:
-                return f"亲，您的{ST.coin_name()}不足，无法进行赌博！"
-            cur_st = ST.acct(gid, qq).int("stamina")
+                return f"亲，您的现金不足，无法进行赌博（不可直接透支银行存款下注，请先前往银行取款）！"
+            cur_st = a2.int("stamina")
             if cur_st < cs:
                 return "亲，您的体力不足，无法进行赌博！"
-            a2 = ST.acct(gid, qq)
+            # 锁内重读日计数
+            cnt = int(ST.recall_get("gamble_%s_%s_%s" % (gid, qq, dt.date.today()), "0") or 0)
+            if cnt >= lim:
+                return "亲，您今日赌博次数已达上限，无法再进行赌博！"
+            ST.recall_set("gamble_%s_%s_%s" % (gid, qq, dt.date.today()), str(cnt + 1))
             a2.set("stamina", str(cur_st - cs))
             if random.random() * 100 < prob:
                 # 成功：-amount +gain
@@ -991,7 +1013,7 @@ def cmd_sell_slave(gid, qq, target):
     if a.int("stamina") < cs:
         return "亲，您的体力不足，无法实施打劫！"
     if ST.coins_get(gid, qq) < 500:
-        return f"亲，您的{ST.coin_name()}不足，无法实施打劫！"
+        return f"亲，您的现金不足500{ST.coin_name()}，无法实施打劫！"
     if ST.coins_get(gid, target) < 100:
         return "亲，对方是个穷光蛋，无法对他实施打劫！"
     ok, mins = _cd(a, "rob_time", ST.cfgi("银行配置", "打劫关押时间", 5), "打劫")
@@ -1010,7 +1032,7 @@ def cmd_sell_slave(gid, qq, target):
                 return "亲，您的体力不足，无法实施打劫！"
             cur_money = ST.coins_get(gid, qq)
             if cur_money < 500:
-                return f"亲，您的{ST.coin_name()}不足，无法实施打劫！"
+                return f"亲，您的现金不足500{ST.coin_name()}，无法实施打劫！"
             a2 = ST.acct(gid, qq)
             a2.set("stamina", str(cur_st - cs))
             a2.set("rob_time", _now_s())

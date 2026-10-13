@@ -513,7 +513,7 @@ _MENU = (
     "💪 购买体力 数量　购买魅力 数量\r\n"
     "🎁 领取新手礼包　👤 我的信息\r\n"
     "👍 点赞/每日点赞　　📋 打卡\r\n"
-    "🏆 个人排行　财富榜　签到榜　体力榜　魅力榜\r\n"
+    "🏆 个人排行　财富榜　签到榜　魅力榜\r\n"
     "━━━━━━━━━━━━━━━━\r\n"
     "💡 发送对应指令即可游玩"
 )
@@ -607,8 +607,6 @@ def handle(gid, qq, raw):
         return cmd_rank(gid, "cash", None)
     if text.startswith("签到排行榜") or text.startswith("签到榜"):
         return cmd_rank(gid, "sign", None)
-    if text.startswith("体力排行榜") or text.startswith("体力榜"):
-        return cmd_rank(gid, "stamina", None)
     if text.startswith("魅力排行榜") or text.startswith("魅力榜"):
         return cmd_rank(gid, "charm", None)
     if text == "签到" or text.startswith("签到 ") or text == "打卡" or text.startswith("打卡 "):
