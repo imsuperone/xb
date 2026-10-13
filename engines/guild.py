@@ -60,6 +60,37 @@ def _save_member(gid, qq, g):
     _invalidate_guild_cache(gid)
 
 
+def _gname(gid, qq):
+    try:
+        from . import slave as SL
+        try:
+            if hasattr(SL, "display_name"):
+                d = SL.display_name(gid, str(qq))
+                if d and d != str(qq):
+                    return d
+        except Exception:
+            pass
+        try:
+            nm = SL.get_note_name(gid, str(qq)) or SL.fetch_card(gid, str(qq))
+            if nm:
+                return nm
+        except Exception:
+            pass
+        if gid:
+            try:
+                st = SL.state(str(gid))
+                if st is not None and st.has_section(str(qq)):
+                    raw = dict(st[str(qq)] or {})
+                    n = str(raw.get("name", "")).strip()
+                    if n and n != str(qq):
+                        return n
+            except Exception:
+                pass
+        return SL.NOTE_NAMES.get(str(qq), str(qq)) if (not gid or gid == "dm") and hasattr(SL, "NOTE_NAMES") else str(qq)
+    except Exception:
+        return str(qq)
+
+
 def _members(gid, gname):
     """返回 群内加入该帮派的 qq 列表(含各自 帮派字段) — 15秒缓存避免全表扫"""
     gid_s = str(gid)
@@ -274,7 +305,7 @@ def cmd_invite(gid, qq, target):
         return "亲，该帮派人数已满，无法再邀请！"
     _acct(gid, target).set("guild_invite", g["name"])
     ST.acct_save(gid, target)
-    return f"已向 <{target}> 发出「{g['name']}」邀请！对方发送【同意加入帮派】即可加入！"
+    return f"已向 <{_gname(gid, target)}> 发出「{g['name']}」邀请！对方发送【同意加入帮派】即可加入！"
 
 
 def cmd_accept_invite(gid, qq):
@@ -317,20 +348,6 @@ def cmd_exit(gid, qq):
     name = g["name"]
     _save_member(gid, qq, {})
     return f"您已退出帮派「{name}」！"
-
-
-def _gname(gid, qq):
-    try:
-        from . import slave as SL
-        try:
-            nm = SL.get_note_name(gid, str(qq)) or SL.fetch_card(gid, str(qq))
-            if nm:
-                return nm
-        except Exception:
-            pass
-        return SL.NOTE_NAMES.get(str(qq), str(qq)) if (not gid or gid == "dm") and hasattr(SL, "NOTE_NAMES") else str(qq)
-    except Exception:
-        return str(qq)
 
 
 def cmd_members(gid, qq):
