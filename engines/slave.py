@@ -658,17 +658,17 @@ def cmd_myinfo(gid, qq, st):
         t_list = treasures_of(u)
         acct = store.acct(gid, qq)
         dep = acct.int("deposit")
-        tili = acct.int("stamina")
+        tili = min(300, max(0, acct.int("stamina")))
         meili = acct.int("charm")
         jq = acct.int("lottery_tickets")
         lines = [
-            f"📋【{uname(st,qq)}】的档案",
-            f"💰资产：{coins}{coin_name()}｜🏦存款：{dep}｜💎身价：{price}",
-            f"🔋体力：{tili}｜💄魅力：{meili}｜🎫奖券：{jq}｜📖经验：{wexp}",
-            f"👑主人：{uname(st, owner) if owner else T.NO_OWNER}｜{ptxt}｜📅总签{sign_total}·连签{sign_streak}天",
-            f"⚔️武器：{', '.join(f'{w}★{star_of(u,w)}' for w in w_list) if w_list else T.NO_WEAPON}",
-            f"🎁宝物：{', '.join(t_list) if t_list else T.NO_TREASURE}",
-            f"👥奴隶({len(slaves)}/{cap})：{sl_txt}",
+            f"📋[{uname(st,qq)}]的档案",
+            f"💰资产:{coins}{coin_name()} | 🏦存款:{dep} | 💎身价:{price}",
+            f"🔋体力:({tili}/300) | 💄魅力:{meili} | 🎫奖券:{jq} | 📖经验:{wexp}",
+            f"👑主人:{uname(st, owner) if owner else T.NO_OWNER} | {ptxt} | 📅总签{sign_total}·连签{sign_streak}天",
+            f"⚔️武器:{', '.join(f'{w}★{star_of(u,w)}' for w in w_list) if w_list else T.NO_WEAPON}",
+            f"🎁宝物:{', '.join(t_list) if t_list else T.NO_TREASURE}",
+            f"👥奴隶({len(slaves)}/{cap}): {sl_txt}",
         ]
         return "\r\n".join(lines)
     except Exception as e:
@@ -996,7 +996,7 @@ def cmd_freedom(gid, qq, st):
 def cmd_buyslot(gid, qq, st):
     u = U(st, qq)
     cur = _safe_int(uget(u, "slave_slots", str(cfgi("设置", "奴隶个数", 5))), cfgi("设置", "奴隶个数", 5))
-    cap = cfgi("设置", "奴隶个数上限", 15)
+    cap = cfgi("设置", "奴隶个数上限", 10)
     if cur >= cap:
         return T.SLOT_SYS_MAX
     base_price = cfgi("设置", "奴隶位价格", 5000)

@@ -15,7 +15,7 @@
       "奴隶个数上限": {
         "type": "int",
         "description": "奴隶位系统上限",
-        "default": 15
+        "default": 10
       },
       "奴隶位价格": {
         "type": "int",
