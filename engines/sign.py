@@ -289,25 +289,29 @@ def cmd_newbie(gid, qq):
     a = _acct(gid, qq)
     if a.get("novice_gift", "") == "1":
         return "亲，您已经领取过新手礼包了，无法再次领取！"
-    money = ST.cfgi("新手配置", "现金", ST.cfgi("新手配置", "新手金币", ST.cfgi("新手配置", "money", 10000)))
-    tili = ST.cfgi("新手配置", "体力", ST.cfgi("新手配置", "新手体力", ST.cfgi("新手配置", "stamina", 300)))
-    meili = ST.cfgi("新手配置", "魅力", ST.cfgi("新手配置", "新手魅力", ST.cfgi("新手配置", "charm", 100)))
-    jq = ST.cfgi("新手配置", "奖券", ST.cfgi("新手配置", "新手奖券", ST.cfgi("新手配置", "lottery_tickets", 15)))
+    money = ST.cfgi("新手配置", "现金", ST.cfgi("新手配置", "新手金币", ST.cfgi("新手配置", "money", 20000)))
+    meili = ST.cfgi("新手配置", "魅力", ST.cfgi("新手配置", "新手魅力", ST.cfgi("新手配置", "charm", 150)))
+    jq = ST.cfgi("新手配置", "奖券", ST.cfgi("新手配置", "新手奖券", ST.cfgi("新手配置", "lottery_tickets", 30)))
+    eff_stam = 0
     # 单事务原子领取：钱包+账户同锁一次提交，避免签到并发时 database is locked
     try:
         cur_stam = int(float(a.get("stamina", "0") or 0))
         cur_charm = int(float(a.get("charm", "0") or 0))
         cur_juan = int(float(a.get("lottery_tickets", "0") or 0))
+        new_stam = cur_stam
+        if cur_stam < 300:
+            eff_stam = 300 - cur_stam
+            new_stam = 300
         ST.txn_coins_acct(gid, qq, money, {
             "novice_gift": "1",
-            "stamina": str(cur_stam + tili),
+            "stamina": str(new_stam),
             "charm": str(cur_charm + meili),
             "lottery_tickets": str(cur_juan + jq),
         })
         # txn 内已覆盖 novice 标记，刷新内存避免旧对象覆盖
         try:
             a.set("novice_gift", "1")
-            a.set("stamina", str(cur_stam + tili))
+            a.set("stamina", str(new_stam))
             a.set("charm", str(cur_charm + meili))
             a.set("lottery_tickets", str(cur_juan + jq))
             a.dirty = False
@@ -316,12 +320,18 @@ def cmd_newbie(gid, qq):
     except Exception:
         a.set("novice_gift", "1")
         ST.coins_add(gid, qq, money)
-        ST.acct_add(gid, qq, "stamina", tili)
         ST.acct_add(gid, qq, "charm", meili)
         ST.acct_add(gid, qq, "lottery_tickets", jq)
         ST.acct_save(gid, qq)
-    return (f"恭喜您获得新手礼包一份！\r\n"
-            f"{ST.coin_name()}+{money}\r\n体力+{tili}\r\n魅力+{meili}\r\n奖券+{jq}")
+    lines = [
+        "🎁 恭喜您获得新手礼包一份！",
+        f"💵 {ST.coin_name()} +{money}",
+    ]
+    if eff_stam > 0:
+        lines.append(f"⚡ 体力 +{eff_stam}（已补满300）")
+    lines.append(f"💄 魅力 +{meili}")
+    lines.append(f"🎫 奖券 +{jq}")
+    return "\r\n".join(lines)
 
 
 def cmd_like(gid, qq):
