@@ -1613,12 +1613,14 @@ def cmd_treasure_up(gid, qq, tname, st):
     if not treasures_of(u):
         return T.TUP_HAVE_NONE
     stage = int(uget(u, tname + "升阶", "0"))
-    if stage >= 3:
+    tiers = ["一", "二", "三", "四", "五"]
+    max_stage = cfgi("设置", "宝物最高阶位", 5)
+    if stage >= min(len(tiers), max_stage):
         return T.TUP_MAX
-    idx = ["一", "二", "三"][stage]
-    need = cfgi("设置", f"{idx}阶宝物消耗宝物数量", stage + 1)
-    cost = cfgi("设置", f"{idx}阶宝物花费", 77777)
-    prob = cfgi("设置", f"{idx}阶宝物概率", 50)
+    idx = tiers[stage]
+    need = cfgi("设置", f"{tname}_{idx}阶宝物消耗宝物数量", cfgi("设置", f"{idx}阶宝物消耗宝物数量", stage + 1))
+    cost = cfgi("设置", f"{tname}_{idx}阶宝物花费", cfgi("设置", f"{idx}阶宝物花费", 77777))
+    prob = cfgi("设置", f"{tname}_{idx}阶宝物概率", cfgi("设置", f"{idx}阶宝物概率", 50))
     have = _safe_int(uget(u, tname, "0"), 0)
     if have < need:
         return T.TUP_NO_ITEM + f"(需{tname}x{need}, 现有{have})"
