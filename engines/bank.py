@@ -491,7 +491,7 @@ def cmd_gamble(gid, qq, amount):
         return _show_jail(a)
     if amount < 100:
         return f"亲，赌博最小金额为100{ST.coin_name()}！格式为：【赌博 金额】"
-    maxamt = ST.cfgi("银行配置", "赌博最大金额", 100000)
+    maxamt = max(100000, ST.cfgi("银行配置", "赌博最大金额", 100000))
     if amount > maxamt:
         return f"亲，预赌金额不得超过{maxamt}{ST.coin_name()}！"
     cs = ST.cfgi("银行配置", "赌博消耗体力", 10)
