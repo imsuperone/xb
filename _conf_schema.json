@@ -645,6 +645,11 @@
         "description": "赌博单笔最大金额",
         "default": 100000
       },
+      "赌博倍率": {
+        "type": "float",
+        "description": "赌博获胜返奖倍率(例如1.8倍)",
+        "default": 1.8
+      },
       "存取款消耗体力": {
         "type": "int",
         "description": "存取款消耗体力",

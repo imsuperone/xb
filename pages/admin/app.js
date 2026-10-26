@@ -1,4 +1,4 @@
-﻿const PLUGIN_ID = "astrbot_plugin_xbbot";
+const PLUGIN_ID = "astrbot_plugin_xbbot";
 
 let _WORKING_API_PREFIX = null;
 
@@ -1642,7 +1642,7 @@ async function exportAllUsers() {
         count: usersList.length,
         users: usersList,
         export_at: res.export_at || Math.floor(Date.now() / 1000),
-        version: res.version || "0.7.47"
+        version: res.version || "0.7.48"
       };
       const jsonStr = JSON.stringify(payload, null, 2);
       triggerExportResult({
@@ -1751,6 +1751,7 @@ const CMD_NUMS = {
     ["银行配置", "红包_基本魅力", "基础魅力", "int"]],
   "赌博": [["银行配置", "赌博成功概率", "成功概率%", "int"], ["银行配置", "赌博消耗体力", "消耗体力", "int"],
     ["银行配置", "赌博魅力减少", "魅力减少", "int"], ["银行配置", "赌博最大金额", "最大金额", "int"],
+    ["银行配置", "赌博倍率", "返奖倍率", "float"],
     ["银行配置", "赌博限定次数", "限定次数", "int"], ["银行配置", "赌博关押时间", "关押(分)", "int"]],
   "打劫": [["银行配置", "打劫成功概率", "成功概率%", "int"], ["银行配置", "打劫消耗体力", "消耗体力", "int"],
     ["银行配置", "打劫金钱下限", "金钱下限", "int"], ["银行配置", "打劫金钱上限", "金钱上限", "int"],

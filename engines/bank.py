@@ -516,7 +516,14 @@ def cmd_gamble(gid, qq, amount):
     meli = ST.cfgi("银行配置", "赌博魅力减少", 20)
     jail_mins = ST.cfgi("银行配置", "赌博关押时间", 5)
     prob = min(40.0, float(ST.cfgi("银行配置", "赌博成功概率", 32)))
-    gain = int(amount * 1.8)
+    try:
+        raw_m = ST.cfg("银行配置", "赌博倍率", None)
+        mult = float(raw_m) if raw_m is not None else 1.8
+    except Exception:
+        mult = 1.8
+    if mult <= 0:
+        mult = 1.8
+    gain = int(amount * mult)
     # 原子化：钱包+体力+魅力 同事务，避免半成功通胀
     try:
         with ST._LOCK:
