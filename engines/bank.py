@@ -509,13 +509,13 @@ def cmd_gamble(gid, qq, amount):
                 f"您当前总资产为{total_pre}{ST.coin_name()}，本次最多可下注{max_bet}{ST.coin_name()}！")
     if cur_cash_pre < amount:
         return f"亲，您的现金不足，无法进行赌博（不可直接透支银行存款下注，请先前往银行取款）！"
-    lim = ST.cfgi("银行配置", "赌博限定次数", 5)
+    lim = max(30, ST.cfgi("银行配置", "赌博限定次数", 30))
     cnt = int(ST.recall_get("gamble_%s_%s_%s" % (gid, qq, dt.date.today()), "0") or 0)
     if cnt >= lim:
         return "亲，您今日赌博次数已达上限，无法再进行赌博！"
     meli = ST.cfgi("银行配置", "赌博魅力减少", 20)
     jail_mins = ST.cfgi("银行配置", "赌博关押时间", 5)
-    prob = ST.cfgi("银行配置", "赌博成功概率", 60)
+    prob = min(40.0, float(ST.cfgi("银行配置", "赌博成功概率", 32)))
     gain = int(amount * 1.8)
     # 原子化：钱包+体力+魅力 同事务，避免半成功通胀
     try:
@@ -541,7 +541,8 @@ def cmd_gamble(gid, qq, amount):
                 return "亲，您今日赌博次数已达上限，无法再进行赌博！"
             ST.recall_set("gamble_%s_%s_%s" % (gid, qq, dt.date.today()), str(cnt + 1))
             a2.set("stamina", str(cur_st - cs))
-            if random.random() * 100 < prob:
+            import secrets
+            if secrets.SystemRandom().uniform(0.0, 100.0) < prob:
                 # 成功：-amount +gain
                 new_money = cur - amount + gain
                 ST._DB.execute("INSERT INTO wallet(gid, qq, money) VALUES(?,?,?) ON CONFLICT(gid, qq) DO UPDATE SET money=excluded.money", (int(gid), int(qq), new_money))
@@ -557,7 +558,7 @@ def cmd_gamble(gid, qq, amount):
                 ST._DB.execute("INSERT INTO wallet(gid, qq, money) VALUES(?,?,?) ON CONFLICT(gid, qq) DO UPDATE SET money=excluded.money", (int(gid), int(qq), new_money))
                 ST._DB.execute("INSERT INTO accounts(gid, qq, data) VALUES(?,?,?) ON CONFLICT(gid, qq) DO UPDATE SET data=excluded.data", (int(gid), int(qq), __import__("json").dumps(a2.kv, ensure_ascii=False)))
                 a2.dirty = False
-                jail = random.random() < 0.5
+                jail = secrets.SystemRandom().random() < 0.5
                 if jail:
                     a2.set("jail", "1")
                     a2.set("jail_start", __import__("datetime").datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
@@ -1036,7 +1037,8 @@ def cmd_sell_slave(gid, qq, target):
             a2 = ST.acct(gid, qq)
             a2.set("stamina", str(cur_st - cs))
             a2.set("rob_time", _now_s())
-            if random.random() * 100 < prob:
+            import secrets
+            if secrets.SystemRandom().uniform(0.0, 100.0) < prob:
                 victim_money = ST.coins_get(gid, target)
                 loot = min(victim_money, random.randint(lo, hi))
                 if loot <= 0:

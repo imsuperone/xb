@@ -617,7 +617,7 @@
       "赌博成功概率": {
         "type": "int",
         "description": "赌博成功率%",
-        "default": 60
+        "default": 35
       },
       "赌博消耗体力": {
         "type": "int",
@@ -632,7 +632,7 @@
       "赌博限定次数": {
         "type": "int",
         "description": "每日赌博次数上限",
-        "default": 20
+        "default": 50
       },
       "赌博关押时间": {
         "type": "int",
